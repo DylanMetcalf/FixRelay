@@ -1,0 +1,612 @@
+// FixRelay schema. Every tenant-owned table carries orgId. See DATABASE.md.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  TECHNICIAN
+  CLIENT
+  REQUESTER
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum JobStatus {
+  NEW
+  ASSESSING
+  ASSESSED
+  QUOTING
+  AWAITING_APPROVAL
+  APPROVED
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  AWAITING_VERIFICATION
+  VERIFIED
+  CLOSED
+  CANCELLED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  SUPERSEDED
+  WITHDRAWN
+}
+
+enum QuoteKind {
+  ORIGINAL
+  VARIATION
+}
+
+enum LineKind {
+  LABOUR
+  MATERIAL
+  OTHER
+}
+
+enum LinkPurpose {
+  QUOTE
+  COMPLETION
+}
+
+enum DecisionOutcome {
+  APPROVED
+  REJECTED
+}
+
+enum DecisionVia {
+  LINK
+  PORTAL
+  IN_PERSON
+  INTERNAL
+}
+
+enum AttachmentKind {
+  REQUEST
+  ASSESSMENT
+  QUOTE
+  PROGRESS
+  BEFORE
+  AFTER
+  TEST_DOCUMENT
+  SIGNATURE
+  LOGO
+}
+
+enum UpdateKind {
+  PROGRESS
+  NOTE
+  CLARIFICATION
+  ADDITIONAL_WORK
+}
+
+enum CompletionStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+}
+
+enum OutboxStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id              String   @id @default(uuid()) @db.Uuid
+  email           String   @unique
+  name            String
+  passwordHash    String
+  isPlatformAdmin Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  sessions    Session[]
+  memberships Membership[]
+}
+
+model Session {
+  id          String   @id @default(uuid()) @db.Uuid
+  tokenHash   String   @unique
+  userId      String   @db.Uuid
+  activeOrgId String?  @db.Uuid
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Organisation {
+  id                      String   @id @default(uuid()) @db.Uuid
+  name                    String
+  slug                    String   @unique
+  isDemo                  Boolean  @default(false)
+  brandColour             String   @default("#0f4c81")
+  logoAttachmentId        String?  @db.Uuid
+  address                 String   @default("")
+  phone                   String   @default("")
+  contactEmail            String   @default("")
+  currency                String   @default("ZAR")
+  vatRegistered           Boolean  @default(false)
+  vatNumber               String   @default("")
+  vatRateBps              Int      @default(1500)
+  quoteTerms              String   @default("")
+  quoteValidityDays       Int      @default(30)
+  customerSignoffRequired Boolean  @default(true)
+  jobSeq                  Int      @default(0)
+  quoteSeq                Int      @default(0)
+  createdAt               DateTime @default(now())
+
+  memberships  Membership[]
+  subscription Subscription?
+  priorities   PriorityRule[]
+}
+
+model Membership {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  userId    String   @db.Uuid
+  roles     Role[]
+  clientId  String?  @db.Uuid // set for CLIENT / client-side REQUESTER: scopes access to one client organisation
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  org    Organisation @relation(fields: [orgId], references: [id])
+  user   User         @relation(fields: [userId], references: [id])
+  client Client?      @relation(fields: [orgId, clientId], references: [orgId, id])
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id         String    @id @default(uuid()) @db.Uuid
+  orgId      String    @db.Uuid
+  email      String
+  name       String    @default("")
+  roles      Role[]
+  clientId   String?   @db.Uuid
+  tokenHash  String    @unique
+  invitedBy  String    @db.Uuid
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([orgId])
+}
+
+model PriorityRule {
+  orgId           String   @db.Uuid
+  priority        Priority
+  responseHours   Int
+  completionHours Int
+
+  org Organisation @relation(fields: [orgId], references: [id])
+
+  @@id([orgId, priority])
+}
+
+model Client {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  name        String
+  contactName String   @default("")
+  email       String   @default("")
+  phone       String   @default("")
+  notes       String   @default("")
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  sites       Site[]
+  jobs        Job[]
+  memberships Membership[]
+
+  @@unique([orgId, id])
+  @@index([orgId, name])
+}
+
+model Site {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  clientId  String   @db.Uuid
+  name      String
+  address   String   @default("")
+  createdAt DateTime @default(now())
+
+  client    Client     @relation(fields: [orgId, clientId], references: [orgId, id])
+  locations Location[]
+  assets    Asset[]
+  jobs      Job[]
+
+  @@unique([orgId, id])
+  @@index([orgId, clientId])
+}
+
+model Location {
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @db.Uuid
+  siteId String @db.Uuid
+  name   String
+
+  site   Site    @relation(fields: [orgId, siteId], references: [orgId, id])
+  assets Asset[]
+  jobs   Job[]
+
+  @@unique([orgId, id])
+  @@index([orgId, siteId])
+}
+
+model Asset {
+  id           String   @id @default(uuid()) @db.Uuid
+  orgId        String   @db.Uuid
+  siteId       String   @db.Uuid
+  locationId   String?  @db.Uuid
+  reference    String
+  name         String
+  type         String   @default("")
+  manufacturer String   @default("")
+  model        String   @default("")
+  serialNumber String   @default("")
+  notes        String   @default("")
+  createdAt    DateTime @default(now())
+
+  site     Site      @relation(fields: [orgId, siteId], references: [orgId, id])
+  location Location? @relation(fields: [orgId, locationId], references: [orgId, id])
+  jobs     Job[]
+
+  @@unique([orgId, id])
+  @@unique([orgId, reference])
+}
+
+// A maintenance request and the job it becomes are ONE record moving through JobStatus.
+model Job {
+  id                      String    @id @default(uuid()) @db.Uuid
+  orgId                   String    @db.Uuid
+  reference               String
+  title                   String
+  description             String
+  category                String    @default("General")
+  priority                Priority  @default(NORMAL)
+  emergency               Boolean   @default(false)
+  status                  JobStatus @default(NEW)
+  heldFromStatus          JobStatus?
+  holdReason              String?
+  cancelReason            String?
+  directAuthReason        String?
+  clientId                String    @db.Uuid
+  siteId                  String    @db.Uuid
+  locationId              String?   @db.Uuid
+  assetId                 String?   @db.Uuid
+  requesterId             String    @db.Uuid
+  ownerId                 String?   @db.Uuid // responsible manager / dispatcher
+  leadTechnicianId        String?   @db.Uuid
+  externalContractor      String?
+  instructions            String?
+  plannedStart            DateTime?
+  plannedEnd              DateTime?
+  dueAt                   DateTime?
+  customerSignoffRequired Boolean   @default(true)
+  reportedAt              DateTime  @default(now())
+  assignedAt              DateTime?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  closedAt                DateTime?
+  reopenCount             Int       @default(0)
+  overdueNotifiedAt       DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  client      Client          @relation(fields: [orgId, clientId], references: [orgId, id])
+  site        Site            @relation(fields: [orgId, siteId], references: [orgId, id])
+  location    Location?       @relation(fields: [orgId, locationId], references: [orgId, id])
+  asset       Asset?          @relation(fields: [orgId, assetId], references: [orgId, id])
+  technicians JobTechnician[]
+  assessments Assessment[]
+  quotes      Quote[]
+  updates     WorkUpdate[]
+  completions Completion[]
+  attachments Attachment[]
+  events      ActivityEvent[]
+
+  @@unique([orgId, id])
+  @@unique([orgId, reference])
+  @@index([orgId, status])
+  @@index([orgId, clientId])
+  @@index([orgId, leadTechnicianId])
+}
+
+model JobTechnician {
+  orgId  String @db.Uuid
+  jobId  String @db.Uuid
+  userId String @db.Uuid
+
+  job Job @relation(fields: [orgId, jobId], references: [orgId, id], onDelete: Cascade)
+
+  @@id([jobId, userId])
+  @@index([orgId, userId])
+}
+
+model Assessment {
+  id                   String   @id @default(uuid()) @db.Uuid
+  orgId                String   @db.Uuid
+  jobId                String   @db.Uuid
+  authorId             String   @db.Uuid
+  findings             String
+  suspectedCause       String   @default("")
+  recommendedWork      String   @default("")
+  materials            String   @default("")
+  labourHoursEstimate  Decimal? @db.Decimal(8, 2)
+  quoteRequired        Boolean
+  externalHelpRequired Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  job Job @relation(fields: [orgId, jobId], references: [orgId, id])
+
+  @@index([orgId, jobId])
+}
+
+// Each revision is a NEW row sharing `number` with version+1. Non-draft rows are immutable (DB trigger).
+model Quote {
+  id            String      @id @default(uuid()) @db.Uuid
+  orgId         String      @db.Uuid
+  jobId         String      @db.Uuid
+  number        String
+  version       Int         @default(1)
+  kind          QuoteKind   @default(ORIGINAL)
+  status        QuoteStatus @default(DRAFT)
+  scope         String      @default("")
+  terms         String      @default("")
+  validUntil    DateTime?
+  vatRateBps    Int         @default(0) // snapshot of org VAT at creation; 0 = not VAT registered
+  subtotalCents Int         @default(0)
+  vatCents      Int         @default(0)
+  totalCents    Int         @default(0)
+  createdById   String      @db.Uuid
+  submittedAt   DateTime?
+  decidedAt     DateTime?
+  createdAt     DateTime    @default(now())
+
+  job      Job            @relation(fields: [orgId, jobId], references: [orgId, id])
+  lines    QuoteLine[]
+  decision Decision?
+  links    ApprovalLink[]
+
+  @@unique([orgId, id])
+  @@unique([orgId, number, version])
+  @@index([orgId, jobId])
+  @@index([orgId, status])
+}
+
+model QuoteLine {
+  id             String   @id @default(uuid()) @db.Uuid
+  orgId          String   @db.Uuid
+  quoteId        String   @db.Uuid
+  position       Int
+  kind           LineKind
+  description    String
+  quantity       Decimal  @db.Decimal(12, 3)
+  unitPriceCents Int
+  taxable        Boolean  @default(true)
+  lineTotalCents Int
+
+  quote Quote @relation(fields: [orgId, quoteId], references: [orgId, id], onDelete: Cascade)
+
+  @@index([quoteId])
+}
+
+model Completion {
+  id            String           @id @default(uuid()) @db.Uuid
+  orgId         String           @db.Uuid
+  jobId         String           @db.Uuid
+  version       Int
+  status        CompletionStatus @default(SUBMITTED)
+  workPerformed String
+  observations  String           @default("")
+  completedAt   DateTime
+  submittedById String           @db.Uuid
+  createdAt     DateTime         @default(now())
+
+  job      Job            @relation(fields: [orgId, jobId], references: [orgId, id])
+  decision Decision?
+  links    ApprovalLink[]
+
+  @@unique([orgId, id])
+  @@unique([jobId, version])
+}
+
+// Secure customer review link. Only the SHA-256 of the token is stored.
+model ApprovalLink {
+  id             String      @id @default(uuid()) @db.Uuid
+  orgId          String      @db.Uuid
+  purpose        LinkPurpose
+  quoteId        String?     @db.Uuid
+  completionId   String?     @db.Uuid
+  tokenHash      String      @unique
+  recipientName  String
+  recipientEmail String
+  createdById    String      @db.Uuid
+  expiresAt      DateTime
+  usedAt         DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime    @default(now())
+
+  quote      Quote?      @relation(fields: [orgId, quoteId], references: [orgId, id])
+  completion Completion? @relation(fields: [orgId, completionId], references: [orgId, id])
+}
+
+// One decision per quote version / completion version (unique constraints stop duplicates under concurrency).
+model Decision {
+  id                    String          @id @default(uuid()) @db.Uuid
+  orgId                 String          @db.Uuid
+  jobId                 String          @db.Uuid
+  quoteId               String?         @unique @db.Uuid
+  completionId          String?         @unique @db.Uuid
+  outcome               DecisionOutcome
+  via                   DecisionVia
+  deciderUserId         String?         @db.Uuid
+  deciderName           String
+  deciderEmail          String          @default("")
+  recordedById          String?         @db.Uuid // staff member who captured an IN_PERSON / INTERNAL decision
+  linkId                String?         @db.Uuid
+  comment               String          @default("")
+  signatureAttachmentId String?         @db.Uuid
+  ipAddress             String          @default("")
+  createdAt             DateTime        @default(now())
+
+  quote      Quote?      @relation(fields: [quoteId], references: [id])
+  completion Completion? @relation(fields: [completionId], references: [id])
+
+  @@index([orgId, jobId])
+}
+
+model WorkUpdate {
+  id                  String     @id @default(uuid()) @db.Uuid
+  orgId               String     @db.Uuid
+  jobId               String     @db.Uuid
+  authorId            String     @db.Uuid
+  kind                UpdateKind @default(PROGRESS)
+  note                String
+  labourMinutes       Int        @default(0)
+  materialDescription String     @default("")
+  materialCostCents   Int        @default(0)
+  createdAt           DateTime   @default(now())
+
+  job Job @relation(fields: [orgId, jobId], references: [orgId, id])
+
+  @@index([orgId, jobId])
+}
+
+model Attachment {
+  id           String         @id @default(uuid()) @db.Uuid
+  orgId        String         @db.Uuid
+  jobId        String?        @db.Uuid
+  quoteId      String?        @db.Uuid
+  completionId String?        @db.Uuid
+  kind         AttachmentKind
+  storageKey   String         @unique
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+
+  job Job? @relation(fields: [orgId, jobId], references: [orgId, id])
+
+  @@index([orgId, jobId])
+}
+
+// Append-only audit trail (DB trigger rejects UPDATE/DELETE).
+model ActivityEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @db.Uuid
+  jobId       String?  @db.Uuid
+  type        String
+  summary     String
+  actorUserId String?  @db.Uuid
+  actorLabel  String
+  data        Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  job Job? @relation(fields: [orgId, jobId], references: [orgId, id])
+
+  @@index([orgId, jobId, createdAt])
+  @@index([orgId, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  orgId     String    @db.Uuid
+  userId    String    @db.Uuid
+  jobId     String?   @db.Uuid
+  type      String
+  title     String
+  body      String    @default("")
+  dedupeKey String    @unique
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, orgId, readAt])
+}
+
+model OutboxEmail {
+  id            String       @id @default(uuid()) @db.Uuid
+  orgId         String?      @db.Uuid
+  toEmail       String
+  subject       String
+  body          String
+  dedupeKey     String       @unique
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  nextAttemptAt DateTime     @default(now())
+  lastError     String?
+  sentAt        DateTime?
+  createdAt     DateTime     @default(now())
+
+  @@index([status, nextAttemptAt])
+}
+
+model Plan {
+  id            String  @id @default(uuid()) @db.Uuid
+  code          String  @unique
+  name          String
+  maxUsers      Int? // null = unlimited
+  maxActiveJobs Int?
+  maxClients    Int?
+  active        Boolean @default(true)
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  orgId              String             @unique @db.Uuid
+  planId             String             @db.Uuid
+  status             SubscriptionStatus @default(TRIALING)
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  graceEndsAt        DateTime?
+  providerRef        String?
+  updatedAt          DateTime           @updatedAt
+
+  org  Organisation @relation(fields: [orgId], references: [id])
+  plan Plan         @relation(fields: [planId], references: [id])
+}
+
+// Explicit, time-bound, audited permission for the platform operator to view a tenant.
+model SupportAccessGrant {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @db.Uuid
+  grantedById String    @db.Uuid
+  reason      String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([orgId])
+}

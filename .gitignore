@@ -1,0 +1,10 @@
+node_modules
+.next
+.env
+.storage
+.storage-test
+test-results
+playwright-report
+*.tsbuildinfo
+next-env.d.ts
+.efficiency

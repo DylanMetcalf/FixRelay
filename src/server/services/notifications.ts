@@ -1,0 +1,153 @@
+/**
+ * Notifications = in-app rows + a transactional email outbox.
+ * - `notify` runs inside the business transaction, so a notification exists iff the change committed.
+ * - `dedupeKey` (unique) makes repeats idempotent: the same event never notifies the same person twice.
+ * - `processOutbox` is run by the worker (src/worker.ts). Rows are claimed with FOR UPDATE SKIP LOCKED,
+ *   so several workers can run safely. Failures retry with exponential backoff, then become FAILED.
+ */
+import { prisma, type Tx } from "@/lib/db";
+import type { Ctx } from "../permissions";
+import { OPEN_STATUSES } from "../workflow";
+
+export const MAX_ATTEMPTS = 5;
+
+export interface EmailTransport {
+  send(msg: { to: string; subject: string; body: string }): Promise<void>;
+}
+
+/** Default transport: writes to stdout. Swap in a real provider via DEPLOYMENT.md. */
+export const consoleTransport: EmailTransport = {
+  async send(msg) {
+    console.log(`[email] to=${msg.to} subject=${JSON.stringify(msg.subject)}`);
+  },
+};
+
+export interface NotifyInput {
+  orgId: string;
+  userIds: (string | null | undefined)[];
+  jobId?: string | null;
+  type: string;
+  title: string;
+  body?: string;
+  /** Stable identifier of the triggering event, e.g. `quote-submitted:<quoteId>`. */
+  eventKey: string;
+  exceptUserId?: string | null;
+}
+
+export async function notify(tx: Tx, n: NotifyInput): Promise<void> {
+  const ids = [...new Set(n.userIds.filter((x): x is string => !!x && x !== n.exceptUserId))];
+  if (ids.length === 0) return;
+  const users = await tx.user.findMany({
+    where: { id: { in: ids }, memberships: { some: { orgId: n.orgId, active: true } } },
+    select: { id: true, email: true },
+  });
+  await tx.notification.createMany({
+    data: users.map((u) => ({
+      orgId: n.orgId, userId: u.id, jobId: n.jobId ?? null, type: n.type, title: n.title,
+      body: n.body ?? "", dedupeKey: `${n.eventKey}:${u.id}`,
+    })),
+    skipDuplicates: true,
+  });
+  await tx.outboxEmail.createMany({
+    data: users.map((u) => ({
+      orgId: n.orgId, toEmail: u.email, subject: n.title,
+      body: `${n.body ?? n.title}\n\nOpen FixRelay to view the details.`, dedupeKey: `${n.eventKey}:${u.id}`,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+export async function queueEmail(tx: Tx, e: { orgId: string; to: string; subject: string; body: string; dedupeKey: string }) {
+  await tx.outboxEmail.createMany({
+    data: [{ orgId: e.orgId, toEmail: e.to, subject: e.subject, body: e.body, dedupeKey: e.dedupeKey }],
+    skipDuplicates: true,
+  });
+}
+
+export async function managerIds(tx: Tx, orgId: string): Promise<string[]> {
+  const ms = await tx.membership.findMany({
+    where: { orgId, active: true, roles: { hasSome: ["OWNER", "MANAGER"] } },
+    select: { userId: true },
+  });
+  return ms.map((m) => m.userId);
+}
+
+export async function clientRepIds(tx: Tx, orgId: string, clientId: string): Promise<string[]> {
+  const ms = await tx.membership.findMany({
+    where: { orgId, clientId, active: true, roles: { has: "CLIENT" } },
+    select: { userId: true },
+  });
+  return ms.map((m) => m.userId);
+}
+
+/** Send due emails. Returns counts. Safe to run concurrently. */
+export async function processOutbox(transport: EmailTransport = consoleTransport, limit = 20, now = new Date()) {
+  let sent = 0;
+  let failed = 0;
+  for (let i = 0; i < limit; i++) {
+    const done = await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "OutboxEmail" WHERE status = 'PENDING' AND "nextAttemptAt" <= ${now}
+        ORDER BY "createdAt" LIMIT 1 FOR UPDATE SKIP LOCKED`;
+      const row = rows[0];
+      if (!row) return false;
+      const email = await tx.outboxEmail.findUniqueOrThrow({ where: { id: row.id } });
+      try {
+        await transport.send({ to: email.toEmail, subject: email.subject, body: email.body });
+        // The body can contain a one-time approval link: do not keep it once delivered.
+        await tx.outboxEmail.update({
+          where: { id: email.id },
+          data: { status: "SENT", sentAt: now, attempts: { increment: 1 }, body: "[sent]", lastError: null },
+        });
+        sent++;
+      } catch (e) {
+        const attempts = email.attempts + 1;
+        const giveUp = attempts >= MAX_ATTEMPTS;
+        await tx.outboxEmail.update({
+          where: { id: email.id },
+          data: {
+            attempts, status: giveUp ? "FAILED" : "PENDING",
+            lastError: String(e instanceof Error ? e.message : e).slice(0, 500),
+            nextAttemptAt: new Date(now.getTime() + 60_000 * 2 ** attempts), // 2, 4, 8, 16 minutes
+          },
+        });
+        failed++;
+      }
+      return true;
+    });
+    if (!done) break;
+  }
+  return { sent, failed };
+}
+
+/** Notify once per job when it passes its due date. Run periodically by the worker. */
+export async function scanOverdue(now = new Date()): Promise<number> {
+  const jobs = await prisma.job.findMany({
+    where: { status: { in: OPEN_STATUSES }, dueAt: { lt: now }, overdueNotifiedAt: null },
+    select: { id: true, orgId: true, reference: true, title: true, ownerId: true, leadTechnicianId: true },
+    take: 200,
+  });
+  let n = 0;
+  for (const j of jobs) {
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.job.updateMany({ where: { id: j.id, overdueNotifiedAt: null }, data: { overdueNotifiedAt: now } });
+      if (claimed.count !== 1) return;
+      await notify(tx, {
+        orgId: j.orgId, jobId: j.id, type: "job.overdue", title: `${j.reference} is overdue`, body: j.title,
+        userIds: [...(await managerIds(tx, j.orgId)), j.leadTechnicianId], eventKey: `overdue:${j.id}:${now.toISOString().slice(0, 10)}`,
+      });
+      n++;
+    });
+  }
+  return n;
+}
+
+export function listNotifications(ctx: Ctx, take = 50) {
+  return prisma.notification.findMany({
+    where: { orgId: ctx.orgId, userId: ctx.userId }, orderBy: { createdAt: "desc" }, take,
+  });
+}
+export const unreadCount = (ctx: Ctx) =>
+  prisma.notification.count({ where: { orgId: ctx.orgId, userId: ctx.userId, readAt: null } });
+export const markAllRead = (ctx: Ctx) =>
+  prisma.notification.updateMany({ where: { orgId: ctx.orgId, userId: ctx.userId, readAt: null }, data: { readAt: new Date() } });
