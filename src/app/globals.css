@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* --brand / --brand-fg are set per tenant on <body> (see app/(app)/layout.tsx). */
+:root {
+  --brand: #0f4c81;
+  --brand-fg: #ffffff;
+  --ink: #111827;
+}
+html { -webkit-text-size-adjust: 100%; }
+body { color: var(--ink); background: #f3f4f6; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+
+@layer components {
+  .btn { @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { background: var(--brand); color: var(--brand-fg); }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-secondary { @apply border border-gray-400 bg-white text-gray-900 hover:bg-gray-100; }
+  .btn-danger { @apply bg-red-700 text-white hover:bg-red-800; }
+  .btn-sm { @apply min-h-9 px-3 py-1 text-xs; }
+  .input { @apply block min-h-11 w-full rounded-md border border-gray-400 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-500; }
+  .label { @apply mb-1 block text-sm font-semibold text-gray-800; }
+  .card { @apply rounded-lg border border-gray-300 bg-white p-4 shadow-sm sm:p-5; }
+  .card-title { @apply mb-3 text-base font-bold text-gray-900; }
+  .badge { @apply inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold; }
+  .link { @apply font-semibold underline underline-offset-2; color: var(--brand); }
+  .th { @apply px-3 py-2 text-left text-xs font-bold uppercase tracking-wide text-gray-600; }
+  .td { @apply px-3 py-3 align-top text-sm; }
+  .muted { @apply text-sm text-gray-600; }
+  details.action > summary { @apply inline-flex min-h-11 w-full cursor-pointer list-none items-center justify-center rounded-md border border-gray-400 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 sm:w-auto; }
+  details.action > summary::-webkit-details-marker { display: none; }
+  details.action[open] > summary { @apply mb-3 bg-gray-200; }
+  details.action[open] { @apply w-full rounded-lg border border-gray-300 bg-gray-50 p-3; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  .card { box-shadow: none; break-inside: avoid; }
+}
