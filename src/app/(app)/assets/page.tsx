@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { createAssetAction } from "@/app/actions/admin";
 import { requirePage } from "@/app/_lib/session";
 import { Form, Submit } from "@/components/form";

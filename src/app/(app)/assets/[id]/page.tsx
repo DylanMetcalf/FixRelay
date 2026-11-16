@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/app/_lib/session";
 import { Card, Empty, fmtDate, PageHeader, StatusBadge } from "@/components/ui";

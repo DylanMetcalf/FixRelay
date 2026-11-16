@@ -140,7 +140,7 @@ export default async function Settings() {
                   {live && <ActionButton action={a.revokeSupportAction} hidden={{ id: g.id }} className="btn btn-danger btn-sm">Revoke</ActionButton>}</li>
               );
             })}</ul>
-            <Form action={a.grantSupportAction} resetOnOk>
+            <Form action={a.grantSupportAction}>
               <Field label="Reason" name="reason" required placeholder="What do you need help with?" />
               <div><label className="label" htmlFor="hours">Duration</label><select id="hours" name="hours" className="input"><option value="4">4 hours</option><option value="24">24 hours</option><option value="72">3 days</option></select></div>
               <Submit className="btn btn-secondary">Grant read-only support access</Submit>

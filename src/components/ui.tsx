@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import type { JobStatus, Priority } from "@prisma/client";
 import { nextAction, STATUS_LABEL } from "@/server/workflow";
 

@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import Link from "@/components/link";
+import { getSession } from "@/app/_lib/session";
 import { acceptInviteAction } from "@/app/actions/auth";
 import { Form, Submit } from "@/components/form";
 import { Field } from "@/components/ui";
@@ -9,6 +11,8 @@ export const metadata = { title: "Accept invitation" };
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const inv = await getInvitation(token);
+  // Just accepted (the session cookie is now set): go straight in.
+  if (!inv && (await getSession())?.ctx) redirect("/dashboard");
   if (!inv)
     return (
       <>

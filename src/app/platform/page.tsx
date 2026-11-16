@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { enterSupportAction, setSubscriptionAction } from "@/app/actions/admin";
-import { logoutAction } from "@/app/actions/auth";
 import { getSession } from "@/app/_lib/session";
 import { Form, Submit } from "@/components/form";
 import { fmtDate } from "@/components/ui";
@@ -25,7 +24,7 @@ export default async function Platform() {
     <main className="mx-auto max-w-5xl p-4 sm:p-6">
       <div className="mb-5 flex items-center justify-between">
         <div><h1 className="text-2xl font-extrabold">Platform console</h1><p className="muted">Signed in as {s.user.email}. Company data is not visible here.</p></div>
-        <form action={logoutAction}><button className="btn btn-secondary">Sign out</button></form>
+        <form method="post" action="/api/logout"><button className="btn btn-secondary">Sign out</button></form>
       </div>
       <ul className="space-y-3">
         {tenants.map((t) => {

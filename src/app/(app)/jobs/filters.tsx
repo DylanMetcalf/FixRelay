@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import type { JobFilters } from "@/server/services/jobs";
 import { STATUS_LABEL } from "@/server/workflow";
 

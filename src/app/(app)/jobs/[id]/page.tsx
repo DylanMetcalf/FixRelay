@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/app/_lib/session";
 import { Card, fmtDate, fmtDateTime, isOverdue, PageHeader, Pill, PriorityBadge, QuotePill, StatusBadge } from "@/components/ui";

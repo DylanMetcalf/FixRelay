@@ -1,12 +1,11 @@
 "use server";
-import { redirect } from "next/navigation";
 import { rateLimit } from "@/lib/rate-limit";
 import * as auth from "@/server/auth";
 import { createDemoWorkspace } from "@/server/services/demo";
 import { markAllRead } from "@/server/services/notifications";
 import * as orgs from "@/server/services/orgs";
 import { type ActionState, run, str } from "../_lib/action";
-import { clearSessionCookie, clientIp, requireSession, sessionToken, setSessionCookie } from "../_lib/session";
+import { clientIp, requireSession, sessionToken, setSessionCookie } from "../_lib/session";
 
 export async function loginAction(_: ActionState, fd: FormData) {
   return run(async () => {
@@ -34,13 +33,6 @@ export async function acceptInviteAction(_: ActionState, fd: FormData) {
     await setSessionCookie(r.token);
     return { redirect: "/dashboard" };
   });
-}
-
-export async function logoutAction() {
-  const t = await sessionToken();
-  if (t) await auth.logout(t);
-  await clearSessionCookie();
-  redirect("/login");
 }
 
 export async function switchWorkspaceAction(_: ActionState, fd: FormData) {

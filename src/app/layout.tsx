@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorker } from "@/components/client";
+import { Flash } from "@/components/form";
 
 export const metadata: Metadata = {
   title: { default: "FixRelay", template: "%s · FixRelay" },
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en-ZA">
       <body>
         {children}
+        <Flash />
         <ServiceWorker />
       </body>
     </html>

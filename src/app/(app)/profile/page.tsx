@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { changePasswordAction, logoutAction, switchWorkspaceAction } from "@/app/actions/auth";
+import Link from "@/components/link";
+import { changePasswordAction, switchWorkspaceAction } from "@/app/actions/auth";
 import { requireSession } from "@/app/_lib/session";
 import { Form, Submit } from "@/components/form";
 import { Card, Field, PageHeader } from "@/components/ui";
@@ -34,7 +34,7 @@ export default async function Profile() {
         {s.user.isPlatformAdmin && <Card title="Platform"><Form action={switchWorkspaceAction} hidden={{ orgId: "" }}><Submit className="btn btn-secondary">Back to platform console</Submit></Form></Card>}
         {!ctx.support && (
           <Card title="Change password">
-            <Form action={changePasswordAction} resetOnOk>
+            <Form action={changePasswordAction}>
               <Field label="Current password" name="current" type="password" autoComplete="current-password" required />
               <Field label="New password" name="next" type="password" autoComplete="new-password" minLength={10} required hint="At least 10 characters. Other devices will be signed out." />
               <Submit>Change password</Submit>
@@ -44,7 +44,7 @@ export default async function Profile() {
         <Card title="Install the app">
           <p className="muted">On your phone, open your browser menu and choose <strong>Add to Home Screen</strong> (or <strong>Install app</strong>). FixRelay then opens like an app. It still needs a connection to load and save work.</p>
         </Card>
-        <Card><form action={logoutAction}><button className="btn btn-secondary w-full">Sign out</button></form></Card>
+        <Card><form method="post" action="/api/logout"><button className="btn btn-secondary w-full">Sign out</button></form></Card>
       </div>
     </>
   );

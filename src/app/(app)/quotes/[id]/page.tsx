@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import * as a from "@/app/actions/jobs";
 import { requirePage } from "@/app/_lib/session";

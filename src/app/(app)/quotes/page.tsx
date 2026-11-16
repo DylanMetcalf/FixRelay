@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { requirePage } from "@/app/_lib/session";
 import { Empty, fmtDate, PageHeader, QuotePill } from "@/components/ui";
 import { formatZar } from "@/lib/money";

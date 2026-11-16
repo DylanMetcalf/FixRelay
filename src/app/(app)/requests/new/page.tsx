@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { createJobAction } from "@/app/actions/jobs";
 import { requirePage } from "@/app/_lib/session";
 import { RequestPlaceFields } from "@/components/client-forms";

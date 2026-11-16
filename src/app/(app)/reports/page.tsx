@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { requirePage } from "@/app/_lib/session";
 import { Card, PageHeader } from "@/components/ui";
 import { formatZar } from "@/lib/money";

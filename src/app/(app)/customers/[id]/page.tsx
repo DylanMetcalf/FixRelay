@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import * as a from "@/app/actions/admin";
 import { requirePage } from "@/app/_lib/session";
@@ -34,7 +34,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     {s.address && <p className="muted">{s.address}</p>}
                     <div className="mt-2 flex flex-wrap gap-1">{s.locations.map((l) => <Pill key={l.id}>{l.name}</Pill>)}</div>
                     {manage && (
-                      <Form action={a.createLocationAction} hidden={{ siteId: s.id }} resetOnOk className="mt-2 flex flex-wrap items-end gap-2">
+                      <Form action={a.createLocationAction} hidden={{ siteId: s.id }} className="mt-2 flex flex-wrap items-end gap-2">
                         <input name="name" aria-label={`New location at ${s.name}`} placeholder="Add a location, e.g. Plant room" className="input max-w-xs !min-h-9 text-sm" required />
                         <Submit className="btn btn-secondary btn-sm">Add location</Submit>
                       </Form>
@@ -45,7 +45,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             )}
             {manage && (
               <details className="action mt-4" open={c.sites.length === 0}><summary>Add a site</summary>
-                <Form action={a.createSiteAction} hidden={{ clientId: c.id }} resetOnOk>
+                <Form action={a.createSiteAction} hidden={{ clientId: c.id }}>
                   <Field label="Site name" name="name" required placeholder="e.g. Germiston Depot" />
                   <Field label="Address" name="address" />
                   <Submit>Add site</Submit>

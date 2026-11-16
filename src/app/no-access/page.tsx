@@ -1,4 +1,3 @@
-import { logoutAction } from "@/app/actions/auth";
 
 export default function NoAccess() {
   return (
@@ -6,7 +5,7 @@ export default function NoAccess() {
       <div className="card max-w-md text-center">
         <h1 className="text-xl font-extrabold">No company access</h1>
         <p className="muted mt-2">Your account is not linked to an active company. If your access was removed, contact your company administrator.</p>
-        <form action={logoutAction}><button className="btn btn-secondary mt-4">Sign out</button></form>
+        <form method="post" action="/api/logout"><button className="btn btn-secondary mt-4">Sign out</button></form>
       </div>
     </main>
   );

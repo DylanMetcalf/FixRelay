@@ -12,7 +12,7 @@ export function LinkForm({ action, hidden, children, submit, shareLabel }: { act
   const [link, setLink] = useState<string | null>(null);
   return (
     <div className="space-y-3">
-      <Form action={action} hidden={hidden} resetOnOk onOk={(d) => setLink(d?.link ?? null)}>{children}<Submit>{submit}</Submit></Form>
+      <Form action={action} hidden={hidden} onOk={(d) => setLink(d?.link ?? null)}>{children}<Submit>{submit}</Submit></Form>
       {link && <ShareLink link={link} label={shareLabel} />}
     </div>
   );

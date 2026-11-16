@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import * as a from "@/app/actions/jobs";
 import { SignaturePad } from "@/components/client";
 import { LinkForm } from "@/components/client-forms";
@@ -90,7 +90,7 @@ export function ActionsPanel({ job, ctx, team }: { job: JobView; ctx: Ctx; team:
   if (worker && (st === "IN_PROGRESS" || st === "ASSIGNED" || st === "ON_HOLD")) {
     blocks.push(
       <D key="upd" label="Add update / note">
-        <Form action={a.workUpdateAction} hidden={h} resetOnOk>
+        <Form action={a.workUpdateAction} hidden={h}>
           <Select label="Type" name="kind" options={[{ value: "PROGRESS", label: "Progress update" }, { value: "NOTE", label: "Work note" }, { value: "CLARIFICATION", label: "I need clarification" }, { value: "ADDITIONAL_WORK", label: "Additional work is needed (needs approval)" }]} />
           <TextArea label="Update" name="note" required />
           <div className="grid grid-cols-2 gap-3">
@@ -166,7 +166,7 @@ export function ActionsPanel({ job, ctx, team }: { job: JobView; ctx: Ctx; team:
   );
   if (open && (manage || job.requesterId === ctx.userId) && can(ctx, "job.create")) blocks.push(
     <D key="photo" label="Add photos to the request">
-      <Form action={a.evidenceAction} hidden={{ ...h, kind: "REQUEST" }} resetOnOk>
+      <Form action={a.evidenceAction} hidden={{ ...h, kind: "REQUEST" }}>
         <Field label="Photos or documents" name="files"><input id="req-files" name="files" type="file" multiple accept={FILES} className="input" /></Field>
         <Submit>Upload</Submit>
       </Form>

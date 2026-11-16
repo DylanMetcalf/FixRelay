@@ -1,6 +1,6 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { Suspense } from "react";
-import { logoutAction, switchWorkspaceAction } from "@/app/actions/auth";
+import { switchWorkspaceAction } from "@/app/actions/auth";
 import { requireSession } from "@/app/_lib/session";
 import { NavLink } from "@/components/client";
 import { Form, Submit } from "@/components/form";
@@ -43,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="border-t border-slate-700 p-3">
           <Link href="/profile" className="block truncate text-sm font-bold text-white">{s.user.name}</Link>
           <p className="truncate text-xs text-slate-400">{ctx.support ? "Platform support (read-only)" : ctx.roles.join(", ").toLowerCase()}</p>
-          <form action={logoutAction}><button className="mt-2 text-xs font-bold text-slate-300 underline">Sign out</button></form>
+          <form method="post" action="/api/logout"><button className="mt-2 text-xs font-bold text-slate-300 underline">Sign out</button></form>
         </div>
       </aside>
 

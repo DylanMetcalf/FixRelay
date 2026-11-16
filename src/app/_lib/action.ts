@@ -1,8 +1,6 @@
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { AppError } from "@/lib/errors";
 
-export type ActionState = { error?: string; ok?: string; data?: Record<string, string> } | null;
+export type ActionState = { error?: string; ok?: string; data?: Record<string, string>; redirectTo?: string; at?: number } | null;
 export type Outcome = { ok?: string; redirect?: string; data?: Record<string, string> } | void;
 
 /**
@@ -18,9 +16,9 @@ export async function run(fn: () => Promise<Outcome>): Promise<ActionState> {
     console.error("[action error]", e);
     return { error: "Something went wrong. Please try again." };
   }
-  revalidatePath("/", "layout");
-  if (out?.redirect) redirect(out.redirect);
-  return { ok: out?.ok ?? "Saved.", data: out?.data };
+  // Navigation happens in the browser (components/form.tsx). Server-side redirect()/revalidatePath() inside
+  // actions left the client transition hanging in production builds of Next 15.5 (see AI_HANDOVER.md).
+  return { ok: out?.ok ?? "Saved.", data: out?.data, redirectTo: out?.redirect, at: Date.now() };
 }
 
 export const str = (fd: FormData, k: string) => String(fd.get(k) ?? "");

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { markReadAction } from "@/app/actions/auth";
 import { requireSession } from "@/app/_lib/session";
 import { Form, Submit } from "@/components/form";

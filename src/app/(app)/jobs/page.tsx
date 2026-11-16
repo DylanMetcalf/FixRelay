@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/link";
 import { requireSession } from "@/app/_lib/session";
 import { Empty, JobList, PageHeader } from "@/components/ui";
 import { can } from "@/server/permissions";
