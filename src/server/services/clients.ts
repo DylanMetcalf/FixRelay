@@ -37,7 +37,7 @@ export async function updateClient(ctx: Ctx, id: string, input: z.input<typeof c
   if (r.count !== 1) throw notFound("Customer not found.");
 }
 
-export function listClients(ctx: Ctx) {
+export async function listClients(ctx: Ctx) {
   requirePerm(ctx, "clients.view");
   return prisma.client.findMany({
     where: { orgId: ctx.orgId, archived: false },
@@ -64,7 +64,7 @@ export async function getClient(ctx: Ctx, id: string) {
  * Anyone who may log a request needs these, so this is scoped rather than permission-gated:
  * a customer-side user only ever receives their own organisation.
  */
-export function requestFormOptions(ctx: Ctx) {
+export async function requestFormOptions(ctx: Ctx) {
   requirePerm(ctx, "job.create");
   return prisma.client.findMany({
     where: { orgId: ctx.orgId, archived: false, ...(ctx.clientId ? { id: ctx.clientId } : {}) },
@@ -116,7 +116,7 @@ export async function createAsset(ctx: Ctx, input: z.input<typeof assetSchema>) 
   }
 }
 
-export function listAssets(ctx: Ctx, q?: string) {
+export async function listAssets(ctx: Ctx, q?: string) {
   requirePerm(ctx, "clients.view");
   return prisma.asset.findMany({
     where: {

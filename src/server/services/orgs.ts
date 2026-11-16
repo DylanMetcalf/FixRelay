@@ -215,7 +215,7 @@ export async function listTeam(ctx: Ctx) {
 }
 
 /** Staff who can be given work (active technicians; managers/owners may also do assessments). */
-export function listAssignable(ctx: Ctx, roles: Role[] = ["TECHNICIAN"]) {
+export async function listAssignable(ctx: Ctx, roles: Role[] = ["TECHNICIAN"]) {
   requirePerm(ctx, "clients.view");
   return prisma.membership.findMany({
     where: { orgId: ctx.orgId, active: true, clientId: null, roles: { hasSome: roles } },

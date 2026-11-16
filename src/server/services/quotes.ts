@@ -134,9 +134,9 @@ export async function reviseQuote(ctx: Ctx, quoteId: string) {
           orgId: ctx.orgId, jobId: q.jobId, number: q.number, version: q.version + 1, kind: q.kind, createdById: ctx.userId,
           scope: q.scope, terms: q.terms, vatRateBps: q.vatRateBps, subtotalCents: q.subtotalCents, vatCents: q.vatCents, totalCents: q.totalCents,
           validUntil: new Date(Date.now() + org.quoteValidityDays * 86_400_000),
-          lines: { create: q.lines.map(({ id: _id, quoteId: _q, ...l }) => l) },
         },
       });
+      await tx.quoteLine.createMany({ data: q.lines.map(({ id: _id, ...l }) => ({ ...l, quoteId: next.id })) });
       await logEvent(tx, actorOf(ctx), job.id, "quote.revision_started", `Revision v${next.version} of quote ${q.number} started`, { quoteId: next.id, previousId: q.id });
       return next;
     });
@@ -165,7 +165,7 @@ export async function getQuote(ctx: Ctx, quoteId: string) {
   return { ...q, versions: can(ctx, "quote.manage") || ctx.support ? versions : versions.filter((v) => v.status !== "DRAFT" && v.status !== "WITHDRAWN"), attachments };
 }
 
-export function listQuotes(ctx: Ctx, f: { status?: string } = {}) {
+export async function listQuotes(ctx: Ctx, f: { status?: string } = {}) {
   requirePerm(ctx, "quote.view");
   const statuses = ["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "SUPERSEDED", "WITHDRAWN"] as const;
   const status = statuses.find((s) => s === f.status);

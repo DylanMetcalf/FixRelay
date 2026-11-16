@@ -139,6 +139,11 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
   };
 }
 
+/** Change the session's active company. Only to a company the user belongs to (or, for the platform operator, any — loadSession still demands a live support grant). */
 export async function switchWorkspace(token: string, orgId: string | null): Promise<void> {
-  await prisma.session.updateMany({ where: { tokenHash: hashToken(token) }, data: { activeOrgId: orgId } });
+  const s = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
+  if (!s) throw new AppError("UNAUTHENTICATED", "Please sign in again.");
+  if (orgId && !s.user.isPlatformAdmin && !(await prisma.membership.findFirst({ where: { userId: s.userId, orgId, active: true } })))
+    throw new AppError("FORBIDDEN", "You do not have access to that workspace.");
+  await prisma.session.update({ where: { id: s.id }, data: { activeOrgId: orgId } });
 }
