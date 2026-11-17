@@ -24,35 +24,37 @@ npm run build && npm run test:e2e # starts `next start -p 3100` against the test
 npm run typecheck
 ```
 
-## Results (last run: 2026-11-16, Linux, Node 22, PostgreSQL 16.15, Chromium from Playwright 1.63)
+## Results (last run: 2026-11-17, Linux, Node 22, PostgreSQL 16.15, Chromium from Playwright 1.63, ClamAV 1.5.4)
 
-- `npm run typecheck`: **pass** (0 errors)
-- `npm test`: **46 / 46 passed**, 3 files (run twice back to back, both green)
-- `npm run test:e2e`: **3 / 3 passed** (run twice, both green, about 13s)
+- `npm run typecheck`: **pass**
+- `npm test` (with `CLAMAV_TEST_PORT=3310`): **68 / 68 passed**, 6 files, run twice in a row
+- `npm run test:e2e`: **18 / 18 passed** (3 journey tests plus 15 feature tests), run twice in a row, about 70s
 - `npm run build`: **pass**
+- Fresh-clone install from README/DEPLOYMENT (empty database → migrate → seed → build → start with in-process worker → sign up → confirmation email delivered): **pass**
+- axe-core WCAG 2.1 AA: **0 violations** on 19 pages at desktop and phone sizes (also enforced by e2e test 14)
 
-### What the suites cover
+### Real services used in tests
+| Capability | Tested against |
+|---|---|
+| Antivirus | **Real ClamAV daemon** (clamd INSTREAM over TCP). The official signature download is blocked in the sandbox, so a custom EICAR body signature (`/var/lib/clamav/fixrelay-test.ndb`) was loaded; production uses `freshclam` |
+| Email (SMTP) | **Real SMTP server** (`smtp-server`), with AUTH, multipart text + HTML, and a wrong-password failure |
+| Email (Resend) | Local HTTP stand-in that checks the exact API request; not a live Resend account |
+| File storage (S3) | `s3rver` (S3-compatible API) with a 3 MB object round trip; not AWS/R2 itself |
+| Rate limiter | Real Postgres, 12 concurrent requests |
+| Photo metadata | Real JPEG with GPS + camera EXIF and rotation, decoded after upload |
 
-**Primary journey (integration and e2e)**: register a company → configure VAT/branding → invite and accept a technician → add a customer and site → log a request with a photo → send for assessment → technician assesses (phone viewport) → quote with labour and material lines, client-side totals matching server totals including 15% VAT (R 3 288.49) → secure link → customer approves without an account (the link cannot be reused) → assign → start → progress update → completion blocked without evidence → evidence → completion → manager cannot close → verification link → customer signs and approves → close → timeline contains all 10 key events → printable report → reports page counts it → reopen with a reason.
+To run the ClamAV test locally: install `clamav-daemon`, start `clamd` on 127.0.0.1:3310 with real signatures (or the EICAR test signature), then `CLAMAV_TEST_PORT=3310 npm test`. Without it, that one test is skipped and reported as skipped.
 
-**Alternatives**: rejected quote (reason required) → revision v2, with both versions kept and v1 still REJECTED; revising a submitted quote supersedes it and kills its link; emergency authorisation without a quote (manager plus reason only); hold/resume; cancel (quotes withdrawn, links dead, terminal); variation quote blocks completion until decided; rejected completion → v2 signed in person → close → reopen; internal close only when sign-off is not required; sign-off cannot be waived after submission.
-
-**Concurrency**: 6 simultaneous approvals on one link → exactly 1 decision; conflicting approve/reject/portal decisions → one wins and state is consistent; 12 parallel requests → unique gap-free references; triple start / completion / close → exactly one succeeds; concurrent invitation acceptance → one membership.
-
-**Security**: everything listed at the end of SECURITY.md, plus e2e checks that a rival company gets 404 for a foreign job, its report and its file; that a technician gets the forbidden page for settings, quotes and reports and 404 (with no content leak) for a job they are not on; that anonymous users are redirected and files return 404; that an invalid link shows a safe page; and security headers.
-
-**Notifications**: correct recipients, the actor excluded, deduplication, never across tenants, outbox retry with backoff → success → never re-sent, permanent FAILED after 5 attempts, overdue alert once.
-
-**Subscriptions**: suspended tenant is read-only but every record stays readable; trial → grace → locked by dates; plan limits from the Plan row (portal users are not counted).
+### Playwright feature tests (e2e/features.spec.ts)
+1 landing page → sign-up, signed-in users skip it, legal pages · 2 PWA manifest, icons, shortcuts, screenshots, active service worker · 3 offline page; nothing tenant-specific cached; first visit does not reload · 4 email confirmation gate and unlock · 5 forgot password (no enumeration, single use, input kept on error, old password rejected) · 6 bogus/expired links explained · 7 show/hide password · 8 photo GPS stripped and PDF scripts refused through the UI · 9 customer rep "Needs your decision" → portal approval · 10 technician on a phone: bottom nav, alert badge, opening the job clears it · 11 report metrics with definitions; CSV formula-injection safe · 12 company data export (no secrets; others refused; audited) · 13 rate limiting · 14 axe WCAG 2.1 AA on main screens (desktop and phone) · 15 security headers, `__Host-` cookie, minimal health, session rotation, forms never GET
 
 ## Known gaps in testing (honest list)
 
 - No load or performance tests. Reports aggregate in application code (capped at 5,000 rows per query).
-- The email HTTP transport (`EMAIL_TRANSPORT=http`) has **never been run against a real provider**. Only the console transport and a fake transport in tests are verified.
-- PWA installability was checked through the manifest and service-worker responses only, not by installing on a physical iOS/Android device. **Offline mode is not supported**: the service worker only shows an offline notice.
+- Email has not been sent through a live provider account (SMTP verified against a real SMTP server, Resend against a stand-in).
+- PWA installability was verified by manifest, icon and service-worker checks in Chromium, not by installing on a physical iOS/Android device. **Offline data entry is not supported**: the service worker shows an offline page.
 - Only Chromium was used for e2e (no Safari/WebKit or Firefox runs).
-- No automated accessibility audit (axe) has been run. Basic practices were followed (labels, focus rings, contrast, 44px targets, skip link).
-- The S3 storage driver does not exist yet, so it is untested.
+- The Dockerfile and docker-compose were not built (no Docker in the sandbox).
 - Not every page has an e2e test (asset pages, platform console UI, settings for priority rules and support grants are covered by service tests only).
 
 ## Failures found and fixed during development (for future reference)
@@ -62,3 +64,11 @@ npm run typecheck
 3. **React 19 cleared form fields after a failed action**, so users lost their input on validation errors → forms now submit through `startTransition` instead of the `action` prop.
 4. **Denied job pages returned HTTP 200** (with not-found content) because a `loading.tsx` streaming boundary flushed headers first → boundary removed; denied pages now return 404.
 5. Accepting an invitation unmounted its own form (the re-render showed "invalid") → the invite page now sends a signed-in visitor to the dashboard.
+
+### Found by the second round (audits and the 15 new Playwright tests), all fixed
+6. Rate limiting trusted a client-supplied `X-Forwarded-For` value (bypass) → trusted-proxy hop count.
+7. The service worker reloaded the page on **first install**, wiping what a first-time visitor was typing (for example on an invitation link) → reload only after the user taps "Update".
+8. React 19 replaced values typed **before hydration** (slow phones) → fields are read-only until the page is interactive (verified with throttled scripts).
+9. A form submitted before scripts loaded could fall back to **GET with the password in the URL** → forms always have a native POST target, and buttons are disabled until ready.
+10. On desktop only the job reference was clickable, not the title → title linked.
+11. Accessibility: header button name mismatch, an invalid definition list, low-contrast text → fixed (0 violations).

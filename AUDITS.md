@@ -64,3 +64,13 @@ Result after fixes: **0 axe violations on all 19 pages at both sizes.**
 | 5.3 | No way to analyse jobs in a spreadsheet | Medium | Jobs CSV download (formula-injection safe) | e2e CSV test |
 | 5.4 | Monitoring could not see stuck email | Low | Health endpoint reports email backlog and failures (token-protected) | — |
 | 5.5 | Deployment not reproducible | Medium | Dockerfile, docker-compose (with ClamAV), Render blueprint, DEPLOYMENT.md | fresh-clone install verified (TESTING.md) |
+
+## Found by the 15 new Playwright tests (after the five audits), all fixed
+
+| # | Finding | Sev. | Fix |
+|---|---|---|---|
+| E.1 | On a visitor's **first** visit the service worker took control and the app **reloaded the page**, wiping anything typed (e.g. a technician accepting an invitation) | **High** | Reload only when the user taps "Update"; e2e 3 asserts typed input survives the first install |
+| E.2 | Values typed **before the page became interactive** were replaced by React 19 (reproduced with throttled scripts) | Medium | Form fields are read-only until hydration (usually < 1 s) |
+| E.3 | A form submitted before scripts loaded fell back to **GET with fields (incl. passwords) in the URL** | **High** | Native POST target kept on every form; submit buttons disabled until ready; e2e 15 asserts `method="post"` |
+| E.4 | After setting a new password, the page re-rendered as "link expired" instead of continuing | Medium | Freshly signed-in user is sent to the dashboard |
+| E.5 | Success messages could appear twice (inline then after reload) | Low | Shown once, after the reload |

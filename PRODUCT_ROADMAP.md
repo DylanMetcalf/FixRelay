@@ -2,18 +2,19 @@
 
 Ordered by commercial value and dependency. Keep the product narrow: request-to-closure maintenance management.
 
+## Done in round 2 (2026-11-17)
+Password reset and email verification · SMTP/Resend email with branded HTML · Postgres/S3 storage · shared rate limiter · ClamAV and PDF safety · EXIF/GPS stripping · retention purge · company and customer data export · privacy/terms templates · brand, landing page and installable PWA · response-time, quote win-rate and rework metrics · jobs CSV.
+
 ## Next (needed before a paid launch)
 
-| # | Item | Why | Depends on |
-|---|---|---|---|
-| 1 | **Password reset by email** and **email verification** at sign-up | Basic account recovery. Today a locked-out user needs the operator | A live email provider (2) |
-| 2 | **Live email delivery** (verify the `http` transport with Resend/Postmark/SES; templates with tenant branding) | Quote and verification links reach customers | Domain plus SPF/DKIM |
-| 3 | **Object storage driver** (S3-compatible, e.g. Cloudflare R2 or AWS af-south-1) | Required for PaaS and multi-instance hosting | — |
-| 4 | **Shared rate limiter** (Postgres or Redis) | Required for more than one instance | — |
-| 5 | **Billing provider adapter** (Paystack or PayFast) plus a self-serve plan page | Self-service revenue | 2 |
-| 6 | **POPIA tooling**: privacy notice, data export per customer, retention/anonymisation jobs, EXIF stripping | Legal readiness | Compliance review |
-| 7 | **Error tracking and uptime monitoring** | Operational safety | — |
-| 8 | Server-generated **PDF** quotes and job reports (today: browser print → PDF) | Professional attachments in emails | 2 |
+| # | Item | Why |
+|---|---|---|
+| 1 | **Live deployment** plus a **live email provider** account (domain SPF/DKIM) | Customers must receive links |
+| 2 | **Independent security test** and **legal review** (privacy, terms, POPIA operator agreements) | Launch readiness |
+| 3 | **MFA** for owners and the platform operator | Account takeover protection |
+| 4 | **Billing adapter** (Paystack or PayFast) plus a self-serve plan page | Self-service revenue |
+| 5 | Error tracking and uptime monitoring | Operational safety |
+| 6 | Server-generated **PDF** quotes and job reports | Professional attachments |
 
 ## Soon (strong customer value)
 

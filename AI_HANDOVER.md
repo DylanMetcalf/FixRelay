@@ -16,9 +16,16 @@ src/lib/                        db client, AppError, money (integer cents), toke
 src/server/permissions.ts       Ctx type, PERMISSIONS matrix, can/requirePerm, jobScope()  ← security core
 src/server/workflow.ts          TRANSITIONS, STATUS_LABEL, nextAction()                    ← lifecycle core
 src/server/auth.ts              passwords, sessions, loadSession() builds Ctx
-src/server/storage.ts           Storage interface + local driver
+src/server/storage.ts           Storage drivers: db (default) | s3 | local
+src/server/scan.ts              upload safety: ClamAV, PDF active content, image re-encode (EXIF strip)
+src/server/email.ts             email transports (console | smtp | resend) + branded HTML template
+src/server/jobs-runner.ts       background loop (outbox, overdue, retention) for worker or WORKER_IN_PROCESS
+src/server/services/account.ts  password reset, email verification, requireVerifiedEmail
+src/server/services/export.ts   company / customer data export (POPIA)
 src/server/services/*.ts        ALL business logic (see ARCHITECTURE.md table)
-src/worker.ts                   email outbox + overdue scan loop
+src/worker.ts                   standalone worker (uses jobs-runner)
+src/instrumentation.ts          starts the loop in-process when WORKER_IN_PROCESS=true
+src/components/logo.tsx         FixRelay mark + wordmark (see BRAND.md)
 src/app/_lib/session.ts         cookie handling, requireSession/requirePage
 src/app/_lib/action.ts          run() wrapper for server actions → ActionState
 src/app/actions/*.ts            server actions: parse FormData → call ONE service → return
@@ -28,7 +35,7 @@ src/app/q|v/[token]             public customer review pages (quote / completion
 src/app/api/**                  files (private), public link files, manifest, health, logout
 src/components/                 ui.tsx (server-safe primitives), form.tsx (Form/Submit/Flash), client*.tsx
 tests/unit, tests/integration   Vitest; integration uses the real fixrelay_test DB
-e2e/                            Playwright journey tests (production build, port 3100)
+e2e/                            Playwright: journey.spec (3) + features.spec (15); helpers read emailed links from the outbox
 ```
 
 ## Conventions (follow them)
@@ -52,7 +59,14 @@ With **Next 15.5.29** production builds, server actions whose responses included
 - on success the form does `window.location.assign(redirectTo)` or `window.location.reload()`, and the message is carried by `sessionStorage` (`<Flash/>`);
 - forms submit through `startTransition(() => formAction(fd))` from `onSubmit` instead of `<form action>`, because React 19 **resets all fields after a form action even when it fails** (users lost their input).
 If you upgrade Next.js, you can try returning to `router.refresh()`, but **verify with `npm run build && npm run test:e2e`** (production mode), not in dev.
-Also: do not add `loading.tsx` to the `(app)` group. Streaming flushes a 200 status before `notFound()`, so denied pages would stop returning 404 (an e2e test checks this).
+Also: do not add `loading.tsx` to the `(app)` group.
+
+**More browser caveats (each caused a real bug; keep the fixes):**
+- The service worker must **not** reload the page on `controllerchange` unless the user tapped "Update". The first install also fires it, and a reload wipes a first-time visitor's typing.
+- `<Form>` keeps `action={formAction} method="post"` **and** `onSubmit`. Without the native POST target, a submit before scripts load becomes a GET with the password in the URL.
+- `<Form>` wraps fields in `<fieldset disabled={!hydrated}>` and `<Submit>` is disabled until hydrated, because React 19 replaces values typed before hydration.
+- Pages that a successful action "consumes" (invite, reset password) must redirect a now-signed-in visitor, because the action response re-renders the same page.
+- In tests, wait for `networkidle` (helpers `gotoReady`) before typing, and pick visible elements (`filter({ visible: true })`): job lists render a phone and a desktop layout. Streaming flushes a 200 status before `notFound()`, so denied pages would stop returning 404 (an e2e test checks this).
 
 ## Business rules quick reference
 
@@ -82,14 +96,16 @@ Prisma refuses `migrate reset` when driven by an AI agent without explicit user 
 
 All of Priority 1–4 in the original brief: architecture, data model with integrity constraints, every core module, a responsive and mobile UI, a branded PWA (no offline data entry), onboarding with a demo workspace, dashboards, reports, subscriptions foundation, support access, 46 integration/unit tests and 3 e2e tests (all passing). Details: BUILD_STATUS.md.
 
+## Second round (2026-11-17)
+Closed the production gaps (reset/verification, email transports, shared storage and rate limit, antivirus, EXIF strip, retention, export), added the brand/landing/PWA, ran five self-audits (AUDITS.md) and added 15 Playwright tests. Each piece is documented in BUILD_STATUS.md.
+
 ## Recommended next steps (in order)
 
-1. Password reset plus email verification (new `PasswordReset` table with hashed single-use token, 1h expiry; reuse `queueEmail`).
-2. Wire and test a real email provider (`EMAIL_TRANSPORT=http` in `src/worker.ts`). Add branded HTML templates.
-3. S3-compatible `Storage` driver; a Postgres-backed rate limiter.
+1. Deploy (Render blueprint or Docker Compose) and send real email through your provider; check `/api/health?token=`.
+2. Independent penetration test and legal review of `/privacy`, `/terms`, POPIA.md; MFA for owners and the operator.
+3. Nonce-based CSP; automated "anonymise person" tool; post-cancellation deletion schedule.
 4. Billing adapter (Paystack/PayFast) implementing `BillingProvider` and calling `setSubscription`.
-5. POPIA tooling: per-customer data export, retention jobs, EXIF stripping in `attachments.ts`.
-6. Error tracking (Sentry) and an axe accessibility pass. Add WebKit to the Playwright projects.
+5. Error tracking (Sentry); add WebKit (Safari) to the Playwright projects; test installs on real iPhone/Android.
 7. Product: quote reminders, response-time SLA tracking, technician day view, customer "awaiting approval" home.
 
 ## Known issues

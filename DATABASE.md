@@ -27,6 +27,7 @@ Job (request and job are ONE record moving through JobStatus)
  ├─ Attachment (kind: REQUEST/ASSESSMENT/PROGRESS/BEFORE/AFTER/TEST_DOCUMENT/QUOTE/SIGNATURE/LOGO)
  └─ ActivityEvent (append-only audit)
 Notification (in-app), OutboxEmail (email queue), Session
+AuthToken (password reset / email verification, hashed, single-use), RateLimit (shared limiter), StoredFile (file bytes for STORAGE_DRIVER=db)
 ```
 
 Design choice: a "maintenance request" is the early stage of a job (statuses NEW, ASSESSING, ASSESSED). Keeping a single record avoids copying data and keeps one continuous history. "Requests" and "Jobs" in the UI are filtered views.
@@ -75,5 +76,9 @@ Design choice: a "maintenance request" is the early stage of a job (statuses NEW
 `prisma/seed.ts` is idempotent: it creates default plans (trial, starter, professional) and, if the env vars are set, the platform operator. Sample business data is never seeded into real tenants. Demo data is created only on request, in a separate `isDemo` organisation (`services/demo.ts`).
 
 ## Retention
+
+`purgeRetention()` (worker, every 6 hours): delivered/failed emails after 90 days, read notifications after 180 days and all after 365, used/expired auth tokens, expired sessions and rate-limit windows. Business records are kept.
+
+### Previous note
 
 Nothing is hard-deleted by the application except draft quote lines (replaced on save) and expired sessions (worker). Customers are archived rather than deleted. A retention and erasure policy for POPIA still needs to be designed (see SECURITY.md).

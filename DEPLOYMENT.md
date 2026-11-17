@@ -1,77 +1,71 @@
 # Deployment
 
-> This describes a sensible first deployment. It has **not** been performed for this project. Do the security and compliance review (SECURITY.md) before going live.
+Three supported ways to run FixRelay. All use the same code and environment variables. A fresh clone was installed, migrated, seeded, built and started from these docs against an empty database on 2026-11-17 (see TESTING.md). **A live public deployment has not been made yet.** Choose a host below.
 
-## Components
+## Option A: Render (simplest; `render.yaml` is included)
+1. Push the repository to GitHub. In Render: **New → Blueprint**, then select the repository.
+2. Render creates a Postgres database and one web service. The worker runs inside the web service (`WORKER_IN_PROCESS=true`) and files are stored in Postgres (`STORAGE_DRIVER=db`), so nothing else is needed to start.
+3. Set the secret values in the dashboard: `APP_URL` (your Render URL or custom domain), `EMAIL_TRANSPORT=resend` or `smtp`, `EMAIL_FROM`, and `RESEND_API_KEY` or the `SMTP_*` values. Add `HEALTH_TOKEN` if you want detailed health output.
+4. After the first deploy, open Render's shell and create the operator account:
+   `PLATFORM_ADMIN_EMAIL=you@yourco.co.za PLATFORM_ADMIN_PASSWORD='long-random-password' npm run db:seed`
+5. Antivirus (recommended): add a private service from the `clamav/clamav:stable` image and set `CLAMAV_HOST` to its internal hostname.
 
-1. **Web app**: `npm run build`, then `npm start` (Node 22+). Stateless apart from the in-memory rate limiter and local file storage (see below).
-2. **Worker**: `npm run worker`. One long-running process (more are safe). It sends the email outbox, raises overdue alerts and deletes expired sessions.
-3. **PostgreSQL 14+** (tested on 16), managed and with automated backups. A South African or EU region is recommended for POPIA (decide with your compliance review).
-4. **File storage**: today a local directory (`STORAGE_DIR`). This works on a single VM with a persistent disk. For a PaaS or more than one instance, implement an S3-compatible driver in `src/server/storage.ts` (2 methods: `put`, `get`).
+## Option B: One server with Docker Compose (includes ClamAV)
+```bash
+cp .env.example .env    # set APP_URL, EMAIL_*, POSTGRES_PASSWORD
+```
+
+```bash
+docker compose up -d --build
+```
+
+```bash
+docker compose exec web sh -c "PLATFORM_ADMIN_EMAIL=you@yourco.co.za PLATFORM_ADMIN_PASSWORD='long-random-password' npm run db:seed"
+```
+
+Put Caddy or nginx in front for HTTPS (required: cookies are `Secure`/`__Host-` and PWAs need HTTPS). The `Dockerfile` and `docker-compose.yml` follow standard patterns but **were not built in the development sandbox (no Docker available there)**. Build them once before relying on them.
+
+## Option C: Plain Node.js (any VM or PaaS)
+```bash
+npm ci && npm run db:migrate && npm run build
+```
+
+Then run `npm start` (web) and `npm run worker` (background), or only `npm start` with `WORKER_IN_PROCESS=true`.
 
 ## Environment variables
 
-| Variable | Required | Example / notes |
+| Variable | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | yes | `postgresql://user:pass@host:5432/fixrelay?sslmode=require` |
-| `APP_URL` | yes | `https://app.example.co.za`. Used in emailed links |
-| `STORAGE_DIR` | yes (local driver) | `/var/lib/fixrelay/files`. Must persist and be backed up |
-| `NODE_ENV` | yes | `production` (enables Secure cookies) |
-| `EMAIL_TRANSPORT` | no | `console` (default: logs only) or `http` |
-| `EMAIL_API_URL`, `EMAIL_API_KEY`, `EMAIL_FROM` | if `http` | Resend-compatible JSON API. **Untested against a live provider**: test before relying on it |
-| `BCRYPT_COST` | no | default 12 |
-| `WORKER_INTERVAL_MS` | no | default 15000 |
-| `PLATFORM_ADMIN_EMAIL`, `PLATFORM_ADMIN_PASSWORD` | seed only | Create the operator account once, then remove from the environment |
+| `DATABASE_URL` | yes | PostgreSQL 14+ (tested on 16). Add `?sslmode=require` for managed databases |
+| `APP_URL` | yes | Public HTTPS URL. Used in emailed links |
+| `NODE_ENV` | yes | `production` |
+| `STORAGE_DRIVER` | no | `db` (default; files in Postgres, multi-instance, included in DB backups), `s3`, or `local` |
+| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_SSE` | if `s3` | Any S3-compatible store (AWS S3 af-south-1, Cloudflare R2, Backblaze B2, MinIO). Bucket must be **private** |
+| `EMAIL_TRANSPORT` | no | `console` (default, logs only), `smtp`, `resend` |
+| `EMAIL_FROM` | if not console | e.g. `FixRelay <no-reply@yourdomain.co.za>` on a domain with SPF and DKIM |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | if `smtp` | Port 587 uses STARTTLS (required by default); 465 uses TLS |
+| `RESEND_API_KEY` | if `resend` | |
+| `CLAMAV_HOST`, `CLAMAV_PORT` or `CLAMAV_SOCKET` | recommended | When set, every upload is scanned. **If ClamAV is unreachable, uploads are refused** (fail closed) |
+| `TRUSTED_PROXY_HOPS` | no | Number of proxies in front of the app (default 1). Used to read the real client IP for rate limiting. Set 0 if the app is reached directly |
+| `WORKER_IN_PROCESS` | no | `true` runs the background loop inside the web process |
+| `HEALTH_TOKEN` | no | Enables `/api/health?token=…` details (email backlog) |
+| `BCRYPT_COST`, `WORKER_INTERVAL_MS` | no | Defaults 12 and 15000 |
 
-Never commit secrets. Use your host's secret manager.
-
-## First deployment (single VM example)
-
-```bash
-npm ci
-```
-
-```bash
-npm run db:migrate
-```
-
-```bash
-PLATFORM_ADMIN_EMAIL=ops@yourco.example PLATFORM_ADMIN_PASSWORD='long-random-password' npm run db:seed
-```
-
-```bash
-npm run build
-```
-
-Then run `npm start` and `npm run worker` under a process manager (systemd, pm2, or two PaaS processes), behind a TLS-terminating reverse proxy (Caddy or nginx) that sets `X-Forwarded-For`. HTTPS is mandatory: cookies are `Secure`, and PWAs require it.
-
-## Releases
-
-1. Back up the database.
-2. `npm ci && npm run db:migrate && npm run build`.
-3. Restart the web app and the worker.
-Migrations must be backwards-compatible with the running version during the switch (see DATABASE.md, "Migration strategy").
+## Email setup checklist
+1. Verify your sending domain with the provider (SPF, DKIM, ideally DMARC).
+2. Set `EMAIL_TRANSPORT`, `EMAIL_FROM` and credentials.
+3. Register a test company: the confirmation email must arrive. Then use "Forgot password?".
+4. Watch `/api/health?token=…`: `emailBacklogMinutes` should stay near 0.
+The SMTP transport was verified against a real SMTP server and the Resend transport against an HTTP stand-in, both in automated tests. Neither has been run against a live provider account.
 
 ## Backups and restore
-
-- PostgreSQL: daily automated snapshots plus point-in-time recovery if available. Keep at least 30 days. **Test a restore** before launch and quarterly.
-- Files in `STORAGE_DIR`: back up with the same schedule (file names are UUIDs; the database holds the mapping). Back up the database and files together.
-- Encrypt backups at rest. Restrict who can access them (they contain personal information).
+- Database: daily snapshots plus point-in-time recovery; keep ≥ 30 days; encrypted. With `STORAGE_DRIVER=db` the files are inside these backups. With `s3`, enable bucket versioning and lifecycle rules.
+- **Test a restore** before launch and every quarter.
 
 ## Monitoring
+- `GET /api/health` → `{ ok: true }` (database reachable). With the token: `emailBacklogMinutes`, `emailsFailedLast24h`.
+- Alert on 5xx rate, health failures, growing email backlog, and `[scan] ClamAV unavailable` log lines.
+- Logs contain no passwords, tokens or email bodies.
 
-- Health check: `GET /api/health` returns `{ ok: true }` (checks the DB).
-- Alert on: web 5xx rate, health failures, worker not running, `OutboxEmail` rows with `status = 'FAILED'` or old `PENDING` rows:
-  `SELECT status, count(*), min("createdAt") FROM "OutboxEmail" GROUP BY status;`
-- Logs: the app logs `[action error]` for unexpected server errors and `[worker]` lines. Ship stdout to your log service. Logs do not contain passwords, tokens or email bodies.
-- Error tracking (Sentry or similar) is not wired in yet. Recommended.
-
-## Scaling notes
-
-- More than one web instance needs: a shared rate limiter (`src/lib/rate-limit.ts`) and object storage instead of a local disk.
-- Workers can scale horizontally (`SKIP LOCKED`).
-- Watch report queries for large tenants (`services/reports.ts` aggregates in code with 5,000-row caps). Move them to SQL aggregates when needed.
-
-## Billing provider
-
-Subscriptions are managed today by the platform operator in `/platform` (plan, status, dates). To automate, implement `BillingProvider` in `services/billing.ts` for a South African provider (e.g. Paystack or PayFast) and translate its webhooks into `setSubscription()`. Never store card data. Plan prices live with the provider; plan limits live in the `Plan` table.
+## Releases
+Back up → `npm ci && npm run db:migrate && npm run build` → restart. Migrations are additive and non-destructive (see DATABASE.md).

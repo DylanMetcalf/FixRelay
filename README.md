@@ -10,6 +10,7 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 
 ## Features (implemented and tested)
 
+- **Accounts**: email confirmation, secure password reset, show/hide passwords, and session hardening.
 - **Company sign-up and onboarding**: trial subscription, a checklist computed from real records, branding (name, logo, colour), VAT settings, response times per priority, and an optional, clearly separated **demo workspace**.
 - **Team and roles**: Owner, Manager/Dispatcher, Technician, Client representative, Requester. Invitations are single-use and expire. Removing access takes effect immediately.
 - **Customers → Sites → Locations → Assets**, with a maintenance history per asset.
@@ -25,7 +26,10 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 - **Dashboard and reports**: live counts per stage, filters, and metrics with written definitions.
 - **Subscriptions**: plans with entitlements stored in data, trial → grace → read-only. Data is never deleted.
 - **Platform operator console**: no access to tenant data without a time-limited grant from the tenant; any access is audited and read-only.
-- **Branded PWA**: installable, tenant-branded manifest, and an offline notice page. It does **not** support offline data entry.
+- **Installable app (PWA)**: FixRelay icon set, shortcuts, screenshots, an install button with iPhone instructions, an update prompt, and a branded offline page. It does **not** support offline data entry.
+- **Landing page** for prospects, plus privacy and terms templates.
+- **Upload safety**: ClamAV virus scanning, blocking of PDFs with scripts, and removal of photo location (EXIF/GPS) data.
+- **Production plumbing**: SMTP or Resend email (branded HTML), Postgres or S3 file storage, a rate limiter shared across servers, retention clean-up, and data export.
 
 ## Quick start (local)
 
@@ -68,13 +72,13 @@ npm run worker    # separate terminal: emails (printed to the console by default
 | `npm run worker` | Background worker (email outbox, overdue scan, session cleanup) |
 | `npm run typecheck` | TypeScript strict check |
 | `npm test` | Unit and integration tests (Vitest, against the real test database) |
-| `npm run build && npm run test:e2e` | Browser end-to-end tests (Playwright, production build on port 3100) |
+| `npm run build && npm run test:e2e` | Browser end-to-end tests (18, Playwright, production build on port 3100) |
 | `npm run db:migrate` | Apply migrations (production-safe) |
 | `npm run db:migrate:dev` | Create a new migration in development |
 | `npm run db:seed` | Plans and the platform operator account (idempotent) |
 
 ## Documentation
 
-[ARCHITECTURE](ARCHITECTURE.md) · [DATABASE](DATABASE.md) · [WORKFLOWS](WORKFLOWS.md) · [SECURITY](SECURITY.md) · [TESTING](TESTING.md) · [DEPLOYMENT](DEPLOYMENT.md) · [PRODUCT_ROADMAP](PRODUCT_ROADMAP.md) · [BUILD_STATUS](BUILD_STATUS.md) · [AI_HANDOVER](AI_HANDOVER.md)
+[BRAND](BRAND.md) · [AUDITS](AUDITS.md) · [POPIA](POPIA.md) · [ARCHITECTURE](ARCHITECTURE.md) · [DATABASE](DATABASE.md) · [WORKFLOWS](WORKFLOWS.md) · [SECURITY](SECURITY.md) · [TESTING](TESTING.md) · [DEPLOYMENT](DEPLOYMENT.md) · [PRODUCT_ROADMAP](PRODUCT_ROADMAP.md) · [BUILD_STATUS](BUILD_STATUS.md) · [AI_HANDOVER](AI_HANDOVER.md)
 
 > Production use needs a separate security, operational and POPIA/compliance review first. See SECURITY.md and BUILD_STATUS.md.

@@ -9,8 +9,13 @@
 - Sessions are opaque random 256-bit tokens in an **httpOnly, SameSite=Lax, Secure (production)** cookie. Only the **SHA-256** of the token is stored. They last 30 days and are revocable server-side.
 - Every request reloads the session **and the membership**. Deactivating a member or revoking support access takes effect on the next request.
 - Changing a password revokes all other sessions. Logout deletes the session row (POST `/api/logout`).
-- Rate limits: login (20 per 10 min per IP, 8 per 10 min per email), registration (10 per hour per IP), invitation acceptance and review-link decisions (per IP). **The limiter is in memory** (`src/lib/rate-limit.ts`): it is per-instance and resets on restart, so replace it with Redis/Postgres before running more than one instance.
-- **Not implemented yet:** password reset by email, email verification at sign-up, MFA. See BUILD_STATUS.md.
+- Rate limits (shared Postgres limiter, `src/lib/rate-limit.ts`, works across instances): login (20 per 10 min per IP, 8 per email), registration (10 per hour per IP), password reset (10 per hour per IP, 3 per email), invitation acceptance, review-link decisions, verification resends, exports.
+- Client IP = the `X-Forwarded-For` entry `TRUSTED_PROXY_HOPS` from the right (default 1). The leftmost entries are client-controlled and are ignored, so rate limits cannot be bypassed with a fake header.
+- **Password reset**: 256-bit single-use token (hash stored), 60 minutes, only the newest works, same response whether or not the email exists, weak passwords rejected before the token is used, completion signs out every device and emails a "password changed" notice.
+- **Email verification**: 48-hour single-use link at sign-up (resendable). Unverified accounts cannot send invitations or customer review links. Accepting an emailed invitation counts as verified.
+- Session cookie `__Host-fr_session` in production (HTTPS-only, host-locked). Signing in replaces any previous session in that browser.
+- Forms always POST (never GET) so credentials cannot end up in URLs, even if submitted before scripts load.
+- **Not implemented yet:** MFA (recommended for owners and the platform operator).
 
 ## Authorisation (`src/server/permissions.ts`)
 
@@ -71,18 +76,25 @@ Drawn signatures (PNG) are stored as evidence of acknowledgement, with name, tim
 - Type is decided by **magic bytes**: JPEG, PNG, WebP, PDF only. Client filename and MIME type are ignored. SVG, HTML and executables are rejected.
 - 10 MB per file (logo 1 MB, signature 300 KB), 100 files per job. Filenames are sanitised. Storage keys are random UUIDs.
 - Files are never public. They are served only by `/api/files/:id` after tenant, job-scope and kind checks, with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`, and `Cache-Control: private, no-store`.
-- **Not implemented:** antivirus scanning, image re-encoding (EXIF/GPS metadata in photos is kept: consider stripping it for POPIA).
+- **Antivirus**: with `CLAMAV_HOST`/`CLAMAV_SOCKET` set, every file is streamed to ClamAV (clamd INSTREAM). If ClamAV cannot be reached the upload is **refused** (fail closed).
+- **PDF active content** (JavaScript, launch actions, embedded files, XFA, rich media, including hex-obfuscated names) is refused.
+- **Images are decoded and re-encoded**: removes all EXIF/XMP metadata (GPS location, camera serials), applies rotation, caps at 2560 px, and rejects corrupt or decompression-bomb images (50 MP input limit).
+- Storage: `db` (default) or private `s3` buckets. Files are always streamed through the app after permission checks.
 
 ## Web protections
 
 - Next.js server actions check the `Origin` header (CSRF). Session cookies are SameSite=Lax. Logout is POST-only.
-- Headers (`next.config.ts`): `X-Frame-Options: DENY`, `frame-ancestors 'none'`, nosniff, `Referrer-Policy: no-referrer`, HSTS, and a restrictive `Permissions-Policy`. A full script-src CSP is **not** set yet (would need nonces with Next.js).
+- Headers (`next.config.ts`): Content-Security-Policy (`default-src 'self'`; scripts, requests, images, fonts, workers and manifest from this site only; `frame-ancestors 'none'`; `form-action 'self'`; `object-src 'none'`), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: no-referrer`, HSTS, `Permissions-Policy`. Inline scripts are allowed because Next.js needs them without nonces (roadmap: nonce-based CSP).
+- The service worker caches only public versioned assets, never pages, API responses or files, so nothing leaks between users on a shared device.
 - React escapes output. No `dangerouslySetInnerHTML`. Prisma parameterises SQL. The only raw SQL is tagged-template (parameterised).
 - Errors: only `AppError` messages reach users. Unexpected errors are logged on the server and shown as a generic message.
 
 ## Secrets
 
 All configuration is via environment variables (`.env` is git-ignored; `.env.example` has no secrets). The app does not log passwords, tokens or email bodies.
+
+## Self-audit
+See AUDITS.md (five audits plus the e2e findings) and POPIA.md.
 
 ## POPIA considerations (not a compliance statement)
 
