@@ -1,4 +1,5 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
+import { verifyEmail } from "./helpers";
 
 const uid = Math.random().toString(36).slice(2, 8);
 const PASSWORD = "correct-horse-battery";
@@ -18,6 +19,7 @@ const status = (p: Page) => p.locator(".badge").first();
 
 async function register(p: Page, who: { email: string; company: string }) {
   await p.goto("/register");
+  await p.waitForLoadState("networkidle");
   await f(p, "companyName").fill(who.company);
   await f(p, "name").fill("Olive Owner");
   await f(p, "email").fill(who.email);
@@ -27,6 +29,7 @@ async function register(p: Page, who: { email: string; company: string }) {
 }
 async function login(p: Page, email: string) {
   await p.goto("/login");
+  await p.waitForLoadState("networkidle");
   await f(p, "email").fill(email);
   await f(p, "password").fill(PASSWORD);
   await p.getByRole("button", { name: "Sign in" }).click();
@@ -48,6 +51,7 @@ test("primary journey: register → request → assess → quote → approve →
   // 1. Register a maintenance company; onboarding checklist is shown.
   await register(page, owner);
   await expect(page.getByText("Getting started")).toBeVisible();
+  await verifyEmail(page, owner.email); // required before inviting people or sending customer links
 
   // Company settings: VAT registered + brand colour.
   await page.goto("/settings");

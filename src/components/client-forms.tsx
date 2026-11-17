@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import type { ActionState } from "@/app/_lib/action";
 import { computeTotals, formatVatRate, formatZar, lineTotalCents, parseQuantityMilli, parseRandToCents } from "@/lib/money";
 import { ShareLink } from "./client";
-import { Form, Submit } from "./form";
+import { Form, Submit, useHydrated } from "./form";
 
 type Action = (prev: ActionState, fd: FormData) => Promise<ActionState>;
 
@@ -65,6 +65,7 @@ export interface EditorLine { kind: "LABOUR" | "MATERIAL" | "OTHER"; description
 export function QuoteEditor({ action, quoteId, jobId, initial, scope, terms, validUntil, vatRateBps }: {
   action: Action; quoteId: string; jobId: string; initial: EditorLine[]; scope: string; terms: string; validUntil: string; vatRateBps: number;
 }) {
+  const ready = useHydrated();
   const blank: EditorLine = { kind: "LABOUR", description: "", quantity: "1", unitPrice: "", taxable: true };
   const [lines, setLines] = useState<EditorLine[]>(initial.length ? initial : [blank]);
   const set = (i: number, patch: Partial<EditorLine>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -110,8 +111,8 @@ export function QuoteEditor({ action, quoteId, jobId, initial, scope, terms, val
       </div>
       <div><label className="label" htmlFor="terms">Terms and conditions</label><textarea id="terms" name="terms" rows={3} className="input" defaultValue={terms} /></div>
       <div className="flex flex-wrap gap-2">
-        <button name="intent" value="save" className="btn btn-secondary">Save draft</button>
-        <button name="intent" value="submit" className="btn btn-primary"
+        <button name="intent" value="save" className="btn btn-secondary" disabled={!ready}>Save draft</button>
+        <button name="intent" value="submit" className="btn btn-primary" disabled={!ready}
           onClick={(e) => { if (!window.confirm("Submit this quote for approval? It can no longer be edited afterwards (you can create a revision).")) e.preventDefault(); }}>
           Save and submit for approval
         </button>

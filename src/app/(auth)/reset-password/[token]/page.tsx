@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { resetPasswordAction } from "@/app/actions/auth";
+import { getSession } from "@/app/_lib/session";
 import { PasswordField } from "@/components/client";
 import { Form, Submit } from "@/components/form";
 import Link from "@/components/link";
@@ -9,7 +11,10 @@ export const metadata = { title: "Choose a new password", robots: { index: false
 
 export default async function ResetPassword({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  if (!(await isResetTokenValid(token)))
+  const valid = await isResetTokenValid(token);
+  // Just used (the new session cookie is set): go straight in.
+  if (!valid && (await getSession())?.ctx) redirect("/dashboard");
+  if (!valid)
     return (
       <>
         <h1 className="text-xl font-extrabold">This link has expired</h1>

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 export function ServiceWorker() {
   const [update, setUpdate] = useState<ServiceWorker | null>(null);
+  const updateRequested = useRef(false);
   useEffect(() => {
     if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") return;
     navigator.serviceWorker.register("/sw.js").then((reg) => {
@@ -12,14 +13,17 @@ export function ServiceWorker() {
       watch(reg.installing);
       reg.addEventListener("updatefound", () => watch(reg.installing));
     }).catch(() => {});
-    let reloaded = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; window.location.reload(); } });
+    // Reload ONLY after the user chose "Update". The first install also fires controllerchange (clients.claim),
+    // and reloading then would wipe whatever a first-time visitor had started typing.
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (updateRequested.current) { updateRequested.current = false; window.location.reload(); }
+    });
   }, []);
   if (!update) return null;
   return (
     <div role="status" className="no-print fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg bg-navy px-4 py-3 text-sm text-white shadow-lg md:bottom-6">
       <span>A new version of FixRelay is ready.</span>
-      <button className="btn btn-sm bg-signal text-navy" onClick={() => update.postMessage("skipWaiting")}>Update</button>
+      <button className="btn btn-sm bg-signal text-navy" onClick={() => { updateRequested.current = true; update.postMessage("skipWaiting"); }}>Update</button>
     </div>
   );
 }
