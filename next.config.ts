@@ -21,6 +21,9 @@ const securityHeaders = [
 
 const config: NextConfig = {
   poweredByHeader: false,
+  // Small build machines (e.g. the free 512 MB demo instance) run out of memory during Next's built-in lint and
+  // type check. Those checks still run in development and CI (`npm run typecheck`, `npm run lint`, the test suites).
+  ...(process.env.SKIP_BUILD_CHECKS === "1" ? { eslint: { ignoreDuringBuilds: true }, typescript: { ignoreBuildErrors: true } } : {}),
   experimental: { serverActions: { bodySizeLimit: "12mb" } },
   async headers() {
     return [
