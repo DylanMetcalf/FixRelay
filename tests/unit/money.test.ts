@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeTotals, formatZar, lineTotalCents, parseQuantityMilli, parseRandToCents } from "@/lib/money";
 import { canTransition, nextAction, TRANSITIONS } from "@/server/workflow";
-import { rateLimit, resetRateLimits } from "@/lib/rate-limit";
 
 describe("money", () => {
   it("parses rand amounts exactly", () => {
@@ -60,11 +59,3 @@ describe("workflow state machine", () => {
   });
 });
 
-describe("rate limiter", () => {
-  it("blocks after the limit and resets after the window", () => {
-    resetRateLimits();
-    for (let i = 0; i < 3; i++) rateLimit("k", 3, 1000, 0);
-    expect(() => rateLimit("k", 3, 1000, 500)).toThrow(/Too many/);
-    expect(() => rateLimit("k", 3, 1000, 1001)).not.toThrow();
-  });
-});

@@ -10,6 +10,6 @@ export default defineConfig({
     fileParallelism: false,
     globalSetup: "tests/global-setup.ts",
     testTimeout: 30_000,
-    env: { DATABASE_URL: TEST_DB, BCRYPT_COST: "4", STORAGE_DIR: "./.storage-test", APP_URL: "http://test.local" },
+    env: { DATABASE_URL: TEST_DB, BCRYPT_COST: "4", STORAGE_DIR: "./.storage-test", APP_URL: "http://test.local", CLAMAV_TEST_PORT: process.env.CLAMAV_TEST_PORT ?? "" },
   },
 });

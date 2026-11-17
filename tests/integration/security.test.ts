@@ -247,7 +247,7 @@ describe("attachments", () => {
     await expect(addJobAttachment(t.rep, { jobId: job.id, kind: "REQUEST", filename: "a.png", bytes: PNG })).rejects.toEqual(FB); // not the reporter
     await expect(addJobAttachment(t.manager, { jobId: job.id, kind: "SIGNATURE", filename: "s.png", bytes: PNG })).rejects.toEqual(code("INVALID"));
     await expect(readAttachment(t.rep, progress.id)).rejects.toEqual(NF); // internal working photo
-    expect((await readAttachment(t.rep, after.id)).bytes.equals(PNG)).toBe(true);
+    expect((await readAttachment(t.rep, after.id)).mimeType).toBe("image/png");
     expect((await readAttachment(t.tech, progress.id)).filename).toBe("p.png");
   });
 });
@@ -410,7 +410,7 @@ describe("notifications", () => {
     expect(pending).toBeGreaterThanOrEqual(3);
     const sentTo: string[] = [];
     let fail = true;
-    const flaky = { send: async (m: { to: string }) => { if (fail) throw new Error("smtp down"); sentTo.push(m.to); } };
+    const flaky = { name: "test", send: async (m: { to: string }) => { if (fail) throw new Error("smtp down"); sentTo.push(m.to); } };
     let now = new Date();
     expect(await notifications.processOutbox(flaky, 50, now)).toEqual({ sent: 0, failed: pending });
     expect(await notifications.processOutbox(flaky, 50, now)).toEqual({ sent: 0, failed: 0 }); // backoff: not due yet

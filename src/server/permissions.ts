@@ -18,6 +18,8 @@ export interface Ctx {
   support: boolean;
   /** Subscription suspended / expired past grace: tenant is read-only (data stays retrievable). */
   locked: boolean;
+  /** The user's email address has been confirmed (required before emailing other people). */
+  emailVerified: boolean;
 }
 
 const STAFF: Role[] = ["OWNER", "MANAGER", "TECHNICIAN"];

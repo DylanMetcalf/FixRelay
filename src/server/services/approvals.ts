@@ -18,6 +18,7 @@ import { isManager, jobScope, requirePerm, type Ctx } from "../permissions";
 import { type Actor, actorOf, logEvent } from "./activity";
 import { storeSignature } from "./attachments";
 import { isAssigned, move } from "./jobs";
+import { requireVerifiedEmail } from "./account";
 import { managerIds, notify, queueEmail } from "./notifications";
 
 export const LINK_DAYS = 14;
@@ -111,6 +112,7 @@ const linkSchema = z.object({
 /** Create a review link for a SUBMITTED quote or completion. The token is returned once and never stored. */
 export async function createApprovalLink(ctx: Ctx, target: { quoteId: string } | { completionId: string }, input: z.input<typeof linkSchema>) {
   requirePerm(ctx, "quoteId" in target ? "quote.manage" : "job.manage");
+  requireVerifiedEmail(ctx);
   const p = linkSchema.safeParse(input);
   if (!p.success) throw invalid(p.error.issues[0]!.message);
   const token = newToken();

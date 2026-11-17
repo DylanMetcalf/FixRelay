@@ -13,7 +13,7 @@ import * as quotes from "./quotes";
 export async function createDemoWorkspace(user: { id: string; name: string; email: string }): Promise<string> {
   if (await prisma.membership.findFirst({ where: { userId: user.id, org: { isDemo: true } } })) throw conflict("You already have a demo workspace.");
   const org = await prisma.$transaction((tx) => createOrganisation(tx, user.id, "Demo Maintenance Co (sample data)", true));
-  const ctx: Ctx = { userId: user.id, userName: user.name, userEmail: user.email, orgId: org.id, roles: ["OWNER", "TECHNICIAN"], clientId: null, support: false, locked: false };
+  const ctx: Ctx = { userId: user.id, userName: user.name, userEmail: user.email, orgId: org.id, roles: ["OWNER", "TECHNICIAN"], clientId: null, support: false, locked: false, emailVerified: true };
   await prisma.membership.updateMany({ where: { orgId: org.id, userId: user.id }, data: { roles: ["OWNER", "TECHNICIAN"] } });
   await prisma.organisation.update({ where: { id: org.id }, data: { vatRegistered: true, vatNumber: "4000000000", quoteTerms: "Payment within 30 days. Prices valid as stated." } });
 

@@ -8,21 +8,23 @@ import { registerCompany } from "@/server/services/orgs";
 import * as quotes from "@/server/services/quotes";
 import { addJobAttachment } from "@/server/services/attachments";
 
-export const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 1)]);
+/** A real, decodable 1×1 PNG (uploads are decoded and re-encoded, so fake bytes are rejected). */
+export const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 export const PNG_DATA_URL = `data:image/png;base64,${PNG.toString("base64")}`;
 export const uniq = () => randomUUID().slice(0, 8);
 
 export async function member(orgId: string, roles: Role[], clientId: string | null = null, label = roles[0]!.toLowerCase()): Promise<Ctx> {
-  const user = await prisma.user.create({ data: { email: `${label}-${uniq()}@example.com`, name: `${label} ${uniq()}`, passwordHash: "x" } });
+  const user = await prisma.user.create({ data: { email: `${label}-${uniq()}@example.com`, name: `${label} ${uniq()}`, passwordHash: "x", emailVerifiedAt: new Date() } });
   await prisma.membership.create({ data: { orgId, userId: user.id, roles, clientId } });
-  return { userId: user.id, userName: user.name, userEmail: user.email, orgId, roles, clientId, support: false, locked: false };
+  return { userId: user.id, userName: user.name, userEmail: user.email, orgId, roles, clientId, support: false, locked: false, emailVerified: true };
 }
 
 /** A complete tenant: owner, manager, technician, one customer with a site and a client representative. */
 export async function tenant() {
   const email = `owner-${uniq()}@example.com`;
   const reg = await registerCompany({ name: "Olive Owner", companyName: `Acme Maintenance ${uniq()}`, email, password: "correct-horse-battery" });
-  const owner: Ctx = { userId: reg.userId, userName: "Olive Owner", userEmail: email, orgId: reg.orgId, roles: ["OWNER"], clientId: null, support: false, locked: false };
+  await prisma.user.update({ where: { id: reg.userId }, data: { emailVerifiedAt: new Date() } });
+  const owner: Ctx = { userId: reg.userId, userName: "Olive Owner", userEmail: email, orgId: reg.orgId, roles: ["OWNER"], clientId: null, support: false, locked: false, emailVerified: true };
   const manager = await member(reg.orgId, ["MANAGER"]);
   const tech = await member(reg.orgId, ["TECHNICIAN"]);
   const client = await clients.createClient(owner, { name: `Client ${uniq()}`, email: "ops@client.example" });

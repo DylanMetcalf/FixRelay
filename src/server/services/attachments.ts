@@ -10,6 +10,7 @@ import { prisma, type Tx } from "@/lib/db";
 import { conflict, forbidden, invalid, notFound } from "@/lib/errors";
 import { hashToken } from "@/lib/tokens";
 import { can, isManager, isStaff, jobScope, requirePerm, type Ctx } from "../permissions";
+import { sanitizeImage, scanFile } from "../scan";
 import { storage } from "../storage";
 import { actorOf, logEvent } from "./activity";
 import { isAssigned } from "./jobs";
@@ -34,11 +35,15 @@ async function store(tx: Tx, a: { orgId: string; jobId: string | null; quoteId?:
   const mimeType = sniffMime(a.bytes);
   if (!mimeType || (a.imagesOnly && mimeType === "application/pdf"))
     throw invalid(a.imagesOnly ? "Only JPEG, PNG or WebP images are allowed." : "Only JPEG, PNG, WebP images and PDF documents are allowed.");
+  const scan = await scanFile(a.bytes, mimeType);
+  if (!scan.ok) throw invalid(scan.reason);
+  // Images are re-encoded: strips EXIF/GPS location and other metadata (POPIA), fixes rotation, caps size.
+  const bytes = mimeType === "application/pdf" ? a.bytes : await sanitizeImage(a.bytes, mimeType);
   const storageKey = `${a.orgId}/${randomUUID()}`;
-  await storage().put(storageKey, a.bytes);
+  await storage().put(storageKey, bytes, mimeType);
   return tx.attachment.create({
     data: { orgId: a.orgId, jobId: a.jobId, quoteId: a.quoteId ?? null, completionId: a.completionId ?? null, kind: a.kind,
-      storageKey, filename: cleanName(a.filename), mimeType, sizeBytes: a.bytes.length, uploadedById: a.uploadedById },
+      storageKey, filename: cleanName(a.filename), mimeType, sizeBytes: bytes.length, uploadedById: a.uploadedById },
   });
 }
 

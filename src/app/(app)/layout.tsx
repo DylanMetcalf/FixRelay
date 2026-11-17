@@ -1,6 +1,6 @@
 import Link from "@/components/link";
 import { Suspense } from "react";
-import { switchWorkspaceAction } from "@/app/actions/auth";
+import { resendVerificationAction, switchWorkspaceAction } from "@/app/actions/auth";
 import { requireSession } from "@/app/_lib/session";
 import { NavLink } from "@/components/client";
 import { Form, Submit } from "@/components/form";
@@ -69,6 +69,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
+        {!s.user.emailVerified && !ctx.support && (
+          <Banner tone="blue">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span><strong>Please confirm your email address.</strong> We sent a link to {s.user.email}. You need it to invite people and send quotes.</span>
+              <Form action={resendVerificationAction} className="inline-flex items-center gap-2"><Submit className="btn btn-secondary btn-sm">Resend link</Submit></Form>
+            </div>
+          </Banner>
+        )}
         {org.isDemo && <Banner tone="amber"><strong>Demo workspace.</strong> This is sample data, kept completely separate from your company. Switch workspace from your profile.</Banner>}
         {ctx.support && <Banner tone="red"><strong>Support session (read-only).</strong> You are viewing {org.name} under a time-limited grant. This visit is recorded in their audit trail.</Banner>}
         {sub?.access === "grace" && <Banner tone="amber"><strong>{sub.message}</strong> Full access continues until {fmtDate(sub.endsAt)}.</Banner>}

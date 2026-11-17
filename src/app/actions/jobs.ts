@@ -193,7 +193,7 @@ export async function captureSignoffAction(_: ActionState, fd: FormData) {
 export async function publicDecideAction(_: ActionState, fd: FormData) {
   return run(async () => {
     const ip = await clientIp();
-    rateLimit(`link:ip:${ip}`, 30, 10 * 60_000);
+    await rateLimit(`link:ip:${ip}`, 30, 10 * 60_000);
     await approvals.decideViaLink(str(fd, "token"),
       { outcome: str(fd, "outcome") as "APPROVED", name: str(fd, "name"), comment: str(fd, "comment"), signature: str(fd, "signature") || undefined }, ip);
     return { ok: "Thank you. Your decision has been recorded." };

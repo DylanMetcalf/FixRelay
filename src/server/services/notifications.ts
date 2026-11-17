@@ -6,21 +6,13 @@
  *   so several workers can run safely. Failures retry with exponential backoff, then become FAILED.
  */
 import { prisma, type Tx } from "@/lib/db";
+import { consoleTransport, type EmailTransport, renderEmailHtml } from "../email";
+
+export { consoleTransport, type EmailTransport };
 import type { Ctx } from "../permissions";
 import { OPEN_STATUSES } from "../workflow";
 
 export const MAX_ATTEMPTS = 5;
-
-export interface EmailTransport {
-  send(msg: { to: string; subject: string; body: string }): Promise<void>;
-}
-
-/** Default transport: writes to stdout. Swap in a real provider via DEPLOYMENT.md. */
-export const consoleTransport: EmailTransport = {
-  async send(msg) {
-    console.log(`[email] to=${msg.to} subject=${JSON.stringify(msg.subject)}`);
-  },
-};
 
 export interface NotifyInput {
   orgId: string;
@@ -57,7 +49,7 @@ export async function notify(tx: Tx, n: NotifyInput): Promise<void> {
   });
 }
 
-export async function queueEmail(tx: Tx, e: { orgId: string; to: string; subject: string; body: string; dedupeKey: string }) {
+export async function queueEmail(tx: Tx, e: { orgId: string | null; to: string; subject: string; body: string; dedupeKey: string }) {
   await tx.outboxEmail.createMany({
     data: [{ orgId: e.orgId, toEmail: e.to, subject: e.subject, body: e.body, dedupeKey: e.dedupeKey }],
     skipDuplicates: true,
@@ -92,8 +84,12 @@ export async function processOutbox(transport: EmailTransport = consoleTransport
       const row = rows[0];
       if (!row) return false;
       const email = await tx.outboxEmail.findUniqueOrThrow({ where: { id: row.id } });
+      const org = email.orgId ? await tx.organisation.findUnique({ where: { id: email.orgId }, select: { name: true, brandColour: true, contactEmail: true } }) : null;
       try {
-        await transport.send({ to: email.toEmail, subject: email.subject, body: email.body });
+        await transport.send({
+          to: email.toEmail, subject: email.subject, text: email.body, replyTo: org?.contactEmail || undefined,
+          html: renderEmailHtml({ subject: email.subject, text: email.body, brandName: org?.name ?? "FixRelay", brandColour: org?.brandColour ?? "#1E5AA8" }),
+        });
         // The body can contain a one-time approval link: do not keep it once delivered.
         await tx.outboxEmail.update({
           where: { id: email.id },
@@ -151,3 +147,22 @@ export const unreadCount = (ctx: Ctx) =>
   prisma.notification.count({ where: { orgId: ctx.orgId, userId: ctx.userId, readAt: null } });
 export const markAllRead = (ctx: Ctx) =>
   prisma.notification.updateMany({ where: { orgId: ctx.orgId, userId: ctx.userId, readAt: null }, data: { readAt: new Date() } });
+
+/**
+ * Retention (POPIA minimality). Run daily by the worker:
+ *  - delivered/failed emails older than 90 days, read notifications older than 180 days, unread older than 365 days;
+ *  - used or expired account tokens; expired sessions; expired rate-limit windows.
+ * Business records (jobs, quotes, decisions, audit trail) are kept: they are the company's lawful records.
+ */
+export async function purgeRetention(now = new Date()) {
+  const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
+  const [emails, readN, oldN, tokens, sessions, limits] = await prisma.$transaction([
+    prisma.outboxEmail.deleteMany({ where: { status: { in: ["SENT", "FAILED"] }, createdAt: { lt: days(90) } } }),
+    prisma.notification.deleteMany({ where: { readAt: { not: null }, createdAt: { lt: days(180) } } }),
+    prisma.notification.deleteMany({ where: { createdAt: { lt: days(365) } } }),
+    prisma.authToken.deleteMany({ where: { OR: [{ usedAt: { not: null } }, { expiresAt: { lt: now } }] } }),
+    prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
+    prisma.rateLimit.deleteMany({ where: { resetAt: { lt: now } } }),
+  ]);
+  return { emails: emails.count, notifications: readN.count + oldN.count, tokens: tokens.count, sessions: sessions.count, rateLimits: limits.count };
+}

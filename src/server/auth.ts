@@ -67,7 +67,7 @@ export async function changePassword(userId: string, current: string, next: stri
 }
 
 export interface SessionView {
-  user: { id: string; name: string; email: string; isPlatformAdmin: boolean };
+  user: { id: string; name: string; email: string; isPlatformAdmin: boolean; emailVerified: boolean };
   /** null when the user has no active membership (e.g. platform admin only, or access revoked). */
   ctx: Ctx | null;
   org: {
@@ -98,7 +98,7 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
   if (!s || s.expiresAt < new Date()) return null;
   const { user } = s;
   const base = {
-    user: { id: user.id, name: user.name, email: user.email, isPlatformAdmin: user.isPlatformAdmin },
+    user: { id: user.id, name: user.name, email: user.email, isPlatformAdmin: user.isPlatformAdmin, emailVerified: !!user.emailVerifiedAt },
     workspaces: user.memberships.map((m) => ({ orgId: m.orgId, name: m.org.name, isDemo: m.org.isDemo })),
   };
   const m = user.memberships.find((x) => x.orgId === s.activeOrgId) ?? (s.activeOrgId ? undefined : user.memberships[0]);
@@ -121,7 +121,7 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
         subscription: subscriptionState(org.subscription, org.isDemo),
         ctx: {
           userId: user.id, userName: `${user.name} (platform support)`, userEmail: user.email,
-          orgId: org.id, roles: [], clientId: null, support: true, locked: false,
+          orgId: org.id, roles: [], clientId: null, support: true, locked: false, emailVerified: true,
         },
       };
   }
@@ -134,7 +134,7 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
     subscription: sub,
     ctx: {
       userId: user.id, userName: user.name, userEmail: user.email, orgId: membership.orgId,
-      roles: membership.roles, clientId: membership.clientId, support: false, locked: sub.access === "locked",
+      roles: membership.roles, clientId: membership.clientId, support: false, locked: sub.access === "locked", emailVerified: !!user.emailVerifiedAt,
     },
   };
 }

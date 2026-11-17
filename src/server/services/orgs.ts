@@ -8,6 +8,7 @@ import { createSession, emailSchema, hashPassword, passwordSchema } from "../aut
 import { requirePerm, type Ctx } from "../permissions";
 import { actorOf, logEvent } from "./activity";
 import { assertWithinPlan, ensureDefaultPlans, TRIAL_DAYS } from "./billing";
+import { sendVerificationEmail, requireVerifiedEmail } from "./account";
 import { queueEmail } from "./notifications";
 
 const name = z.string().trim().min(2, "Too short.").max(120);
@@ -51,6 +52,7 @@ export async function registerCompany(input: z.input<typeof registerSchema>) {
     return await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({ data: { email: p.data.email, name: p.data.name, passwordHash } });
       const org = await createOrganisation(tx, user.id, p.data.companyName);
+      await sendVerificationEmail(tx, user);
       const token = await createSession(tx, user.id, org.id);
       return { userId: user.id, orgId: org.id, token };
     });
@@ -128,6 +130,7 @@ export async function inviteMember(ctx: Ctx, input: z.input<typeof inviteSchema>
   const d = p.data;
   assertRoleShape(d.roles, d.clientId);
   requirePerm(ctx, d.clientId ? "clients.manage" : "team.manage");
+  requireVerifiedEmail(ctx);
   const token = newToken();
   return prisma.$transaction(async (tx) => {
     if (d.clientId && !(await tx.client.findFirst({ where: { id: d.clientId, orgId: ctx.orgId } }))) throw notFound("Customer not found.");
@@ -187,7 +190,8 @@ export async function acceptInvitation(token: string, input: { name?: string; pa
       where: { id: inv.id, acceptedAt: null, revokedAt: null, expiresAt: { gt: new Date() } }, data: { acceptedAt: new Date() },
     });
     if (claimed.count !== 1) throw conflict("This invitation has already been used.");
-    user ??= await tx.user.create({ data: { email: inv.email, name: input.name!.trim(), passwordHash: passwordHash! } });
+    // The invitation link was delivered to this address, which proves ownership.
+    user ??= await tx.user.create({ data: { email: inv.email, name: input.name!.trim(), passwordHash: passwordHash!, emailVerifiedAt: new Date() } });
     await tx.membership.create({ data: { orgId: inv.orgId, userId: user.id, roles: inv.roles, clientId: inv.clientId } });
     await logEvent(tx, { orgId: inv.orgId, userId: user.id, label: user.name }, null, "team.joined", `${user.name} joined`);
     return { userId: user.id, orgId: inv.orgId, token: await createSession(tx, user.id, inv.orgId) };

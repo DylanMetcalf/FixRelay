@@ -20,7 +20,7 @@ export function Form({ action, children, className = "space-y-3", hidden = {}, o
     // Full page loads instead of router.refresh()/push(): in production builds of Next 15.5 the router's
     // RSC fetches after a server action were intermittently cancelled, leaving stale pages (see AI_HANDOVER.md).
     if (state.redirectTo) return window.location.assign(state.redirectTo);
-    if (state.data?.link) return; // keep the one-time link on screen
+    if (state.data?.link || state.data?.sent) return; // keep the one-time link / confirmation on screen
     try { sessionStorage.setItem("fr_flash", state.ok ?? "Saved."); } catch { /* storage blocked: reload anyway */ }
     window.location.reload();
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
