@@ -32,7 +32,7 @@ npm run typecheck
 - `npm run build`: **pass**
 - `prisma migrate diff` (migrations vs schema): **no drift**
 - axe-core WCAG 2.1 AA: **0 violations** on the main screens at desktop and phone sizes (e2e test 14)
-- Live demo: see BUILD_STATUS.md for the latest deployment check
+- **Live demo** (https://fixrelay-demo.onrender.com, commit `ae1a87a`): smoke test passed: landing, manifest and service worker, CSP/HSTS, sign-up (`__Host-` cookie, confirmation email sent through Resend), demo workspace, the contractor job with its quote comparison, site report link, QR sheet, and an anonymous phone report through the QR link (reference shown). Note: in the build sandbox the browser could not load page scripts whose path contains `(app)` plus an ID (the sandbox's network re-encoded the path); fetched from outside the sandbox the same file returns 200, so the smoke test routes static files through Playwright's own network stack. One React hydration warning (#418) was seen once on the live jobs list and did not reproduce in five later runs or locally with a different timezone/language.
 
 ### What the browser journeys cover (e2e/journey.spec.ts)
 1. **In-house**: register → confirm email → add a site with locations → invite a technician and a fault reporter (phone) → the reporter reports a fault with a photo → the manager sends it for assessment → the technician assesses on a phone (no prices shown) → "Fix it in-house" → assign → start, log time → finishing without an after-photo is refused → the reporter answers "Is it fixed?" from their dashboard → the manager cannot close before that → close → full history, printable report, Insights count → reopen with a reason.

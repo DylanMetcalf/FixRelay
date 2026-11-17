@@ -69,3 +69,9 @@ The SMTP transport was verified against a real SMTP server and the Resend transp
 
 ## Releases
 Back up → `npm ci && npm run db:migrate && npm run build` → restart. Migrations are additive and non-destructive (see DATABASE.md).
+
+## Small instances (free / 512 MB)
+
+`next build` runs ESLint and a TypeScript check inside the build, which can run out of memory on a 512 MB machine ("JavaScript heap out of memory"). `render.demo.yaml` therefore runs `tsc --noEmit` on its own under a heap cap and sets `SKIP_BUILD_CHECKS=1` (read by `next.config.ts`) plus `NODE_OPTIONS=--max-old-space-size=400`. On the live demo these two are also set as service environment variables. Paid instances (`render.yaml`) build normally.
+
+If pushes do not start a deploy, the service's GitHub connection is missing: use "Manual Deploy" in the Render dashboard (or reconnect the repository).

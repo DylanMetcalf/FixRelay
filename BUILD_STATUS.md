@@ -22,7 +22,7 @@ FixRelay was changed from a tool for maintenance *contractors serving customers*
 | 12 | Job can be closed or reopened appropriately | ✅ | e2e journey 1; integration (contractor rework link) |
 | 13 | Complete audit history | ✅ | e2e timeline/report; DB trigger |
 | 14 | Main workflow passes meaningful automated tests | ✅ | 66 integration/unit + 19 e2e, all green |
-| 15 | Installed, configured and deployed using the documentation | ✅ | Live demo https://fixrelay-demo.onrender.com redeployed from this branch via `render.demo.yaml` (migrations run on start) |
+| 15 | Installed, configured and deployed using the documentation | ✅ | Live demo https://fixrelay-demo.onrender.com redeployed from this branch (migrations ran on start); live smoke test passed (TESTING.md). Pushes do not trigger deploys on this service (GitHub webhook not connected): deploy from the Render dashboard or API |
 
 ## Previously open gaps (this round)
 
