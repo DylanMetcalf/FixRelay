@@ -1,0 +1,40 @@
+# FREE demo deployment on Render (for showing people, not for real customer data).
+# Free web services sleep after ~15 minutes idle (first load then takes ~1 minute) and Render's free Postgres
+# expires after 30 days. For production use render.yaml (paid, always-on).
+services:
+  - type: web
+    name: fixrelay-demo
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npx prisma migrate deploy && npx next start -p $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=460
+      - key: DATABASE_URL
+        fromDatabase: { name: fixrelay-demo-db, property: connectionString }
+      - key: STORAGE_DRIVER
+        value: db
+      - key: WORKER_IN_PROCESS
+        value: "true"
+      - key: WORKER_INTERVAL_MS
+        value: "10000"
+      - key: EMAIL_TRANSPORT
+        value: resend
+      - key: EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+databases:
+  - name: fixrelay-demo-db
+    plan: free
+    region: frankfurt
+    postgresVersion: "16"
+    databaseName: fixrelay_demo_db
+    user: fixrelay_demo_db_user

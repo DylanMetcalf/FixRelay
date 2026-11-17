@@ -2,9 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorker } from "@/components/client";
 import { Flash } from "@/components/form";
+import { appUrl } from "@/lib/app-url";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.APP_URL || "http://localhost:3000"),
+  metadataBase: new URL(appUrl() || "http://localhost:3000"),
   title: { default: "FixRelay", template: "%s · FixRelay" },
   description: "From fault reported to job completed. Every request, quote, approval and repair in one place.",
   applicationName: "FixRelay",

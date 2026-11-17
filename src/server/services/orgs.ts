@@ -11,6 +11,7 @@ import { actorOf, logEvent } from "./activity";
 import { assertWithinPlan, ensureDefaultPlans, TRIAL_DAYS } from "./billing";
 import { sendVerificationEmail, requireVerifiedEmail } from "./account";
 import { queueEmail } from "./notifications";
+import { appUrl } from "@/lib/app-url";
 
 const name = z.string().trim().min(2, "Too short.").max(120);
 const text = (max: number) => z.string().trim().max(max).default("");
@@ -150,7 +151,7 @@ export async function inviteMember(ctx: Ctx, input: z.input<typeof inviteSchema>
     const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId } });
     await queueEmail(tx, {
       orgId: ctx.orgId, to: d.email, subject: `You have been invited to ${org.name} on FixRelay`,
-      body: `${ctx.userName} invited you to join ${org.name}.\n\nAccept: ${process.env.APP_URL ?? ""}/invite/${token}\n\nThis link expires in ${INVITE_DAYS} days.`,
+      body: `${ctx.userName} invited you to join ${org.name}.\n\nAccept: ${appUrl()}/invite/${token}\n\nThis link expires in ${INVITE_DAYS} days.`,
       dedupeKey: `invite:${inv.id}`,
     });
     await logEvent(tx, actorOf(ctx), null, "team.invited", `Invited ${d.email} as ${d.roles.join(", ")}`);

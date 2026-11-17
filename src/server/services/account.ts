@@ -13,10 +13,10 @@ import { hashToken, newToken } from "@/lib/tokens";
 import { createSession, emailSchema, hashPassword } from "../auth";
 import type { Ctx } from "../permissions";
 import { queueEmail } from "./notifications";
+import { appUrl } from "@/lib/app-url";
 
 export const RESET_MINUTES = 60;
 export const VERIFY_HOURS = 48;
-const appUrl = () => process.env.APP_URL ?? "";
 
 async function issue(tx: Tx, userId: string, purpose: AuthTokenPurpose, ttlMs: number): Promise<string> {
   // Only the newest token of each purpose works.

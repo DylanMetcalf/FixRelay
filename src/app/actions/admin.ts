@@ -8,6 +8,7 @@ import * as clients from "@/server/services/clients";
 import * as orgs from "@/server/services/orgs";
 import { type ActionState, bool, fileOf, list, run, str } from "../_lib/action";
 import { getSession, requireCtx, sessionToken } from "../_lib/session";
+import { appUrl } from "@/lib/app-url";
 
 export async function saveSettingsAction(_: ActionState, fd: FormData) {
   return run(async () => {
@@ -39,7 +40,7 @@ export async function inviteAction(_: ActionState, fd: FormData) {
       email: str(fd, "email"), name: str(fd, "name"), roles: list(fd, "roles") as Role[], clientId: str(fd, "clientId") || null,
     });
     // The link is shown once so it can also be shared by WhatsApp; an email is queued as well.
-    return { ok: "Invitation created.", data: { link: `${process.env.APP_URL ?? ""}/invite/${r.token}` } };
+    return { ok: "Invitation created.", data: { link: `${appUrl()}/invite/${r.token}` } };
   });
 }
 

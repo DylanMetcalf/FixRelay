@@ -20,6 +20,7 @@ import { storeSignature } from "./attachments";
 import { isAssigned, move } from "./jobs";
 import { requireVerifiedEmail } from "./account";
 import { managerIds, notify, queueEmail } from "./notifications";
+import { appUrl } from "@/lib/app-url";
 
 export const LINK_DAYS = 14;
 const endOfDay = (d: Date) => new Date(new Date(d).setHours(23, 59, 59, 999));
@@ -136,7 +137,7 @@ export async function createApprovalLink(ctx: Ctx, target: { quoteId: string } |
       data: { orgId: ctx.orgId, purpose: "quoteId" in data ? "QUOTE" : "COMPLETION", ...data, tokenHash: hashToken(token),
         recipientName: p.data.recipientName, recipientEmail: p.data.recipientEmail, createdById: ctx.userId, expiresAt },
     });
-    const url = `${process.env.APP_URL ?? ""}/${path}/${token}`;
+    const url = `${appUrl()}/${path}/${token}`;
     await queueEmail(tx, {
       orgId: ctx.orgId, to: p.data.recipientEmail, subject, dedupeKey: `link:${link.id}`,
       body: `Dear ${p.data.recipientName},\n\n${org.name} has asked you to review this online:\n${url}\n\nThe link is personal to you and expires on ${expiresAt.toDateString()}.`,
