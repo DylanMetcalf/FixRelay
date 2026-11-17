@@ -34,4 +34,4 @@ databases:
   - name: fixrelay-db
     plan: basic-256mb
     region: frankfurt
-    postgresVersion: "16"
+    postgresMajorVersion: "16"

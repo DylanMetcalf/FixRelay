@@ -35,6 +35,6 @@ databases:
   - name: fixrelay-demo-db
     plan: free
     region: frankfurt
-    postgresVersion: "16"
+    postgresMajorVersion: "16"
     databaseName: fixrelay_demo_db
     user: fixrelay_demo_db_user
