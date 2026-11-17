@@ -1,41 +1,53 @@
-import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/app/_lib/session";
-import { Card, fmtDate, fmtDateTime, isOverdue, PageHeader, Pill, PriorityBadge, QuotePill, StatusBadge } from "@/components/ui";
+import Link from "@/components/link";
+import { Card, fmtDate, fmtDateTime, isOverdue, PageHeader, Pill, PriorityBadge, StatusBadge } from "@/components/ui";
+import { prisma } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { formatZar } from "@/lib/money";
 import { can } from "@/server/permissions";
+import { listContractors } from "@/server/services/contractors";
 import { getJob } from "@/server/services/jobs";
 import { markJobRead } from "@/server/services/notifications";
 import { listAssignable } from "@/server/services/orgs";
-import { nextAction } from "@/server/workflow";
+import { nextAction, ROUTE_LABEL } from "@/server/workflow";
 import { ActionsPanel } from "./actions-panel";
+import { QuotesCard } from "./quotes-card";
 
 export const metadata = { title: "Job" };
 
-const KIND_LABEL: Record<string, string> = { REQUEST: "Reported with the request", ASSESSMENT: "Assessment", PROGRESS: "Work in progress", BEFORE: "Before", AFTER: "After", TEST_DOCUMENT: "Test documents", QUOTE: "Quote documents", SIGNATURE: "Signatures" };
+const KIND_LABEL: Record<string, string> = { REQUEST: "Reported with the fault", ASSESSMENT: "Assessment", PROGRESS: "Work in progress", BEFORE: "Before", AFTER: "After", TEST_DOCUMENT: "Test documents", QUOTE: "Quote documents", SIGNATURE: "Signatures" };
+const VIA = { LINK: "secure link", PORTAL: "confirmed in the app", IN_PERSON: "signed on site", INTERNAL: "checked by the maintenance manager" } as const;
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { ctx } = await requireSession();
   const job = await getJob(ctx, (await params).id).catch((e) => { if (e instanceof AppError) notFound(); throw e; });
   if (!ctx.support) await markJobRead(ctx, job.id);
-  const staff = can(ctx, "clients.view") || ctx.support;
-  const team = can(ctx, "job.manage") ? await listAssignable(ctx, ["TECHNICIAN", "MANAGER", "OWNER"]) : [];
+  const staff = can(ctx, "sites.view") || ctx.support;
+  const [team, contractors, assessment] = await Promise.all([
+    can(ctx, "job.manage") ? listAssignable(ctx, ["TECHNICIAN", "MANAGER", "OWNER"]) : [],
+    can(ctx, "job.manage") ? listContractors(ctx, { activeOnly: true }) : [],
+    prisma.assessment.findFirst({ where: { jobId: job.id, orgId: ctx.orgId }, orderBy: { createdAt: "desc" }, select: { recommendedWork: true } }),
+  ]);
   const next = nextAction(job);
-  const who = next.party === "Manager" ? (job.ownerId ? job.people[job.ownerId] : "Any manager") : next.party === "Technician" ? (job.leadTechnicianId ? job.people[job.leadTechnicianId] : "Unassigned") : next.party === "Customer" ? job.client.name : "—";
   const name = (id: string | null | undefined) => (id ? (job.people[id] ?? "Unknown") : "—");
+  const reporter = job.requesterId ? name(job.requesterId) : `${job.reporterName ?? "Unknown"} (public link)`;
+  const who = { "Maintenance manager": job.ownerId ? name(job.ownerId) : "Any maintenance manager", Technician: job.leadTechnicianId ? name(job.leadTechnicianId) : "Unassigned",
+    Contractor: job.contractor?.name ?? "—", Approver: "Site / finance approver", Reporter: reporter, Nobody: "—" }[next.party];
   const groups = Object.keys(KIND_LABEL).map((k) => ({ kind: k, items: job.attachments.filter((a) => a.kind === k) })).filter((g) => g.items.length);
 
   return (
     <>
-      <PageHeader title={job.title} subtitle={<><strong>{job.reference}</strong> · {job.client.name} · {job.site.name}</>}>
+      <PageHeader title={job.title} subtitle={<><strong>{job.reference}</strong> · {job.site.name}{job.location && ` · ${job.location.name}`}</>}>
         <Link href={`/jobs/${job.id}/report`} className="btn btn-secondary">Job report</Link>
       </PageHeader>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <StatusBadge status={job.status} /><PriorityBadge priority={job.priority} emergency={job.emergency} />
+        {job.route !== "UNDECIDED" && <Pill tone="blue">{ROUTE_LABEL[job.route]}</Pill>}
         {isOverdue(job) && <Pill tone="red">Overdue since {fmtDate(job.dueAt)}</Pill>}
         {job.reopenCount > 0 && <Pill tone="amber">Reopened ×{job.reopenCount}</Pill>}
+        {job.source === "PUBLIC_LINK" && <Pill tone="amber">Reported without an account</Pill>}
       </div>
 
       <div className="mb-5 rounded-lg border-l-8 bg-white p-4 shadow-sm" style={{ borderColor: "var(--brand)" }} data-testid="next-action">
@@ -48,27 +60,35 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <ActionsPanel job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))} />
+          <ActionsPanel job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))}
+            contractors={contractors.map((c) => ({ value: c.id, label: `${c.name}${c.trade ? ` – ${c.trade}` : ""}` }))} suggestedScope={assessment?.recommendedWork || job.description} />
 
-          <Card title="Request details">
+          {can(ctx, "quote.view") && <QuotesCard ctx={ctx} jobId={job.id} />}
+
+          <Card title="Fault details">
             <p className="whitespace-pre-line text-sm">{job.description}</p>
+            {job.source === "PUBLIC_LINK" && staff && (
+              <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm" data-testid="public-reporter"><strong>Reported without an account by {job.reporterName}</strong>{job.reporterPhone && ` · ${job.reporterPhone}`}{job.reporterEmail && ` · ${job.reporterEmail}`}. Check it is genuine before sending anyone out.</p>
+            )}
             <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-              <Item label="Customer">{staff ? <Link className="link" href={`/customers/${job.client.id}`}>{job.client.name}</Link> : job.client.name}</Item>
-              <Item label="Site">{job.site.name}{job.site.address && <span className="block text-gray-600">{job.site.address}</span>}</Item>
+              <Item label="Site">{staff ? <Link className="link" href={`/sites/${job.site.id}`}>{job.site.name}</Link> : job.site.name}{job.site.address && <span className="block text-gray-600">{job.site.address}</span>}</Item>
               <Item label="Location">{job.location?.name ?? "—"}</Item>
-              <Item label="Asset">{job.asset ? (staff ? <Link className="link" href={`/assets/${job.asset.id}`}>{job.asset.reference} – {job.asset.name}</Link> : job.asset.name) : "—"}</Item>
-              <Item label="Category">{job.category}</Item>
-              <Item label="Reported by">{name(job.requesterId)}</Item>
+              <Item label="Equipment">{job.asset ? (staff ? <Link className="link" href={`/assets/${job.asset.id}`}>{job.asset.reference} – {job.asset.name}</Link> : job.asset.name) : "—"}</Item>
+              <Item label="Type">{job.category}</Item>
+              <Item label="Reported by">{reporter}</Item>
               <Item label="Reported">{fmtDateTime(job.reportedAt)}</Item>
               <Item label="Due">{fmtDate(job.dueAt)}</Item>
-              <Item label="Customer sign-off">{job.customerSignoffRequired ? "Required" : "Not required"}</Item>
+              <Item label="Fixed by">{job.route === "CONTRACTOR" ? (job.contractor ? (staff ? <Link className="link" href={`/contractors/${job.contractor.id}`}>{job.contractor.name}</Link> : job.contractor.name) : "Contractor – getting quotes") : job.route === "IN_HOUSE" ? `In-house – ${name(job.leadTechnicianId)}` : "Not decided yet"}</Item>
               <Item label="Responsible manager">{name(job.ownerId)}</Item>
-              <Item label="Technician">{name(job.leadTechnicianId)}{job.technicians.length > 0 && <span className="block text-gray-600">+ {job.technicians.map((t) => name(t.userId)).join(", ")}</span>}</Item>
-              <Item label="Planned">{job.plannedStart || job.plannedEnd ? `${fmtDate(job.plannedStart)} → ${fmtDate(job.plannedEnd)}` : "—"}</Item>
-              {job.externalContractor && <Item label="External contractor">{job.externalContractor}</Item>}
+              {job.technicians.length > 0 && <Item label="Also working on it">{job.technicians.map((t) => name(t.userId)).join(", ")}</Item>}
+              {(job.plannedStart || job.plannedEnd) && <Item label="Planned">{`${fmtDate(job.plannedStart)} → ${fmtDate(job.plannedEnd)}`}</Item>}
+              {job.approvedCostCents != null && <Item label="Approved value">{formatZar(job.approvedCostCents)} incl. VAT</Item>}
+              {job.poNumber && <Item label="PO number">{job.poNumber}</Item>}
+              <Item label="Confirmation">{job.reporterConfirmation ? "Reporter confirms it is fixed" : "Maintenance manager confirms"}</Item>
             </dl>
-            {job.instructions && <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm"><strong>Job instructions:</strong> {job.instructions}</p>}
-            {job.directAuthReason && <p className="mt-3 text-sm text-gray-700"><strong>Authorised without quotation:</strong> {job.directAuthReason}</p>}
+            {job.instructions && <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm"><strong>Instructions:</strong> {job.instructions}</p>}
+            {job.directAuthReason && <p className="mt-3 text-sm text-gray-700"><strong>In-house note:</strong> {job.directAuthReason}</p>}
+            {job.quoteExceptionReason && <p className="mt-3 text-sm text-gray-700"><strong>Fewer quotes than required:</strong> {job.quoteExceptionReason}</p>}
           </Card>
 
           {job.assessments.map((a) => (
@@ -80,24 +100,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                 {a.materials && <Item label="Materials needed">{a.materials}</Item>}
                 <Item label="Labour estimate">{a.labourHoursEstimate ? `${a.labourHoursEstimate.toString()} h` : "—"}</Item>
               </dl>
-              <div className="mt-2 flex gap-2"><Pill tone={a.quoteRequired ? "amber" : "green"}>{a.quoteRequired ? "Quotation required" : "No quotation required"}</Pill>{a.externalHelpRequired && <Pill tone="red">Specialist help needed</Pill>}</div>
+              <div className="mt-2 flex gap-2"><Pill tone={a.quoteRequired ? "amber" : "green"}>{a.quoteRequired ? "Contractor quote suggested" : "Can be done in-house"}</Pill>{a.externalHelpRequired && <Pill tone="red">Specialist needed</Pill>}</div>
             </Card>
           ))}
-
-          {job.quotes.length > 0 && (
-            <Card title="Quotations">
-              <ul className="divide-y divide-gray-200">
-                {job.quotes.map((q) => (
-                  <li key={q.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                    <Link className="link" href={`/quotes/${q.id}`}>{q.number} v{q.version}{q.kind === "VARIATION" ? " (variation)" : ""}</Link>
-                    <span className="font-bold tabular-nums">{formatZar(q.totalCents)}</span>
-                    <QuotePill status={q.status} />
-                    {q.decision && <span className="w-full text-xs text-gray-600">{q.decision.outcome === "APPROVED" ? "Approved" : "Rejected"} by {q.decision.deciderName} · {fmtDateTime(q.decision.createdAt)}{q.decision.comment && ` · “${q.decision.comment}”`}</span>}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
 
           {job.updates.length > 0 && (
             <Card title="Work log">
@@ -116,15 +121,15 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           )}
 
           {job.completions.map((c) => (
-            <Card key={c.id} title={`Completion${job.completions.length > 1 ? ` (version ${c.version})` : ""}`} aside={<Pill tone={c.status === "APPROVED" ? "green" : c.status === "REJECTED" ? "red" : "amber"}>{c.status === "SUBMITTED" ? "Awaiting verification" : c.status[0] + c.status.slice(1).toLowerCase()}</Pill>}>
+            <Card key={c.id} title={`Completed work${job.completions.length > 1 ? ` (version ${c.version})` : ""}`} aside={<Pill tone={c.status === "APPROVED" ? "green" : c.status === "REJECTED" ? "red" : "amber"}>{c.status === "SUBMITTED" ? "Awaiting confirmation" : c.status === "APPROVED" ? "Confirmed fixed" : "Not fixed"}</Pill>}>
               <dl className="space-y-2 text-sm">
                 <Item label="Work performed">{c.workPerformed}</Item>
-                {c.observations && <Item label="Outstanding observations">{c.observations}</Item>}
-                <Item label="Completed">{fmtDateTime(c.completedAt)} by {name(c.submittedById)}</Item>
+                {c.observations && <Item label="Observations">{c.observations}</Item>}
+                <Item label="Completed">{fmtDateTime(c.completedAt)} by {c.submittedById ? name(c.submittedById) : (job.contractor?.name ?? "contractor")}</Item>
               </dl>
               {c.decision && (
                 <div className="mt-3 rounded-md bg-gray-50 p-3 text-sm">
-                  <p><strong>{c.decision.outcome === "APPROVED" ? "Signed off" : "Rejected"}</strong> by {c.decision.deciderName} on {fmtDateTime(c.decision.createdAt)} <span className="text-gray-600">({VIA[c.decision.via]})</span></p>
+                  <p><strong>{c.decision.outcome === "APPROVED" ? "Confirmed fixed" : "Not fixed"}</strong> by {c.decision.deciderName} on {fmtDateTime(c.decision.createdAt)} <span className="text-gray-600">({VIA[c.decision.via]})</span></p>
                   {c.decision.comment && <p className="mt-1 italic">“{c.decision.comment}”</p>}
                   {c.decision.signatureAttachmentId && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -166,8 +171,6 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
     </>
   );
 }
-
-const VIA = { LINK: "secure link", PORTAL: "customer portal", IN_PERSON: "signed in person", INTERNAL: "recorded internally" } as const;
 
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><dt className="text-xs font-bold uppercase tracking-wide text-gray-600">{label}</dt><dd className="whitespace-pre-line text-gray-900">{children}</dd></div>;

@@ -12,10 +12,11 @@ export async function GET(req: Request) {
   const date = (v: string | null, d: Date) => (v && !Number.isNaN(Date.parse(v)) ? new Date(v) : d);
   const from = date(q.get("from"), new Date(Date.now() - 30 * 86_400_000));
   const to = new Date(date(q.get("to"), new Date()).getTime() + 86_400_000);
-  const clientId = q.get("clientId") && /^[0-9a-f-]{36}$/.test(q.get("clientId")!) ? q.get("clientId")! : undefined;
+  const siteId = q.get("siteId") && /^[0-9a-f-]{36}$/.test(q.get("siteId")!) ? q.get("siteId")! : undefined;
+  const scope = s.ctx.siteIds.length ? { siteId: { in: s.ctx.siteIds } } : {};
   const jobs = await prisma.job.findMany({
-    where: { orgId: s.ctx.orgId, reportedAt: { gte: from, lt: to }, ...(clientId ? { clientId } : {}) },
-    include: { client: { select: { name: true } }, site: { select: { name: true } }, quotes: { where: { status: "APPROVED" }, select: { totalCents: true } }, updates: { select: { labourMinutes: true, materialCostCents: true } } },
+    where: { orgId: s.ctx.orgId, reportedAt: { gte: from, lt: to }, ...scope, ...(siteId ? { siteId } : {}) },
+    include: { site: { select: { name: true } }, location: { select: { name: true } }, asset: { select: { reference: true } }, contractor: { select: { name: true } }, updates: { select: { labourMinutes: true, materialCostCents: true } } },
     orderBy: { reportedAt: "asc" }, take: 20_000,
   });
   const ids = [...new Set(jobs.map((j) => j.leadTechnicianId).filter((x): x is string => !!x))];
@@ -23,11 +24,12 @@ export async function GET(req: Request) {
   // Neutralise spreadsheet formulas (=, +, -, @) and quote every cell.
   const cell = (v: unknown) => { let t = v == null ? "" : String(v); if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`; return `"${t.replace(/"/g, '""')}"`; };
   const iso = (d: Date | null) => (d ? d.toISOString() : "");
-  const rows = [["Reference", "Title", "Customer", "Site", "Category", "Priority", "Emergency", "Status", "Technician", "Reported", "First response", "Assigned", "Completed", "Closed", "Due", "Approved quotes incl. VAT (R)", "Labour hours", "Materials (R)"]];
+  const rows = [["Reference", "Title", "Site", "Location", "Equipment", "Category", "Priority", "Emergency", "Status", "Fixed by", "Technician / contractor", "Reported via", "Reported", "First response", "Assigned", "Completed", "Closed", "Due", "Approved contractor value incl. VAT (R)", "PO number", "In-house labour hours", "In-house materials (R)"]];
   for (const j of jobs) rows.push([
-    j.reference, j.title, j.client.name, j.site.name, j.category, j.priority, j.emergency ? "yes" : "no", STATUS_LABEL[j.status],
-    j.leadTechnicianId ? (names[j.leadTechnicianId] ?? "") : "", iso(j.reportedAt), iso(j.respondedAt), iso(j.assignedAt), iso(j.completedAt), iso(j.closedAt), iso(j.dueAt),
-    (j.quotes.reduce((a, x) => a + x.totalCents, 0) / 100).toFixed(2), (j.updates.reduce((a, u) => a + u.labourMinutes, 0) / 60).toFixed(1),
+    j.reference, j.title, j.site.name, j.location?.name ?? "", j.asset?.reference ?? "", j.category, j.priority, j.emergency ? "yes" : "no", STATUS_LABEL[j.status],
+    j.route === "CONTRACTOR" ? "Contractor" : j.route === "IN_HOUSE" ? "In-house" : "", j.route === "CONTRACTOR" ? (j.contractor?.name ?? "") : (j.leadTechnicianId ? (names[j.leadTechnicianId] ?? "") : ""),
+    j.source === "PUBLIC_LINK" ? "Public link" : "App", iso(j.reportedAt), iso(j.respondedAt), iso(j.assignedAt), iso(j.completedAt), iso(j.closedAt), iso(j.dueAt),
+    j.approvedCostCents != null ? (j.approvedCostCents / 100).toFixed(2) : "", j.poNumber ?? "", (j.updates.reduce((a, u) => a + u.labourMinutes, 0) / 60).toFixed(1),
     (j.updates.reduce((a, u) => a + u.materialCostCents, 0) / 100).toFixed(2),
   ]);
   return new NextResponse("﻿" + rows.map((r) => r.map(cell).join(",")).join("\r\n"), {

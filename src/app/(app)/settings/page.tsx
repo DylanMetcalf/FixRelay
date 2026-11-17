@@ -6,17 +6,25 @@ import { Card, Check, Field, fmtDate, fmtDateTime, PageHeader, Pill, TextArea } 
 import { prisma } from "@/lib/db";
 import { can } from "@/server/permissions";
 import { usage } from "@/server/services/billing";
+import { listSites } from "@/server/services/sites";
 import { listSupportGrants, listTeam } from "@/server/services/orgs";
 
 export const metadata = { title: "Settings" };
-const STAFF_ROLES = [["OWNER", "Owner / administrator"], ["MANAGER", "Manager / dispatcher"], ["TECHNICIAN", "Technician"]] as const;
+const ROLES = [
+  ["OWNER", "Owner / administrator", "Everything, incl. settings and team"],
+  ["MANAGER", "Maintenance manager", "Runs jobs, quotes, contractors; approves up to the manager limit"],
+  ["APPROVER", "Approver (site / finance)", "Approves spend up to the approver limit; sees all jobs"],
+  ["TECHNICIAN", "Technician", "Assessments and in-house work on assigned jobs"],
+  ["REQUESTER", "Reports faults only", "Reports faults and follows their own reports (free)"],
+] as const;
 
 export default async function Settings() {
   const { ctx, subscription: sub } = await requirePage("team.view");
   const owner = can(ctx, "org.manage");
-  const [org, team, rules, grants, used] = await Promise.all([
+  const [org, team, rules, grants, used, sites] = await Promise.all([
     prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, include: { subscription: { include: { plan: true } } } }),
     listTeam(ctx), prisma.priorityRule.findMany({ where: { orgId: ctx.orgId } }), owner ? listSupportGrants(ctx) : [], usage(prisma, ctx.orgId),
+    listSites(ctx),
   ]);
   const plan = org.subscription?.plan;
   const lim = (n: number | null | undefined) => (n == null ? "unlimited" : n);
@@ -34,21 +42,15 @@ export default async function Settings() {
                 <Field label="Contact email" name="contactEmail" type="email" defaultValue={org.contactEmail} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Brand colour" name="brandColour" type="color" defaultValue={org.brandColour} hint="Used for buttons and your customer pages." />
+                <Field label="Brand colour" name="brandColour" type="color" defaultValue={org.brandColour} hint="Used for buttons, emails and your public pages." />
                 <Field label="Logo" name="logo" hint="PNG, JPEG or WebP, up to 1 MB. Also used as the app icon."><input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" className="input" /></Field>
               </div>
               <fieldset className="rounded-md border border-gray-300 p-3">
-                <legend className="px-1 text-sm font-bold">Tax</legend>
-                <Check name="vatRegistered" label="My company is VAT registered" defaultChecked={org.vatRegistered} />
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="VAT number" name="vatNumber" defaultValue={org.vatNumber} />
-                  <Field label="VAT rate (%)" name="vatRatePercent" inputMode="decimal" defaultValue={String(org.vatRateBps / 100)} />
-                </div>
-                <p className="mt-1 text-xs text-gray-600">Applies to new quotes. Existing quotes keep the rate they were created with.</p>
+                <legend className="px-1 text-sm font-bold">Fault reporting</legend>
+                <Check name="reporterConfirmation" label="The person who reported a fault confirms it is fixed" defaultChecked={org.reporterConfirmation} />
+                <Check name="publicReportingEnabled" label="Anyone with a site link or QR code can report without an account" defaultChecked={org.publicReportingEnabled} />
+                <p className="mt-1 text-xs text-gray-600">Reports without an account are marked for your team to screen. Reporters only give a name and phone number and cannot see anything else.</p>
               </fieldset>
-              <Field label="Quotes valid for (days)" name="quoteValidityDays" inputMode="numeric" defaultValue={String(org.quoteValidityDays)} />
-              <TextArea label="Default quote terms and conditions" name="quoteTerms" defaultValue={org.quoteTerms} />
-              <Check name="customerSignoffRequired" label="New jobs need customer sign-off before closing" defaultChecked={org.customerSignoffRequired} />
               <Submit>Save company settings</Submit>
             </Form>
           </Card>
@@ -57,17 +59,18 @@ export default async function Settings() {
         <div className="space-y-5" id="team">
           <Card title="Team">
             <ul className="divide-y divide-gray-200">
-              {team.members.filter((m) => !m.clientId).map((m) => (
+              {team.members.map((m) => (
                 <li key={m.id} className="py-3">
                   <p className="text-sm font-bold">{m.user.name} {!m.active && <Pill tone="red">Access removed</Pill>}</p>
                   <p className="muted">{m.user.email}</p>
                   {owner ? (
                     <Form action={a.updateMemberAction} hidden={{ membershipId: m.id }} className="mt-2 flex flex-wrap items-center gap-3">
-                      {STAFF_ROLES.map(([v, l]) => <label key={v} className="flex items-center gap-1 text-xs font-semibold"><input type="checkbox" name="roles" value={v} defaultChecked={m.roles.includes(v)} />{l}</label>)}
+                      {ROLES.map(([v, l]) => <label key={v} className="flex items-center gap-1 text-xs font-semibold"><input type="checkbox" name="roles" value={v} defaultChecked={m.roles.includes(v)} />{l}</label>)}
+                      <SiteBoxes sites={sites} selected={m.siteIds} />
                       <label className="flex items-center gap-1 text-xs font-semibold"><input type="checkbox" name="active" defaultChecked={m.active} />Active</label>
                       <Submit className="btn btn-secondary btn-sm">Save</Submit>
                     </Form>
-                  ) : <p className="text-xs font-semibold text-gray-700">{m.roles.join(", ").toLowerCase()}</p>}
+                  ) : <p className="text-xs font-semibold text-gray-700">{m.roles.map((r) => ROLES.find((x) => x[0] === r)?.[1] ?? r).join(", ")}{m.siteIds.length ? ` · ${m.siteIds.length} site${m.siteIds.length === 1 ? "" : "s"}` : " · all sites"}</p>}
                 </li>
               ))}
             </ul>
@@ -81,16 +84,34 @@ export default async function Settings() {
               </div>
             )}
           </Card>
-          {owner && (
-            <Card title="Invite a team member">
+          {(owner || can(ctx, "sites.manage")) && (
+            <Card title="Invite someone">
               <LinkForm action={a.inviteAction} submit="Send invitation" shareLabel="Invitation created">
                 <Field label="Email" name="email" type="email" required />
                 <Field label="Name" name="name" />
                 <fieldset><legend className="label">Role</legend>
-                  {STAFF_ROLES.map(([v, l]) => <label key={v} className="flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" name="roles" value={v} defaultChecked={v === "TECHNICIAN"} className="h-4 w-4" />{l}</label>)}
+                  {ROLES.filter(([v]) => owner || v === "REQUESTER").map(([v, l, d]) => (
+                    <label key={v} className="flex min-h-9 items-start gap-2 py-1 text-sm"><input type="checkbox" name="roles" value={v} defaultChecked={v === (owner ? "TECHNICIAN" : "REQUESTER")} className="mt-0.5 h-4 w-4" /><span><strong>{l}</strong><span className="block text-xs text-gray-600">{d}</span></span></label>
+                  ))}
                 </fieldset>
+                {sites.length > 1 && <SiteBoxes sites={sites} selected={[]} label="Only these sites (leave empty for all)" />}
               </LinkForm>
-              <p className="muted mt-2">Customer users are invited from the customer's page.</p>
+              {!owner && <p className="muted mt-2">Only the owner can invite managers, approvers and technicians.</p>}
+            </Card>
+          )}
+          {owner && (
+            <Card title="Approval rules">
+              <p className="muted mb-3">Who may approve contractor quotes, by amount incl. VAT. Owners can approve any amount. Changes are recorded in the history.</p>
+              <Form action={a.saveApprovalRulesAction}>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Maintenance managers up to (R)" name="managerLimit" inputMode="decimal" defaultValue={(org.managerApprovalLimitCents / 100).toFixed(2)} />
+                  <Field label="Approvers up to (R) – empty = no limit" name="approverLimit" inputMode="decimal" defaultValue={org.approverApprovalLimitCents == null ? "" : (org.approverApprovalLimitCents / 100).toFixed(2)} />
+                  <Field label="Several quotes needed above (R)" name="quoteThreshold" inputMode="decimal" defaultValue={(org.multiQuoteThresholdCents / 100).toFixed(2)} />
+                  <Field label="Number of quotes needed" name="minQuotes" inputMode="numeric" defaultValue={String(org.minQuotes)} />
+                </div>
+                <Check name="poRequired" label="A purchase order (PO) number is required to approve a quote" defaultChecked={org.poRequired} />
+                <Submit>Save approval rules</Submit>
+              </Form>
             </Card>
           )}
         </div>
@@ -123,7 +144,7 @@ export default async function Settings() {
                 <div><dt className="text-xs font-bold uppercase text-gray-600">Status</dt><dd><Pill tone={sub?.access === "full" ? "green" : sub?.access === "grace" ? "amber" : "red"}>{sub?.status}</Pill> {sub?.endsAt && <span className="text-gray-600">until {fmtDate(sub.endsAt)}</span>}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-gray-600">Team members</dt><dd>{used.users} of {lim(plan?.maxUsers)}</dd></div>
                 <div><dt className="text-xs font-bold uppercase text-gray-600">Open jobs</dt><dd>{used.activeJobs} of {lim(plan?.maxActiveJobs)}</dd></div>
-                <div><dt className="text-xs font-bold uppercase text-gray-600">Customers</dt><dd>{used.clients} of {lim(plan?.maxClients)}</dd></div>
+                <div><dt className="text-xs font-bold uppercase text-gray-600">Sites</dt><dd>{used.sites} of {lim(plan?.maxSites)}</dd></div>
               </dl>
             )}
             <p className="muted mt-3">To change plan, contact us. If a subscription lapses your account becomes read-only: your records are never deleted and remain available to view and print.</p>
@@ -156,5 +177,14 @@ export default async function Settings() {
         )}
       </div>
     </>
+  );
+}
+
+function SiteBoxes({ sites, selected, label = "Sites" }: { sites: { id: string; name: string }[]; selected: string[]; label?: string }) {
+  if (sites.length < 2) return null;
+  return (
+    <fieldset className="w-full"><legend className="text-xs font-bold text-gray-700">{label}</legend>
+      <div className="flex flex-wrap gap-x-3">{sites.map((st) => <label key={st.id} className="flex items-center gap-1 text-xs"><input type="checkbox" name="siteIds" value={st.id} defaultChecked={selected.includes(st.id)} />{st.name}</label>)}</div>
+    </fieldset>
   );
 }

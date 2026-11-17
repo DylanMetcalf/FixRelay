@@ -1,9 +1,13 @@
 /**
- * The job lifecycle as an explicit state machine. This file is the single source of truth
- * for which status changes are legal. Services never set a status without going through
- * `assertTransition` + a guarded UPDATE (see services/jobs.ts `move`). Documented in WORKFLOWS.md.
+ * The job lifecycle as an explicit state machine (single source of truth). Every status change goes through
+ * `assertTransition` + a guarded UPDATE (services/jobs.ts `move`). Documented in WORKFLOWS.md.
+ *
+ * After assessment every job takes one of two routes:
+ *   IN_HOUSE   – authorised → assigned to a site technician → work → evidence → confirmed fixed → closed
+ *   CONTRACTOR – quotes requested → compared → approved (by amount) → contractor appointed → contractor
+ *                submits completion → confirmed fixed → closed
  */
-import type { JobStatus } from "@prisma/client";
+import type { JobRoute, JobStatus } from "@prisma/client";
 import { conflict } from "@/lib/errors";
 
 export const TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
@@ -13,10 +17,10 @@ export const TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
   QUOTING: ["AWAITING_APPROVAL", "APPROVED", "CANCELLED"],
   AWAITING_APPROVAL: ["APPROVED", "QUOTING", "CANCELLED"],
   APPROVED: ["ASSIGNED", "CANCELLED"],
-  ASSIGNED: ["IN_PROGRESS", "ON_HOLD", "CANCELLED"],
+  ASSIGNED: ["IN_PROGRESS", "ON_HOLD", "AWAITING_VERIFICATION", "CANCELLED"],
   IN_PROGRESS: ["AWAITING_VERIFICATION", "ON_HOLD", "CANCELLED"],
   ON_HOLD: ["ASSIGNED", "IN_PROGRESS", "CANCELLED"],
-  AWAITING_VERIFICATION: ["VERIFIED", "CLOSED", "IN_PROGRESS"],
+  AWAITING_VERIFICATION: ["VERIFIED", "CLOSED", "IN_PROGRESS"], // CLOSED directly only when reporter confirmation is off (closeJob)
   VERIFIED: ["CLOSED"],
   CLOSED: ["ASSIGNED"], // reopen
   CANCELLED: [],
@@ -30,20 +34,22 @@ export function assertTransition(from: JobStatus, to: JobStatus): void {
 }
 
 export const STATUS_LABEL: Record<JobStatus, string> = {
-  NEW: "New request",
+  NEW: "New report",
   ASSESSING: "Awaiting assessment",
-  ASSESSED: "Assessed",
-  QUOTING: "Quote being prepared",
-  AWAITING_APPROVAL: "Quote awaiting approval",
+  ASSESSED: "Assessed – decide how to fix",
+  QUOTING: "Getting quotes",
+  AWAITING_APPROVAL: "Awaiting spend approval",
   APPROVED: "Approved – awaiting assignment",
   ASSIGNED: "Assigned",
   IN_PROGRESS: "In progress",
   ON_HOLD: "On hold",
-  AWAITING_VERIFICATION: "Awaiting verification",
-  VERIFIED: "Verified – ready to close",
+  AWAITING_VERIFICATION: "Awaiting confirmation",
+  VERIFIED: "Confirmed fixed – ready to close",
   CLOSED: "Closed",
   CANCELLED: "Cancelled",
 };
+
+export const ROUTE_LABEL: Record<JobRoute, string> = { UNDECIDED: "Not decided yet", IN_HOUSE: "In-house team", CONTRACTOR: "External contractor" };
 
 export const OPEN_STATUSES: JobStatus[] = [
   "NEW", "ASSESSING", "ASSESSED", "QUOTING", "AWAITING_APPROVAL", "APPROVED",
@@ -51,40 +57,26 @@ export const OPEN_STATUSES: JobStatus[] = [
 ];
 export const REQUEST_STATUSES: JobStatus[] = ["NEW", "ASSESSING", "ASSESSED"];
 
-export type Party = "Manager" | "Technician" | "Customer" | "Nobody";
+export type Party = "Maintenance manager" | "Technician" | "Contractor" | "Approver" | "Reporter" | "Nobody";
 
 /** What happens next and who must do it — shown on every job. */
 export function nextAction(job: {
-  status: JobStatus;
-  customerSignoffRequired: boolean;
-  leadTechnicianId?: string | null;
+  status: JobStatus; route?: JobRoute; reporterConfirmation: boolean; leadTechnicianId?: string | null; contractorId?: string | null;
 }): { label: string; party: Party } {
+  const contractor = job.route === "CONTRACTOR";
   switch (job.status) {
-    case "NEW":
-      return { label: "Review and send for assessment", party: "Manager" };
-    case "ASSESSING":
-      return { label: "Assess the problem", party: job.leadTechnicianId ? "Technician" : "Manager" };
-    case "ASSESSED":
-      return { label: "Prepare a quote or authorise the work", party: "Manager" };
-    case "QUOTING":
-      return { label: "Finish and submit the quote", party: "Manager" };
-    case "AWAITING_APPROVAL":
-      return { label: "Approve or reject the quote", party: "Customer" };
-    case "APPROVED":
-      return { label: "Assign a technician", party: "Manager" };
-    case "ASSIGNED":
-      return { label: "Start the work", party: "Technician" };
-    case "IN_PROGRESS":
-      return { label: "Complete the work and submit evidence", party: "Technician" };
-    case "ON_HOLD":
-      return { label: "Resolve the hold and resume", party: "Manager" };
+    case "NEW": return { label: "Review the report and send it for assessment", party: "Maintenance manager" };
+    case "ASSESSING": return { label: "Assess the problem", party: job.leadTechnicianId ? "Technician" : "Maintenance manager" };
+    case "ASSESSED": return { label: "Decide: fix in-house or get contractor quotes", party: "Maintenance manager" };
+    case "QUOTING": return { label: "Collect and compare quotes, then choose one", party: "Maintenance manager" };
+    case "AWAITING_APPROVAL": return { label: "Approve or reject the recommended quote", party: "Approver" };
+    case "APPROVED": return { label: "Assign a technician", party: "Maintenance manager" };
+    case "ASSIGNED": return contractor ? { label: "Do the work and submit completion", party: "Contractor" } : { label: "Start the work", party: "Technician" };
+    case "IN_PROGRESS": return contractor ? { label: "Finish the work and submit completion", party: "Contractor" } : { label: "Complete the work and submit evidence", party: "Technician" };
+    case "ON_HOLD": return { label: "Resolve the hold and resume", party: "Maintenance manager" };
     case "AWAITING_VERIFICATION":
-      return job.customerSignoffRequired
-        ? { label: "Verify and sign off the completed work", party: "Customer" }
-        : { label: "Verify the work and close the job", party: "Manager" };
-    case "VERIFIED":
-      return { label: "Close the job", party: "Manager" };
-    default:
-      return { label: "No further action", party: "Nobody" };
+      return job.reporterConfirmation ? { label: "Confirm the fault is fixed", party: "Reporter" } : { label: "Check the work and confirm it is fixed", party: "Maintenance manager" };
+    case "VERIFIED": return { label: "Close the job", party: "Maintenance manager" };
+    default: return { label: "No further action", party: "Nobody" };
   }
 }

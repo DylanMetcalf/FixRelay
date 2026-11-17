@@ -1,42 +1,41 @@
-import Link from "@/components/link";
 import { createJobAction } from "@/app/actions/jobs";
 import { requirePage } from "@/app/_lib/session";
 import { RequestPlaceFields } from "@/components/client-forms";
 import { Form, Submit } from "@/components/form";
+import Link from "@/components/link";
 import { Card, Check, Empty, Field, PageHeader, Select, TextArea } from "@/components/ui";
 import { can } from "@/server/permissions";
-import { requestFormOptions } from "@/server/services/clients";
 import { CATEGORIES } from "@/server/services/jobs";
+import { requestFormOptions } from "@/server/services/sites";
 
-export const metadata = { title: "New request" };
+export const metadata = { title: "Report a fault" };
 
-export default async function NewRequest() {
+export default async function NewRequest({ searchParams }: { searchParams: Promise<{ site?: string; location?: string; asset?: string }> }) {
   const { ctx } = await requirePage("job.create");
-  const clients = (await requestFormOptions(ctx)).filter((c) => c.sites.length > 0 || !can(ctx, "clients.manage"));
-  if (clients.length === 0 || clients.every((c) => c.sites.length === 0))
-    return (
-      <Empty title="Add a customer and a site first">
-        A request needs to know where the fault is. {can(ctx, "clients.manage") ? <Link className="link" href="/customers">Add a customer and site</Link> : "Ask your maintenance company to set up your site."}
-      </Empty>
-    );
+  const sp = await searchParams;
+  const sites = await requestFormOptions(ctx);
+  if (sites.length === 0)
+    return <Empty title="Add a site first">A fault report needs to know where the problem is. {can(ctx, "sites.manage") ? <Link className="link" href="/sites">Add your first site</Link> : "Ask your maintenance manager to set up your site."}</Empty>;
+  const fromQr = !!(sp.location || sp.asset);
   return (
     <>
-      <PageHeader title="Log a maintenance request" subtitle="Tell us what is wrong and where. Add a photo if you can." />
+      <PageHeader title="Report a fault" subtitle="Tell the maintenance team what is wrong and where. Add a photo if you can." />
       <Card className="max-w-2xl">
+        {fromQr && <p className="mb-3 rounded-md bg-blue-50 p-3 text-sm font-semibold text-blue-950">Location filled in from the QR code. Just describe the problem.</p>}
         <Form action={createJobAction} className="space-y-4">
-          <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Conveyor belt slipping on line 2" />
+          <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Cold room door not sealing" />
           <TextArea label="Describe it" name="description" required rows={4} placeholder="What happened, when did it start, is anything unsafe?" />
-          <RequestPlaceFields clients={clients} />
+          <RequestPlaceFields sites={sites} initial={{ siteId: sp.site, locationId: sp.location, assetId: sp.asset }} />
           <div className="grid grid-cols-2 gap-3">
-            <Select label="Category" name="category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />
-            <Select label="Priority" name="priority" defaultValue="NORMAL" options={[{ value: "LOW", label: "Low" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High" }, { value: "CRITICAL", label: "Critical" }]} />
+            <Select label="Type of problem" name="category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />
+            <Select label="How urgent?" name="priority" defaultValue="NORMAL" options={[{ value: "LOW", label: "Low – when convenient" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High – affecting work" }, { value: "CRITICAL", label: "Critical – stopped / unsafe" }]} />
           </div>
           <Check name="emergency" label="This is an emergency (needs immediate attention)" />
-          <p className="text-xs text-gray-600">Priority tells the team how urgent this is. It does not replace your site's safety procedures: if there is danger, make the area safe and phone your contact.</p>
-          <Field label="Photos or documents" name="files" hint="JPEG, PNG, WebP or PDF, up to 10 MB each.">
-            <input id="files" name="files" type="file" multiple accept="image/*,application/pdf" className="input" />
+          <p className="text-xs text-gray-600">Urgency tells the team how quickly to respond. It does not replace your site&apos;s safety procedures: if there is danger, make the area safe and call your supervisor.</p>
+          <Field label="Photos or documents" name="files" hint="JPEG, PNG, WebP or PDF, up to 10 MB each. Location data is removed from photos.">
+            <input id="files" name="files" type="file" multiple accept="image/*,application/pdf" capture="environment" className="input" />
           </Field>
-          <Submit className="btn btn-primary w-full sm:w-auto">Log request</Submit>
+          <Submit className="btn btn-primary w-full sm:w-auto">Send report</Submit>
         </Form>
       </Card>
     </>

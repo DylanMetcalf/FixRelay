@@ -8,7 +8,6 @@ import { randomUUID } from "node:crypto";
 import type { AttachmentKind } from "@prisma/client";
 import { prisma, type Tx } from "@/lib/db";
 import { conflict, forbidden, invalid, notFound } from "@/lib/errors";
-import { hashToken } from "@/lib/tokens";
 import { can, isManager, isStaff, jobScope, requirePerm, type Ctx } from "../permissions";
 import { sanitizeImage, scanFile } from "../scan";
 import { storage } from "../storage";
@@ -17,7 +16,8 @@ import { isAssigned } from "./jobs";
 
 export const MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_PER_JOB = 100;
-const CUSTOMER_VISIBLE: AttachmentKind[] = ["REQUEST", "QUOTE", "BEFORE", "AFTER", "TEST_DOCUMENT", "SIGNATURE"];
+/** What requesters (non-staff) may open on their own reports. */
+const CUSTOMER_VISIBLE: AttachmentKind[] = ["REQUEST", "BEFORE", "AFTER", "TEST_DOCUMENT", "SIGNATURE"];
 
 export function sniffMime(b: Buffer): string | null {
   if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
@@ -66,8 +66,9 @@ export async function addJobAttachment(ctx: Ctx, input: UploadInput) {
         break;
       case "QUOTE": {
         requirePerm(ctx, "quote.manage");
-        const q = await tx.quote.findFirst({ where: { id: input.quoteId ?? "", orgId: ctx.orgId, jobId: job.id, status: "DRAFT" } });
-        if (!q) throw conflict("Files can only be added to a draft quote.");
+        // The contractor's own document (PDF/photo) for a quote captured by staff. Figures stay frozen.
+        const q = await tx.quote.findFirst({ where: { id: input.quoteId ?? "", orgId: ctx.orgId, jobId: job.id, status: { in: ["DRAFT", "SUBMITTED"] } } });
+        if (!q) throw conflict("Files can only be added to an open quote.");
         quoteId = q.id;
         break;
       }
@@ -114,16 +115,28 @@ export async function readAttachment(ctx: Ctx, id: string) {
   return read(att);
 }
 
-/** Download through a customer review link: only the tenant logo and files bound to that link's quote / completion. */
+/** Download through a contractor link: only the fault photos of that job and the contractor's own uploads. */
 export async function readAttachmentViaLink(token: string, id: string) {
-  const link = await prisma.approvalLink.findUnique({ where: { tokenHash: hashToken(token) } });
-  if (!link || link.revokedAt || link.expiresAt < new Date()) throw notFound();
-  const att = await prisma.attachment.findFirst({ where: { id, orgId: link.orgId } });
-  if (!att) throw notFound();
-  const ok =
-    (att.kind === "LOGO" && (await prisma.organisation.count({ where: { id: link.orgId, logoAttachmentId: att.id } })) === 1) ||
-    (link.quoteId !== null && att.quoteId === link.quoteId) ||
-    (link.completionId !== null && att.completionId === link.completionId);
-  if (!ok) throw notFound();
+  const { contractorLinkAllowsFile } = await import("./portal");
+  if (!/^[0-9a-f-]{36}$/.test(id)) throw notFound();
+  const att = await contractorLinkAllowsFile(token, id);
+  if (!att) {
+    // The organisation logo is shown on the contractor page.
+    const { hashToken } = await import("@/lib/tokens");
+    const link = /^[A-Za-z0-9_-]{43}$/.test(token) ? await prisma.contractorLink.findUnique({ where: { tokenHash: hashToken(token) } }) : null;
+    const logo = link && !link.revokedAt ? await prisma.attachment.findFirst({ where: { id, orgId: link.orgId, kind: "LOGO" } }) : null;
+    if (!logo || (await prisma.organisation.count({ where: { id: link!.orgId, logoAttachmentId: logo.id } })) !== 1) throw notFound();
+    return read(logo);
+  }
   return read(att);
+}
+
+/** Store files uploaded by a contractor through their link (same safety pipeline as staff uploads). */
+export async function addContractorFiles(tx: Tx, a: { orgId: string; jobId: string; quoteId?: string; completionId?: string; kind: AttachmentKind; files: { filename: string; bytes: Buffer }[]; actor: { orgId: string; userId: string | null; label: string } }) {
+  if (a.files.length > 10) throw invalid("Upload up to 10 files at a time.");
+  if ((await tx.attachment.count({ where: { jobId: a.jobId } })) + a.files.length > MAX_PER_JOB) throw conflict("This job has reached the attachment limit.");
+  for (const f of a.files) {
+    const att = await store(tx, { orgId: a.orgId, jobId: a.jobId, quoteId: a.quoteId ?? null, completionId: a.completionId ?? null, kind: a.kind, filename: f.filename, bytes: f.bytes, uploadedById: null, imagesOnly: a.kind === "AFTER" });
+    await logEvent(tx, a.actor, a.jobId, "attachment.added", `File added: ${att.filename} (${a.kind.toLowerCase().replace("_", " ")})`, { attachmentId: att.id });
+  }
 }

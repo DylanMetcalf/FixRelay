@@ -4,7 +4,9 @@ import { forbidden } from "@/lib/errors";
 import { switchWorkspace } from "@/server/auth";
 import { setOrgLogo } from "@/server/services/attachments";
 import { setSubscription } from "@/server/services/billing";
-import * as clients from "@/server/services/clients";
+import * as contractors from "@/server/services/contractors";
+import * as sites from "@/server/services/sites";
+import { parseRandToCents } from "@/lib/money";
 import * as orgs from "@/server/services/orgs";
 import { type ActionState, bool, fileOf, list, run, str } from "../_lib/action";
 import { getSession, requireCtx, sessionToken } from "../_lib/session";
@@ -15,13 +17,25 @@ export async function saveSettingsAction(_: ActionState, fd: FormData) {
     const ctx = await requireCtx();
     await orgs.updateOrgSettings(ctx, {
       name: str(fd, "name"), address: str(fd, "address"), phone: str(fd, "phone"), contactEmail: str(fd, "contactEmail"),
-      brandColour: str(fd, "brandColour"), vatRegistered: bool(fd, "vatRegistered"), vatNumber: str(fd, "vatNumber"),
-      vatRatePercent: str(fd, "vatRatePercent") as unknown as number, quoteTerms: str(fd, "quoteTerms"),
-      quoteValidityDays: str(fd, "quoteValidityDays") as unknown as number, customerSignoffRequired: bool(fd, "customerSignoffRequired"),
+      brandColour: str(fd, "brandColour"), reporterConfirmation: bool(fd, "reporterConfirmation"), publicReportingEnabled: bool(fd, "publicReportingEnabled"),
     });
     const logo = await fileOf(fd, "logo");
     if (logo) await setOrgLogo(ctx, logo);
     return { ok: "Company settings saved." };
+  });
+}
+
+export async function saveApprovalRulesAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const approver = str(fd, "approverLimit").trim();
+    await orgs.setApprovalRules(await requireCtx(), {
+      managerApprovalLimitCents: parseRandToCents(str(fd, "managerLimit") || "0"),
+      approverApprovalLimitCents: approver ? parseRandToCents(approver) : null,
+      poRequired: bool(fd, "poRequired"),
+      multiQuoteThresholdCents: parseRandToCents(str(fd, "quoteThreshold") || "0"),
+      minQuotes: Number.parseInt(str(fd, "minQuotes") || "1", 10),
+    });
+    return { ok: "Approval rules saved." };
   });
 }
 
@@ -37,7 +51,7 @@ export async function savePrioritiesAction(_: ActionState, fd: FormData) {
 export async function inviteAction(_: ActionState, fd: FormData) {
   return run(async () => {
     const r = await orgs.inviteMember(await requireCtx(), {
-      email: str(fd, "email"), name: str(fd, "name"), roles: list(fd, "roles") as Role[], clientId: str(fd, "clientId") || null,
+      email: str(fd, "email"), name: str(fd, "name"), roles: list(fd, "roles") as Role[], siteIds: list(fd, "siteIds"),
     });
     // The link is shown once so it can also be shared by WhatsApp; an email is queued as well.
     return { ok: "Invitation created.", data: { link: `${appUrl()}/invite/${r.token}` } };
@@ -46,7 +60,7 @@ export async function inviteAction(_: ActionState, fd: FormData) {
 
 export async function updateMemberAction(_: ActionState, fd: FormData) {
   return run(async () => {
-    const r = await orgs.updateMember(await requireCtx(), str(fd, "membershipId"), { roles: list(fd, "roles") as Role[], active: bool(fd, "active") });
+    const r = await orgs.updateMember(await requireCtx(), str(fd, "membershipId"), { roles: list(fd, "roles") as Role[], active: bool(fd, "active"), siteIds: list(fd, "siteIds") });
     return { ok: r.openJobsToReassign ? `${r.name} still leads ${r.openJobsToReassign} open job${r.openJobsToReassign === 1 ? "" : "s"}. Reassign them from the Jobs list (filter by technician).` : "Member updated." };
   });
 }
@@ -55,31 +69,41 @@ export async function revokeInviteAction(_: ActionState, fd: FormData) {
   return run(async () => { await orgs.revokeInvitation(await requireCtx(), str(fd, "id")); return { ok: "Invitation cancelled." }; });
 }
 
-export async function createClientAction(_: ActionState, fd: FormData) {
-  return run(async () => {
-    const c = await clients.createClient(await requireCtx(), { name: str(fd, "name"), contactName: str(fd, "contactName"), email: str(fd, "email"), phone: str(fd, "phone"), notes: str(fd, "notes") });
-    return { redirect: `/customers/${c.id}` };
-  });
-}
-
-export async function updateClientAction(_: ActionState, fd: FormData) {
-  return run(async () => {
-    await clients.updateClient(await requireCtx(), str(fd, "id"), { name: str(fd, "name"), contactName: str(fd, "contactName"), email: str(fd, "email"), phone: str(fd, "phone"), notes: str(fd, "notes"), archived: bool(fd, "archived") });
-    return bool(fd, "archived") ? { redirect: "/customers" } : { ok: "Customer saved." };
-  });
-}
-
 export async function createSiteAction(_: ActionState, fd: FormData) {
-  return run(async () => { await clients.createSite(await requireCtx(), { clientId: str(fd, "clientId"), name: str(fd, "name"), address: str(fd, "address") }); return { ok: "Site added." }; });
+  return run(async () => { const st = await sites.createSite(await requireCtx(), { name: str(fd, "name"), address: str(fd, "address") }); return { redirect: `/sites/${st.id}` }; });
+}
+
+export async function updateSiteAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    await sites.updateSite(await requireCtx(), str(fd, "id"), { name: str(fd, "name"), address: str(fd, "address"), archived: bool(fd, "archived") });
+    return bool(fd, "archived") ? { redirect: "/sites" } : { ok: "Site saved." };
+  });
+}
+
+export async function rotateSiteLinkAction(_: ActionState, fd: FormData) {
+  return run(async () => { await sites.rotateSiteToken(await requireCtx(), str(fd, "id")); return { ok: "New report link created. Print new QR codes – the old ones no longer work." }; });
 }
 
 export async function createLocationAction(_: ActionState, fd: FormData) {
-  return run(async () => { await clients.createLocation(await requireCtx(), { siteId: str(fd, "siteId"), name: str(fd, "name") }); return { ok: "Location added." }; });
+  return run(async () => { await sites.createLocation(await requireCtx(), { siteId: str(fd, "siteId"), name: str(fd, "name") }); return { ok: "Location added." }; });
+}
+
+const contractorInput = (fd: FormData) => ({
+  name: str(fd, "name"), trade: str(fd, "trade"), contactName: str(fd, "contactName"), email: str(fd, "email"), phone: str(fd, "phone"),
+  vatRegistered: bool(fd, "vatRegistered"), vatNumber: str(fd, "vatNumber"), notes: str(fd, "notes"),
+});
+
+export async function createContractorAction(_: ActionState, fd: FormData) {
+  return run(async () => { const c = await contractors.createContractor(await requireCtx(), contractorInput(fd)); return { redirect: `/contractors/${c.id}` }; });
+}
+
+export async function updateContractorAction(_: ActionState, fd: FormData) {
+  return run(async () => { await contractors.updateContractor(await requireCtx(), str(fd, "id"), { ...contractorInput(fd), active: !bool(fd, "inactive") }); return { ok: "Contractor saved." }; });
 }
 
 export async function createAssetAction(_: ActionState, fd: FormData) {
   return run(async () => {
-    const a = await clients.createAsset(await requireCtx(), {
+    const a = await sites.createAsset(await requireCtx(), {
       siteId: str(fd, "siteId"), locationId: str(fd, "locationId") || null, reference: str(fd, "reference"), name: str(fd, "name"), type: str(fd, "type"),
       manufacturer: str(fd, "manufacturer"), model: str(fd, "model"), serialNumber: str(fd, "serialNumber"), notes: str(fd, "notes"),
     });

@@ -56,23 +56,23 @@ export function subscriptionState(
 /** Entitlement numbers live in the Plan table, never in code paths. These are only first-run defaults. */
 export async function ensureDefaultPlans(db: Db = prisma) {
   const defaults = [
-    { code: "trial", name: "Trial", maxUsers: 5, maxActiveJobs: 50, maxClients: 10 },
-    { code: "starter", name: "Starter", maxUsers: 5, maxActiveJobs: 200, maxClients: 50 },
-    { code: "professional", name: "Professional", maxUsers: 25, maxActiveJobs: null, maxClients: null },
+    { code: "trial", name: "Trial", maxUsers: 5, maxActiveJobs: 50, maxSites: 3 },
+    { code: "starter", name: "Starter", maxUsers: 10, maxActiveJobs: 300, maxSites: 5 },
+    { code: "professional", name: "Professional", maxUsers: 50, maxActiveJobs: null, maxSites: null },
   ];
   for (const p of defaults) await db.plan.upsert({ where: { code: p.code }, update: {}, create: p });
 }
 
-export type Metered = "users" | "activeJobs" | "clients";
+export type Metered = "users" | "activeJobs" | "sites";
 
 export async function usage(db: Db, orgId: string): Promise<Record<Metered, number>> {
-  const [users, activeJobs, clients] = await Promise.all([
-    // Client-portal users are free: only staff seats are metered.
-    db.membership.count({ where: { orgId, active: true, clientId: null } }),
+  const [users, activeJobs, sites] = await Promise.all([
+    // Requesters (people who only report faults) are free: only maintenance staff and approvers are metered.
+    db.membership.count({ where: { orgId, active: true, roles: { hasSome: ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN"] } } }),
     db.job.count({ where: { orgId, status: { in: OPEN_STATUSES } } }),
-    db.client.count({ where: { orgId, archived: false } }),
+    db.site.count({ where: { orgId, archived: false } }),
   ]);
-  return { users, activeJobs, clients };
+  return { users, activeJobs, sites };
 }
 
 /** Throws if creating one more of `what` would exceed the plan. Demo workspaces are unmetered. */
@@ -83,11 +83,11 @@ export async function assertWithinPlan(db: Db, orgId: string, what: Metered): Pr
   });
   if (org.isDemo || !org.subscription) return;
   const plan = org.subscription.plan;
-  const limit = { users: plan.maxUsers, activeJobs: plan.maxActiveJobs, clients: plan.maxClients }[what];
+  const limit = { users: plan.maxUsers, activeJobs: plan.maxActiveJobs, sites: plan.maxSites }[what];
   if (limit == null) return;
   const used = (await usage(db, orgId))[what];
   if (used >= limit) {
-    const label = { users: "team members", activeJobs: "open jobs", clients: "customers" }[what];
+    const label = { users: "team members", activeJobs: "open jobs", sites: "sites" }[what];
     throw new AppError("SUBSCRIPTION", `Your ${plan.name} plan allows ${limit} ${label}. Upgrade your plan to add more.`);
   }
 }

@@ -3,17 +3,18 @@ import { notFound } from "next/navigation";
 import { requirePage } from "@/app/_lib/session";
 import { Card, Empty, fmtDate, PageHeader, StatusBadge } from "@/components/ui";
 import { AppError } from "@/lib/errors";
-import { getAsset } from "@/server/services/clients";
+import { getAsset } from "@/server/services/sites";
+import { formatZar } from "@/lib/money";
 
 export const metadata = { title: "Asset" };
 
 export default async function AssetPage({ params }: { params: Promise<{ id: string }> }) {
-  const { ctx } = await requirePage("clients.view");
+  const { ctx } = await requirePage("sites.view");
   const x = await getAsset(ctx, (await params).id).catch((e) => { if (e instanceof AppError) notFound(); throw e; });
   const rows = [["Type", x.type], ["Manufacturer", x.manufacturer], ["Model", x.model], ["Serial number", x.serialNumber], ["Site", x.site.name], ["Location", x.location?.name ?? ""], ["Notes", x.notes]].filter(([, v]) => v);
   return (
     <>
-      <PageHeader title={`${x.reference} – ${x.name}`} subtitle={<Link className="link" href={`/customers/${x.site.client.id}`}>{x.site.client.name}</Link>} />
+      <PageHeader title={`${x.reference} – ${x.name}`} subtitle={<><Link className="link" href={`/sites/${x.site.id}`}>{x.site.name}</Link> · Approved contractor spend {formatZar(x.spendCents)}</>} />
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Details" className="self-start">
           <dl className="space-y-2 text-sm">{rows.map(([k, v]) => <div key={k}><dt className="text-xs font-bold uppercase text-gray-600">{k}</dt><dd>{v}</dd></div>)}</dl>

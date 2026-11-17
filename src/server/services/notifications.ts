@@ -14,6 +14,9 @@ import { OPEN_STATUSES } from "../workflow";
 
 export const MAX_ATTEMPTS = 5;
 
+/** example.com/.net/.org, *.example, *.invalid, *.test, *.localhost – reserved, never deliverable. */
+export const isReservedAddress = (to: string) => /@((.+\.)?example\.(com|net|org)|.+\.(example|invalid|test|localhost))$/i.test(to.trim());
+
 export interface NotifyInput {
   orgId: string;
   userIds: (string | null | undefined)[];
@@ -64,14 +67,6 @@ export async function managerIds(tx: Tx, orgId: string): Promise<string[]> {
   return ms.map((m) => m.userId);
 }
 
-export async function clientRepIds(tx: Tx, orgId: string, clientId: string): Promise<string[]> {
-  const ms = await tx.membership.findMany({
-    where: { orgId, clientId, active: true, roles: { has: "CLIENT" } },
-    select: { userId: true },
-  });
-  return ms.map((m) => m.userId);
-}
-
 /** Send due emails. Returns counts. Safe to run concurrently. */
 export async function processOutbox(transport: EmailTransport = consoleTransport, limit = 20, now = new Date()) {
   let sent = 0;
@@ -84,6 +79,11 @@ export async function processOutbox(transport: EmailTransport = consoleTransport
       const row = rows[0];
       if (!row) return false;
       const email = await tx.outboxEmail.findUniqueOrThrow({ where: { id: row.id } });
+      if (isReservedAddress(email.toEmail)) {
+        // Demo and test data use reserved domains (RFC 2606/6761). Never send to them: they bounce and hurt the sender's reputation.
+        await tx.outboxEmail.update({ where: { id: email.id }, data: { status: "SENT", sentAt: now, body: "[not sent: reserved domain]", attempts: { increment: 1 } } });
+        return true;
+      }
       const org = email.orgId ? await tx.organisation.findUnique({ where: { id: email.orgId }, select: { name: true, brandColour: true, contactEmail: true } }) : null;
       try {
         await transport.send({

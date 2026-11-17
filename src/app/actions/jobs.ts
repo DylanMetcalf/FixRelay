@@ -6,26 +6,44 @@ import { rateLimit } from "@/lib/rate-limit";
 import * as approvals from "@/server/services/approvals";
 import { addJobAttachment } from "@/server/services/attachments";
 import * as jobs from "@/server/services/jobs";
+import * as portal from "@/server/services/portal";
 import * as quotes from "@/server/services/quotes";
 import { type ActionState, bool, filesOf, list, run, str } from "../_lib/action";
 import { clientIp, requireCtx } from "../_lib/session";
 
 const id = (fd: FormData) => str(fd, "jobId");
+const optDate = (v: string) => (v ? new Date(v) : null);
+const optInt = (v: string) => (v.trim() ? Number.parseInt(v, 10) : null);
 
-async function attach(ctx: Awaited<ReturnType<typeof requireCtx>>, fd: FormData, jobId: string, kind: AttachmentKind, field = "files") {
-  for (const f of await filesOf(fd, field)) await addJobAttachment(ctx, { jobId, kind, ...f });
+async function attach(ctx: Awaited<ReturnType<typeof requireCtx>>, fd: FormData, jobId: string, kind: AttachmentKind, field = "files", quoteId?: string) {
+  for (const f of await filesOf(fd, field)) await addJobAttachment(ctx, { jobId, kind, quoteId, ...f });
 }
 
 export async function createJobAction(_: ActionState, fd: FormData) {
   return run(async () => {
     const ctx = await requireCtx();
     const job = await jobs.createJob(ctx, {
-      title: str(fd, "title"), description: str(fd, "description"), clientId: str(fd, "clientId"), siteId: str(fd, "siteId"),
+      title: str(fd, "title"), description: str(fd, "description"), siteId: str(fd, "siteId"),
       locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), category: str(fd, "category") as "General",
       priority: str(fd, "priority") as "NORMAL", emergency: bool(fd, "emergency"),
     });
     await attach(ctx, fd, job.id, "REQUEST");
     return { redirect: `/jobs/${job.id}` };
+  });
+}
+
+/** Public: report a fault from a site link / QR code without an account. Rate limited per IP and per site. */
+export async function publicReportAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const ip = await clientIp();
+    const token = str(fd, "siteToken");
+    await rateLimit(`public-report:ip:${ip}`, 10, 60 * 60_000);
+    await rateLimit(`public-report:site:${token}`, 200, 24 * 60 * 60_000);
+    const r = await jobs.createPublicReport(token, {
+      title: str(fd, "title"), description: str(fd, "description"), locationId: str(fd, "locationId"), assetId: str(fd, "assetId"),
+      reporterName: str(fd, "reporterName"), reporterPhone: str(fd, "reporterPhone"), reporterEmail: str(fd, "reporterEmail"),
+    });
+    return { ok: `Thank you. Your report ${r.reference} has been sent to the maintenance team.`, data: { sent: "1", reference: r.reference } };
   });
 }
 
@@ -51,14 +69,14 @@ export async function assessmentAction(_: ActionState, fd: FormData) {
   });
 }
 
-export async function authoriseAction(_: ActionState, fd: FormData) {
-  return run(async () => { await jobs.authoriseWithoutQuote(await requireCtx(), id(fd), { reason: str(fd, "reason") }); return { ok: "Work authorised." }; });
+export async function inHouseAction(_: ActionState, fd: FormData) {
+  return run(async () => { await jobs.routeInHouse(await requireCtx(), id(fd), { note: str(fd, "note") }); return { ok: "The in-house team will fix this. Now assign a technician." }; });
 }
 
 export async function assignAction(_: ActionState, fd: FormData) {
   return run(async () => {
     await jobs.assignJob(await requireCtx(), id(fd), {
-      leadTechnicianId: str(fd, "leadTechnicianId"), additionalIds: list(fd, "additionalIds"), externalContractor: str(fd, "externalContractor"),
+      leadTechnicianId: str(fd, "leadTechnicianId"), additionalIds: list(fd, "additionalIds"),
       plannedStart: str(fd, "plannedStart"), plannedEnd: str(fd, "plannedEnd"), instructions: str(fd, "instructions"),
     });
     return { ok: "Assignment saved." };
@@ -85,9 +103,8 @@ export async function workUpdateAction(_: ActionState, fd: FormData) {
 export async function evidenceAction(_: ActionState, fd: FormData) {
   return run(async () => {
     const ctx = await requireCtx();
-    const kind = str(fd, "kind") as AttachmentKind;
     if (!(await filesOf(fd, "files")).length) throw invalid("Choose at least one file.");
-    await attach(ctx, fd, id(fd), kind);
+    await attach(ctx, fd, id(fd), str(fd, "kind") as AttachmentKind);
     return { ok: "Uploaded." };
   });
 }
@@ -109,8 +126,33 @@ export async function completionAction(_: ActionState, fd: FormData) {
     await attach(ctx, fd, id(fd), "AFTER", "after");
     await attach(ctx, fd, id(fd), "TEST_DOCUMENT", "tests");
     await jobs.submitCompletion(ctx, id(fd), { workPerformed: str(fd, "workPerformed"), observations: str(fd, "observations"), completedAt: str(fd, "completedAt") });
-    return { ok: "Submitted for verification." };
+    return { ok: "Submitted for confirmation." };
   });
+}
+
+/** Reporter (or a manager with a reason) confirms whether the fault is fixed. */
+export async function confirmFixedAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const ok = str(fd, "outcome") === "APPROVED";
+    await jobs.confirmFixed(await requireCtx(), id(fd), { outcome: ok ? "APPROVED" : "REJECTED", comment: str(fd, "comment") });
+    return { ok: ok ? "Thank you – confirmed fixed." : "Thank you – it has been sent back to be fixed." };
+  });
+}
+
+/** The reporter signs on a technician's device (e.g. they have no account). */
+export async function captureSignoffAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const ok = str(fd, "outcome") === "APPROVED";
+    const name = str(fd, "name").trim();
+    if (name.length < 2) throw invalid("Enter the full name of the person signing.");
+    if (!str(fd, "signature")) throw invalid("A signature is required.");
+    await jobs.confirmFixed(await requireCtx(), id(fd), { outcome: ok ? "APPROVED" : "REJECTED", comment: str(fd, "comment") }, { signature: { name, dataUrl: str(fd, "signature") } });
+    return { ok: "Sign-off recorded." };
+  });
+}
+
+export async function resendCompletionLinkAction(_: ActionState, fd: FormData) {
+  return run(async () => { const url = await jobs.resendCompletionLink(await requireCtx(), id(fd)); return { ok: "A new link was emailed to the contractor.", data: { link: url } }; });
 }
 
 export async function closeAction(_: ActionState, fd: FormData) {
@@ -120,82 +162,60 @@ export async function reopenAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.reopenJob(await requireCtx(), id(fd), { reason: str(fd, "reason") }); return { ok: "Job reopened." }; });
 }
 
-// ----- Quotes -----
+// ----- Contractor quotes and approvals -----
 
-export async function createQuoteAction(_: ActionState, fd: FormData) {
+export async function requestQuotesAction(_: ActionState, fd: FormData) {
   return run(async () => {
-    const q = await quotes.createQuote(await requireCtx(), id(fd), str(fd, "kind") === "VARIATION" ? "VARIATION" : "ORIGINAL");
-    return { redirect: `/quotes/${q.id}` };
+    const links = await quotes.requestQuotes(await requireCtx(), id(fd), { contractorIds: list(fd, "contractorIds"), scope: str(fd, "scope"), deadline: optDate(str(fd, "deadline")) });
+    return { ok: `Quote requests sent to ${links.map((l) => l.contractorName).join(", ")}.`, data: { link: links[0]!.url, links: JSON.stringify(links) } };
   });
 }
 
-export async function saveQuoteAction(_: ActionState, fd: FormData) {
+export async function recordQuoteAction(_: ActionState, fd: FormData) {
   return run(async () => {
     const ctx = await requireCtx();
-    const quoteId = str(fd, "quoteId");
-    let raw: { kind: "LABOUR" | "MATERIAL" | "OTHER"; description: string; quantity: string; unitPrice: string; taxable: boolean }[];
-    try { raw = JSON.parse(str(fd, "lines")); } catch { throw invalid("Could not read the line items."); }
-    await quotes.saveQuote(ctx, quoteId, {
-      scope: str(fd, "scope"), terms: str(fd, "terms"), validUntil: str(fd, "validUntil"),
-      lines: raw.filter((l) => l.description.trim() || l.unitPrice.trim()).map((l) => ({
-        kind: l.kind, description: l.description, quantity: l.quantity, unitPriceCents: parseRandToCents(l.unitPrice || "0"), taxable: !!l.taxable,
-      })),
+    const q = await quotes.recordQuote(ctx, id(fd), str(fd, "contractorId"), {
+      scope: str(fd, "scope"), priceExclVatCents: parseRandToCents(str(fd, "price") || "0"),
+      leadTimeDays: optInt(str(fd, "leadTimeDays")), validUntil: optDate(str(fd, "validUntil")),
     });
-    for (const f of await filesOf(fd, "files")) await addJobAttachment(ctx, { jobId: str(fd, "jobId"), kind: "QUOTE", quoteId, ...f });
-    if (str(fd, "intent") === "submit") { await quotes.submitQuote(ctx, quoteId); return { ok: "Quote submitted for approval." }; }
-    return { ok: "Draft saved." };
+    await attach(ctx, fd, id(fd), "QUOTE", "files", q.id);
+    return { ok: "Quote captured." };
   });
 }
 
-export async function reviseQuoteAction(_: ActionState, fd: FormData) {
-  return run(async () => { const q = await quotes.reviseQuote(await requireCtx(), str(fd, "quoteId")); return { redirect: `/quotes/${q.id}` }; });
+export async function withdrawInviteAction(_: ActionState, fd: FormData) {
+  return run(async () => { await quotes.withdrawInvite(await requireCtx(), id(fd), str(fd, "contractorId")); return { ok: "Stopped waiting for that contractor." }; });
 }
 
-export async function sendLinkAction(_: ActionState, fd: FormData) {
+const approveInput = (fd: FormData) => ({ poNumber: str(fd, "poNumber"), exceptionReason: str(fd, "exceptionReason"), comment: str(fd, "comment") });
+
+export async function approveQuoteAction(_: ActionState, fd: FormData) {
+  return run(async () => { await approvals.approveQuote(await requireCtx(), str(fd, "quoteId"), approveInput(fd)); return { ok: "Quote approved and contractor appointed." }; });
+}
+export async function recommendQuoteAction(_: ActionState, fd: FormData) {
+  return run(async () => { await approvals.recommendQuote(await requireCtx(), str(fd, "quoteId"), approveInput(fd)); return { ok: "Sent for approval." }; });
+}
+export async function rejectRecommendationAction(_: ActionState, fd: FormData) {
+  return run(async () => { await approvals.rejectRecommendation(await requireCtx(), id(fd), { comment: str(fd, "comment") }); return { ok: "Not approved – sent back to the maintenance team." }; });
+}
+
+// ----- Contractor portal (public; the link token is the credential) -----
+
+export async function contractorQuoteAction(_: ActionState, fd: FormData) {
   return run(async () => {
-    const target = str(fd, "quoteId") ? { quoteId: str(fd, "quoteId") } : { completionId: str(fd, "completionId") };
-    const l = await approvals.createApprovalLink(await requireCtx(), target, { recipientName: str(fd, "recipientName"), recipientEmail: str(fd, "recipientEmail") });
-    return { ok: "Secure link created and emailed.", data: { link: l.url } };
+    await rateLimit(`contractor:ip:${await clientIp()}`, 40, 60 * 60_000);
+    const r = await portal.submitQuoteViaLink(str(fd, "token"), {
+      scope: str(fd, "scope"), priceExclVatCents: parseRandToCents(str(fd, "price") || "0"),
+      leadTimeDays: optInt(str(fd, "leadTimeDays")), validUntil: optDate(str(fd, "validUntil")),
+    }, await filesOf(fd, "files"));
+    return { ok: `Thank you. Quote ${r.number}${r.version > 1 ? ` (version ${r.version})` : ""} has been submitted.`, data: { sent: "1" } };
   });
 }
 
-export async function recordQuoteDecisionAction(_: ActionState, fd: FormData) {
+export async function contractorCompletionAction(_: ActionState, fd: FormData) {
   return run(async () => {
-    await approvals.recordQuoteDecision(await requireCtx(), str(fd, "quoteId"), { outcome: str(fd, "outcome") as "APPROVED", name: str(fd, "name"), comment: str(fd, "comment") });
-    return { ok: "Decision recorded." };
-  });
-}
-
-export async function portalQuoteAction(_: ActionState, fd: FormData) {
-  return run(async () => {
-    await approvals.portalDecideQuote(await requireCtx(), str(fd, "quoteId"), { outcome: str(fd, "outcome") as "APPROVED", comment: str(fd, "comment") }, await clientIp());
-    return { ok: "Thank you. Your decision has been recorded." };
-  });
-}
-
-export async function portalCompletionAction(_: ActionState, fd: FormData) {
-  return run(async () => {
-    await approvals.portalDecideCompletion(await requireCtx(), str(fd, "completionId"),
-      { outcome: str(fd, "outcome") as "APPROVED", comment: str(fd, "comment"), signature: str(fd, "signature") || undefined }, await clientIp());
-    return { ok: "Thank you. Your decision has been recorded." };
-  });
-}
-
-export async function captureSignoffAction(_: ActionState, fd: FormData) {
-  return run(async () => {
-    await approvals.captureSignoff(await requireCtx(), str(fd, "completionId"),
-      { outcome: str(fd, "outcome") as "APPROVED", name: str(fd, "name"), comment: str(fd, "comment"), signature: str(fd, "signature") || undefined });
-    return { ok: "Customer sign-off recorded." };
-  });
-}
-
-/** Public: decision through a secure review link. No session; the token is the credential. Rate limited. */
-export async function publicDecideAction(_: ActionState, fd: FormData) {
-  return run(async () => {
-    const ip = await clientIp();
-    await rateLimit(`link:ip:${ip}`, 30, 10 * 60_000);
-    await approvals.decideViaLink(str(fd, "token"),
-      { outcome: str(fd, "outcome") as "APPROVED", name: str(fd, "name"), comment: str(fd, "comment"), signature: str(fd, "signature") || undefined }, ip);
-    return { ok: "Thank you. Your decision has been recorded." };
+    await rateLimit(`contractor:ip:${await clientIp()}`, 40, 60 * 60_000);
+    await portal.submitCompletionViaLink(str(fd, "token"), { workPerformed: str(fd, "workPerformed"), observations: str(fd, "observations") }, await filesOf(fd, "files"));
+    return { ok: "Thank you. Your completion has been submitted. The site will check the work.", data: { sent: "1" } };
   });
 }

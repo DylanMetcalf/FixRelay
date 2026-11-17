@@ -10,9 +10,9 @@ const prisma = new PrismaClient();
 
 async function main() {
   const plans = [
-    { code: "trial", name: "Trial", maxUsers: 5, maxActiveJobs: 50, maxClients: 10 },
-    { code: "starter", name: "Starter", maxUsers: 5, maxActiveJobs: 200, maxClients: 50 },
-    { code: "professional", name: "Professional", maxUsers: 25, maxActiveJobs: null, maxClients: null },
+    { code: "trial", name: "Trial", maxUsers: 5, maxActiveJobs: 50, maxSites: 3 },
+    { code: "starter", name: "Starter", maxUsers: 10, maxActiveJobs: 300, maxSites: 5 },
+    { code: "professional", name: "Professional", maxUsers: 50, maxActiveJobs: null, maxSites: null },
   ];
   for (const p of plans) await prisma.plan.upsert({ where: { code: p.code }, update: {}, create: p });
   console.log("Plans ensured.");

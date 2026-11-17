@@ -11,9 +11,10 @@ export default async function Profile() {
   const s = await requireSession();
   const { ctx } = s;
   const links = [
-    { href: "/dashboard", label: "Dashboard", show: true }, { href: "/jobs?view=requests", label: "Requests", show: true }, { href: "/jobs?view=jobs", label: "Jobs", show: true },
-    { href: "/quotes", label: "Quotes", show: can(ctx, "quote.view") }, { href: "/customers", label: "Customers", show: can(ctx, "clients.view") },
-    { href: "/assets", label: "Assets", show: can(ctx, "clients.view") }, { href: "/reports", label: "Reports", show: can(ctx, "reports.view") },
+    { href: "/dashboard", label: "Home", show: true }, { href: "/jobs?view=requests", label: "Reports", show: true }, { href: "/jobs?view=jobs", label: "Jobs", show: true },
+    { href: "/quotes", label: "Quotes", show: can(ctx, "quote.view") }, { href: "/sites", label: "Sites", show: can(ctx, "sites.view") },
+    { href: "/assets", label: "Equipment", show: can(ctx, "sites.view") }, { href: "/contractors", label: "Contractors", show: can(ctx, "contractors.view") },
+    { href: "/reports", label: "Insights", show: can(ctx, "reports.view") },
     { href: "/settings", label: "Settings", show: can(ctx, "team.view") },
   ].filter((l) => l.show);
   return (

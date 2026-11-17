@@ -72,7 +72,7 @@ export interface SessionView {
   ctx: Ctx | null;
   org: {
     id: string; name: string; slug: string; isDemo: boolean; brandColour: string;
-    logoAttachmentId: string | null; vatRegistered: boolean;
+    logoAttachmentId: string | null; publicReportingEnabled: boolean;
   } | null;
   subscription: SubscriptionView | null;
   workspaces: { orgId: string; name: string; isDemo: boolean }[];
@@ -121,7 +121,7 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
         subscription: subscriptionState(org.subscription, org.isDemo),
         ctx: {
           userId: user.id, userName: `${user.name} (platform support)`, userEmail: user.email,
-          orgId: org.id, roles: [], clientId: null, support: true, locked: false, emailVerified: true,
+          orgId: org.id, roles: [], siteIds: [], support: true, locked: false, emailVerified: true,
         },
       };
   }
@@ -134,7 +134,7 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
     subscription: sub,
     ctx: {
       userId: user.id, userName: user.name, userEmail: user.email, orgId: membership.orgId,
-      roles: membership.roles, clientId: membership.clientId, support: false, locked: sub.access === "locked", emailVerified: !!user.emailVerifiedAt,
+      roles: membership.roles, siteIds: membership.siteIds, support: false, locked: sub.access === "locked", emailVerified: !!user.emailVerifiedAt,
     },
   };
 }

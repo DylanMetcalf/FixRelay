@@ -8,12 +8,14 @@ import { Field } from "@/components/ui";
 
 export const metadata = { title: "Sign in" };
 
-export default async function LoginPage() {
-  if (await getSession()) redirect("/dashboard");
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { next } = await searchParams;
+  if (await getSession()) redirect(next && /^\/(?!\/)/.test(next) ? next : "/dashboard");
   return (
     <>
       <h1 className="mb-4 text-xl font-extrabold">Sign in</h1>
-      <Form action={loginAction}>
+      {next?.startsWith("/requests/new") && <p className="mb-3 rounded-md bg-blue-50 p-3 text-sm">Sign in to report this fault. Your site and location are already filled in.</p>}
+      <Form action={loginAction} hidden={{ next: next ?? "" }}>
         <Field label="Email" name="email" type="email" autoComplete="email" required />
         <PasswordField label="Password" name="password" autoComplete="current-password" />
         <p className="-mt-1 text-right text-sm"><Link className="link" href="/forgot-password">Forgot password?</Link></p>

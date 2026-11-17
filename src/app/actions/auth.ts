@@ -17,7 +17,9 @@ export async function loginAction(_: ActionState, fd: FormData) {
     const previous = await sessionToken();
     await setSessionCookie(await auth.login(str(fd, "email"), str(fd, "password")));
     if (previous) await auth.logout(previous); // never keep a session from before sign-in
-    return { redirect: "/dashboard" };
+    const next = str(fd, "next");
+    // Only same-site paths (e.g. from a QR code); never an external URL.
+    return { redirect: /^\/(?!\/)[\w\-/?=&%.]*$/.test(next) ? next : "/dashboard" };
   });
 }
 

@@ -70,23 +70,42 @@ const settingsSchema = z.object({
   phone: text(40),
   contactEmail: z.union([z.literal(""), emailSchema]).default(""),
   brandColour: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Choose a valid colour."),
-  vatRegistered: z.boolean(),
-  vatNumber: text(20),
-  vatRatePercent: z.coerce.number().min(0).max(100),
-  quoteTerms: text(4000),
-  quoteValidityDays: z.coerce.number().int().min(1).max(365),
-  customerSignoffRequired: z.boolean(),
+  reporterConfirmation: z.boolean(),
+  publicReportingEnabled: z.boolean(),
 });
 
 export async function updateOrgSettings(ctx: Ctx, input: z.input<typeof settingsSchema>) {
   requirePerm(ctx, "org.manage");
   const p = settingsSchema.safeParse(input);
   if (!p.success) throw invalid(p.error.issues[0]!.message);
-  const { vatRatePercent, ...d } = p.data;
-  if (d.vatRegistered && !d.vatNumber) throw invalid("Enter your VAT number, or untick VAT registered.");
+  const d = p.data;
   return prisma.$transaction(async (tx) => {
-    await tx.organisation.update({ where: { id: ctx.orgId }, data: { ...d, vatRateBps: Math.round(vatRatePercent * 100) } });
+    await tx.organisation.update({ where: { id: ctx.orgId }, data: d });
     await logEvent(tx, actorOf(ctx), null, "org.settings_changed", "Company settings updated");
+  });
+}
+
+const approvalSchema = z.object({
+  managerApprovalLimitCents: z.number().int().min(0).max(2_000_000_000),
+  approverApprovalLimitCents: z.number().int().min(0).max(2_000_000_000).nullable(),
+  poRequired: z.boolean(),
+  multiQuoteThresholdCents: z.number().int().min(0).max(2_000_000_000),
+  minQuotes: z.number().int().min(1, "At least 1 quote.").max(10, "At most 10 quotes."),
+});
+
+/** Spending authority and quote rules (owner only; every change is audited). */
+export async function setApprovalRules(ctx: Ctx, input: z.input<typeof approvalSchema>) {
+  requirePerm(ctx, "org.manage");
+  const p = approvalSchema.safeParse(input);
+  if (!p.success) throw invalid(p.error.issues[0]!.message);
+  const d = p.data;
+  if (d.approverApprovalLimitCents != null && d.approverApprovalLimitCents < d.managerApprovalLimitCents)
+    throw invalid("The approver limit should be at least the maintenance manager's limit.");
+  return prisma.$transaction(async (tx) => {
+    await tx.organisation.update({ where: { id: ctx.orgId }, data: d });
+    const r = (c: number | null) => (c == null ? "no limit" : `R ${(c / 100).toFixed(2)}`);
+    await logEvent(tx, actorOf(ctx), null, "org.approval_rules_changed",
+      `Approval rules: managers up to ${r(d.managerApprovalLimitCents)}, approvers up to ${r(d.approverApprovalLimitCents)}, ${d.minQuotes} quotes above ${r(d.multiQuoteThresholdCents)}${d.poRequired ? ", PO required" : ""}`);
   });
 }
 
@@ -113,38 +132,39 @@ export async function setPriorityRules(ctx: Ctx, rules: z.input<typeof ruleSchem
 const inviteSchema = z.object({
   email: emailSchema,
   name: text(120),
-  roles: z.array(z.enum(["OWNER", "MANAGER", "TECHNICIAN", "CLIENT", "REQUESTER"])).min(1, "Choose at least one role."),
-  clientId: z.string().uuid().nullish(),
+  roles: z.array(z.enum(["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "REQUESTER"])).min(1, "Choose at least one role."),
+  siteIds: z.array(z.string().uuid()).max(200).default([]),
 });
 export const INVITE_DAYS = 7;
 
-function assertRoleShape(roles: Role[], clientId: string | null | undefined) {
-  const staff = roles.some((r) => r === "OWNER" || r === "MANAGER" || r === "TECHNICIAN");
-  if (roles.includes("CLIENT") && !clientId) throw invalid("Choose which customer this person represents.");
-  // A person tied to a customer organisation can never hold staff roles in the tenant.
-  if (clientId && staff) throw invalid("Customer users cannot also be staff.");
+const STAFF_ROLES: Role[] = ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN"];
+const isSeat = (roles: Role[]) => roles.some((r) => STAFF_ROLES.includes(r));
+
+async function assertSites(tx: Tx, orgId: string, siteIds: string[]) {
+  const ids = [...new Set(siteIds)];
+  if (ids.length && (await tx.site.count({ where: { orgId, id: { in: ids } } })) !== ids.length) throw invalid("Choose sites from this organisation.");
+  return ids;
 }
 
-/** Invite a person. OWNER can invite anyone; MANAGER may invite customer-side users only. Returns the one-time token. */
+/** Invite a person. OWNER can invite anyone; a maintenance MANAGER may invite people who only report faults. Returns the one-time token. */
 export async function inviteMember(ctx: Ctx, input: z.input<typeof inviteSchema>) {
   const p = inviteSchema.safeParse(input);
   if (!p.success) throw invalid(p.error.issues[0]!.message);
   const d = p.data;
-  assertRoleShape(d.roles, d.clientId);
-  requirePerm(ctx, d.clientId ? "clients.manage" : "team.manage");
+  requirePerm(ctx, isSeat(d.roles) ? "team.manage" : "sites.manage");
   requireVerifiedEmail(ctx);
   const token = newToken();
   return prisma.$transaction(async (tx) => {
-    if (d.clientId && !(await tx.client.findFirst({ where: { id: d.clientId, orgId: ctx.orgId } }))) throw notFound("Customer not found.");
+    const siteIds = await assertSites(tx, ctx.orgId, d.siteIds);
     if (await tx.membership.findFirst({ where: { orgId: ctx.orgId, user: { email: d.email } } }))
       throw conflict("This person is already a member.");
-    if (!d.clientId) await assertWithinPlan(tx, ctx.orgId, "users");
+    if (isSeat(d.roles)) await assertWithinPlan(tx, ctx.orgId, "users");
     await tx.invitation.updateMany({
       where: { orgId: ctx.orgId, email: d.email, acceptedAt: null, revokedAt: null }, data: { revokedAt: new Date() },
     });
     const inv = await tx.invitation.create({
       data: {
-        orgId: ctx.orgId, email: d.email, name: d.name, roles: d.roles, clientId: d.clientId ?? null,
+        orgId: ctx.orgId, email: d.email, name: d.name, roles: d.roles, siteIds,
         tokenHash: hashToken(token), invitedBy: ctx.userId, expiresAt: new Date(Date.now() + INVITE_DAYS * 86_400_000),
       },
     });
@@ -194,7 +214,7 @@ export async function acceptInvitation(token: string, input: { name?: string; pa
     if (claimed.count !== 1) throw conflict("This invitation has already been used.");
     // The invitation link was delivered to this address, which proves ownership.
     user ??= await tx.user.create({ data: { email: inv.email, name: input.name!.trim(), passwordHash: passwordHash!, emailVerifiedAt: new Date() } });
-    await tx.membership.create({ data: { orgId: inv.orgId, userId: user.id, roles: inv.roles, clientId: inv.clientId } });
+    await tx.membership.create({ data: { orgId: inv.orgId, userId: user.id, roles: inv.roles, siteIds: inv.siteIds } });
     await logEvent(tx, { orgId: inv.orgId, userId: user.id, label: user.name }, null, "team.joined", `${user.name} joined`);
     return { userId: user.id, orgId: inv.orgId, token: await createSession(tx, user.id, inv.orgId) };
   });
@@ -210,7 +230,7 @@ export async function listTeam(ctx: Ctx) {
   const [members, invitations] = await Promise.all([
     prisma.membership.findMany({
       where: { orgId: ctx.orgId },
-      include: { user: { select: { id: true, name: true, email: true } }, client: { select: { name: true } } },
+      include: { user: { select: { id: true, name: true, email: true } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.invitation.findMany({
@@ -222,17 +242,18 @@ export async function listTeam(ctx: Ctx) {
 
 /** Staff who can be given work (active technicians; managers/owners may also do assessments). */
 export async function listAssignable(ctx: Ctx, roles: Role[] = ["TECHNICIAN"]) {
-  requirePerm(ctx, "clients.view");
+  requirePerm(ctx, "sites.view");
   return prisma.membership.findMany({
-    where: { orgId: ctx.orgId, active: true, clientId: null, roles: { hasSome: roles } },
+    where: { orgId: ctx.orgId, active: true, roles: { hasSome: roles } },
     select: { userId: true, roles: true, user: { select: { name: true } } },
     orderBy: { user: { name: "asc" } },
   });
 }
 
 const memberSchema = z.object({
-  roles: z.array(z.enum(["OWNER", "MANAGER", "TECHNICIAN", "CLIENT", "REQUESTER"])).min(1, "Choose at least one role."),
+  roles: z.array(z.enum(["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "REQUESTER"])).min(1, "Choose at least one role."),
   active: z.boolean(),
+  siteIds: z.array(z.string().uuid()).max(200).optional(),
 });
 
 /** Change a member's roles or deactivate them (access revocation is immediate). The last owner is protected. */
@@ -243,7 +264,7 @@ export async function updateMember(ctx: Ctx, membershipId: string, input: z.inpu
   return prisma.$transaction(async (tx) => {
     const m = await tx.membership.findFirst({ where: { id: membershipId, orgId: ctx.orgId }, include: { user: true } });
     if (!m) throw notFound();
-    assertRoleShape(p.data.roles, m.clientId);
+    const siteIds = p.data.siteIds ? await assertSites(tx, ctx.orgId, p.data.siteIds) : m.siteIds;
     const stillOwner = p.data.active && p.data.roles.includes("OWNER");
     if (m.roles.includes("OWNER") && !stillOwner) {
       // Serialise owner changes so two owners cannot demote each other concurrently.
@@ -251,8 +272,8 @@ export async function updateMember(ctx: Ctx, membershipId: string, input: z.inpu
       const owners = await tx.membership.count({ where: { orgId: ctx.orgId, active: true, roles: { has: "OWNER" } } });
       if (owners <= 1) throw conflict("A company must keep at least one active owner.");
     }
-    if (p.data.active && !m.active && !m.clientId) await assertWithinPlan(tx, ctx.orgId, "users");
-    await tx.membership.update({ where: { id: m.id }, data: p.data });
+    if (p.data.active && isSeat(p.data.roles) && (!m.active || !isSeat(m.roles))) await assertWithinPlan(tx, ctx.orgId, "users");
+    await tx.membership.update({ where: { id: m.id }, data: { roles: p.data.roles, active: p.data.active, siteIds } });
     if (!p.data.active) await tx.session.updateMany({ where: { userId: m.userId, activeOrgId: ctx.orgId }, data: { activeOrgId: null } });
     await logEvent(tx, actorOf(ctx), null, "team.member_changed",
       `${m.user.name}: ${p.data.active ? `roles set to ${p.data.roles.join(", ")}` : "access removed"}`);

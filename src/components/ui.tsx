@@ -1,5 +1,5 @@
 import Link from "@/components/link";
-import type { JobStatus, Priority } from "@prisma/client";
+import type { JobRoute, JobStatus, Priority } from "@prisma/client";
 import { nextAction, STATUS_LABEL } from "@/server/workflow";
 
 export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: React.ReactNode; children?: React.ReactNode }) {
@@ -81,8 +81,10 @@ export const isOverdue = (j: { dueAt: Date | null; status: JobStatus }) => !!j.d
 
 interface Row {
   id: string; reference: string; title: string; status: JobStatus; priority: Priority; emergency: boolean; dueAt: Date | null;
-  customerSignoffRequired: boolean; leadTechnicianId: string | null; technicianName: string | null; client: { name: string }; site: { name: string };
+  reporterConfirmation: boolean; leadTechnicianId: string | null; technicianName: string | null; route: JobRoute; source: string;
+  contractorId: string | null; contractor: { name: string } | null; site: { name: string }; location: { name: string } | null;
 }
+const who = (j: Row) => (j.route === "CONTRACTOR" ? (j.contractor?.name ?? "Contractor (quoting)") : (j.technicianName ?? "—"));
 
 /** Job list: cards on phones, table on desktop. Each row states the next action and who owns it. */
 export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }) {
@@ -100,10 +102,12 @@ export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }
                   <StatusBadge status={j.status} />
                 </div>
                 <p className="mt-1 font-bold text-gray-900">{j.title}</p>
-                <p className="muted">{j.client.name} · {j.site.name}</p>
+                <p className="muted">{j.site.name}{j.location && ` · ${j.location.name}`}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <PriorityBadge priority={j.priority} emergency={j.emergency} />
                   {isOverdue(j) && <Pill tone="red">Overdue</Pill>}
+                  {j.source === "PUBLIC_LINK" && j.status === "NEW" && <Pill tone="amber">To screen</Pill>}
+                  {j.route === "CONTRACTOR" && <Pill tone="blue">Contractor</Pill>}
                 </div>
                 <p className="mt-2 text-sm"><span className="font-semibold">Next:</span> {next.label} <span className="text-gray-600">({next.party})</span></p>
               </Link>
@@ -114,8 +118,8 @@ export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }
       <div className="card hidden overflow-x-auto p-0 md:block">
         <table className="w-full">
           <thead className="border-b border-gray-300 bg-gray-50"><tr>
-            <th className="th">Ref</th><th className="th">Job</th><th className="th">Customer / site</th><th className="th">Status</th>
-            <th className="th">Priority</th><th className="th">Next action</th><th className="th">Technician</th><th className="th">Due</th>
+            <th className="th">Ref</th><th className="th">Job</th><th className="th">Site / location</th><th className="th">Status</th>
+            <th className="th">Priority</th><th className="th">Next action</th><th className="th">Fixed by</th><th className="th">Due</th>
           </tr></thead>
           <tbody className="divide-y divide-gray-200">
             {jobs.map((j) => {
@@ -124,11 +128,11 @@ export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }
                 <tr key={j.id} className="hover:bg-gray-50">
                   <td className="td whitespace-nowrap font-bold"><Link className="link" href={`/jobs/${j.id}`}>{j.reference}</Link></td>
                   <td className="td max-w-xs font-semibold"><Link href={`/jobs/${j.id}`} className="hover:underline">{j.title}</Link></td>
-                  <td className="td">{j.client.name}<br /><span className="text-gray-600">{j.site.name}</span></td>
+                  <td className="td">{j.site.name}<br /><span className="text-gray-600">{j.location?.name ?? ""}</span>{j.source === "PUBLIC_LINK" && j.status === "NEW" && <><br /><Pill tone="amber">To screen</Pill></>}</td>
                   <td className="td"><StatusBadge status={j.status} /></td>
                   <td className="td whitespace-nowrap"><PriorityBadge priority={j.priority} emergency={j.emergency} /></td>
                   <td className="td">{next.label}<br /><span className="text-xs font-semibold text-gray-600">{next.party}</span></td>
-                  <td className="td">{j.technicianName ?? "—"}</td>
+                  <td className="td">{who(j)}</td>
                   <td className="td whitespace-nowrap">{fmtDate(j.dueAt)}{isOverdue(j) && <><br /><Pill tone="red">Overdue</Pill></>}</td>
                 </tr>
               );
@@ -142,6 +146,6 @@ export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }
 
 export function QuotePill({ status }: { status: string }) {
   const tone = ({ DRAFT: "gray", SUBMITTED: "amber", APPROVED: "green", REJECTED: "red", SUPERSEDED: "gray", WITHDRAWN: "gray" } as const)[status] ?? "gray";
-  const label = { DRAFT: "Draft", SUBMITTED: "Awaiting approval", APPROVED: "Approved", REJECTED: "Rejected", SUPERSEDED: "Replaced by newer version", WITHDRAWN: "Withdrawn" }[status] ?? status;
+  const label = { DRAFT: "Draft", SUBMITTED: "Received – open", APPROVED: "Accepted", REJECTED: "Not selected", SUPERSEDED: "Replaced by a newer version", WITHDRAWN: "Withdrawn" }[status] ?? status;
   return <Pill tone={tone}>{label}</Pill>;
 }

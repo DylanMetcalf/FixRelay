@@ -11,9 +11,20 @@ datasource db {
 enum Role {
   OWNER
   MANAGER
+  APPROVER
   TECHNICIAN
-  CLIENT
   REQUESTER
+}
+
+enum JobRoute {
+  UNDECIDED
+  IN_HOUSE
+  CONTRACTOR
+}
+
+enum JobSource {
+  APP
+  PUBLIC_LINK
 }
 
 enum Priority {
@@ -116,13 +127,13 @@ enum OutboxStatus {
 }
 
 model User {
-  id              String   @id @default(uuid()) @db.Uuid
-  email           String   @unique
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
   name            String
   passwordHash    String
-  isPlatformAdmin Boolean  @default(false)
+  isPlatformAdmin Boolean   @default(false)
   emailVerifiedAt DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   sessions    Session[]
   authTokens  AuthToken[]
@@ -143,25 +154,27 @@ model Session {
 }
 
 model Organisation {
-  id                      String   @id @default(uuid()) @db.Uuid
-  name                    String
-  slug                    String   @unique
-  isDemo                  Boolean  @default(false)
-  brandColour             String   @default("#1e5aa8")
-  logoAttachmentId        String?  @db.Uuid
-  address                 String   @default("")
-  phone                   String   @default("")
-  contactEmail            String   @default("")
-  currency                String   @default("ZAR")
-  vatRegistered           Boolean  @default(false)
-  vatNumber               String   @default("")
-  vatRateBps              Int      @default(1500)
-  quoteTerms              String   @default("")
-  quoteValidityDays       Int      @default(30)
-  customerSignoffRequired Boolean  @default(true)
-  jobSeq                  Int      @default(0)
-  quoteSeq                Int      @default(0)
-  createdAt               DateTime @default(now())
+  id                         String   @id @default(uuid()) @db.Uuid
+  name                       String
+  slug                       String   @unique
+  isDemo                     Boolean  @default(false)
+  brandColour                String   @default("#1e5aa8")
+  logoAttachmentId           String?  @db.Uuid
+  address                    String   @default("")
+  phone                      String   @default("")
+  contactEmail               String   @default("")
+  currency                   String   @default("ZAR")
+  // Approvals (amounts in cents, incl. VAT). See WORKFLOWS.md "Approvals".
+  managerApprovalLimitCents  Int      @default(500000) // maintenance managers approve up to R5 000
+  approverApprovalLimitCents Int?     @default(5000000) // approvers up to R50 000; null = no limit; above → owner
+  poRequired                 Boolean  @default(false)
+  multiQuoteThresholdCents   Int      @default(1000000) // above R10 000 …
+  minQuotes                  Int      @default(3) // … this many quotes are needed (or a recorded reason)
+  reporterConfirmation       Boolean  @default(true) // the person who reported a fault confirms it is fixed
+  publicReportingEnabled     Boolean  @default(false) // anyone with a site link / QR code can report without an account
+  jobSeq                     Int      @default(0)
+  quoteSeq                   Int      @default(0)
+  createdAt                  DateTime @default(now())
 
   memberships  Membership[]
   subscription Subscription?
@@ -173,13 +186,12 @@ model Membership {
   orgId     String   @db.Uuid
   userId    String   @db.Uuid
   roles     Role[]
-  clientId  String?  @db.Uuid // set for CLIENT / client-side REQUESTER: scopes access to one client organisation
+  siteIds   String[] @default([]) // empty = all sites; otherwise the member only sees/approves these sites
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  org    Organisation @relation(fields: [orgId], references: [id])
-  user   User         @relation(fields: [userId], references: [id])
-  client Client?      @relation(fields: [orgId, clientId], references: [orgId, id])
+  org  Organisation @relation(fields: [orgId], references: [id])
+  user User         @relation(fields: [userId], references: [id])
 
   @@unique([orgId, userId])
   @@index([userId])
@@ -191,7 +203,7 @@ model Invitation {
   email      String
   name       String    @default("")
   roles      Role[]
-  clientId   String?   @db.Uuid
+  siteIds    String[]  @default([])
   tokenHash  String    @unique
   invitedBy  String    @db.Uuid
   expiresAt  DateTime
@@ -213,40 +225,21 @@ model PriorityRule {
   @@id([orgId, priority])
 }
 
-model Client {
+model Site {
   id          String   @id @default(uuid()) @db.Uuid
   orgId       String   @db.Uuid
   name        String
-  contactName String   @default("")
-  email       String   @default("")
-  phone       String   @default("")
-  notes       String   @default("")
+  address     String   @default("")
+  publicToken String   @unique // identifies the site in its public report link and QR codes (not a secret)
   archived    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  sites       Site[]
-  jobs        Job[]
-  memberships Membership[]
-
-  @@unique([orgId, id])
-  @@index([orgId, name])
-}
-
-model Site {
-  id        String   @id @default(uuid()) @db.Uuid
-  orgId     String   @db.Uuid
-  clientId  String   @db.Uuid
-  name      String
-  address   String   @default("")
-  createdAt DateTime @default(now())
-
-  client    Client     @relation(fields: [orgId, clientId], references: [orgId, id])
   locations Location[]
   assets    Asset[]
   jobs      Job[]
 
   @@unique([orgId, id])
-  @@index([orgId, clientId])
+  @@index([orgId, name])
 }
 
 model Location {
@@ -287,59 +280,69 @@ model Asset {
 
 // A maintenance request and the job it becomes are ONE record moving through JobStatus.
 model Job {
-  id                      String    @id @default(uuid()) @db.Uuid
-  orgId                   String    @db.Uuid
-  reference               String
-  title                   String
-  description             String
-  category                String    @default("General")
-  priority                Priority  @default(NORMAL)
-  emergency               Boolean   @default(false)
-  status                  JobStatus @default(NEW)
-  heldFromStatus          JobStatus?
-  holdReason              String?
-  cancelReason            String?
-  directAuthReason        String?
-  clientId                String    @db.Uuid
-  siteId                  String    @db.Uuid
-  locationId              String?   @db.Uuid
-  assetId                 String?   @db.Uuid
-  requesterId             String    @db.Uuid
-  ownerId                 String?   @db.Uuid // responsible manager / dispatcher
-  leadTechnicianId        String?   @db.Uuid
-  externalContractor      String?
-  instructions            String?
-  plannedStart            DateTime?
-  plannedEnd              DateTime?
-  dueAt                   DateTime?
-  customerSignoffRequired Boolean   @default(true)
-  reportedAt              DateTime  @default(now())
-  respondedAt             DateTime? // first time the job left NEW (used for response-time reporting)
-  assignedAt              DateTime?
-  startedAt               DateTime?
-  completedAt             DateTime?
-  closedAt                DateTime?
-  reopenCount             Int       @default(0)
-  overdueNotifiedAt       DateTime?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  id                   String     @id @default(uuid()) @db.Uuid
+  orgId                String     @db.Uuid
+  reference            String
+  title                String
+  description          String
+  category             String     @default("General")
+  priority             Priority   @default(NORMAL)
+  emergency            Boolean    @default(false)
+  status               JobStatus  @default(NEW)
+  heldFromStatus       JobStatus?
+  holdReason           String?
+  cancelReason         String?
+  directAuthReason     String?
+  siteId               String     @db.Uuid
+  locationId           String?    @db.Uuid
+  assetId              String?    @db.Uuid
+  requesterId          String?    @db.Uuid // null when reported through a public link
+  source               JobSource  @default(APP)
+  reporterName         String? // public-link reports
+  reporterPhone        String?
+  reporterEmail        String?
+  route                JobRoute   @default(UNDECIDED)
+  contractorId         String?    @db.Uuid // appointed contractor (route CONTRACTOR)
+  recommendedQuoteId   String?    @db.Uuid // quote put forward for approval above the manager's limit
+  quoteDeadline        DateTime?
+  quoteExceptionReason String? // why fewer quotes than required were accepted
+  poNumber             String?
+  approvedCostCents    Int?
+  ownerId              String?    @db.Uuid // responsible manager / dispatcher
+  leadTechnicianId     String?    @db.Uuid
+  instructions         String?
+  plannedStart         DateTime?
+  plannedEnd           DateTime?
+  dueAt                DateTime?
+  reporterConfirmation Boolean    @default(true)
+  reportedAt           DateTime   @default(now())
+  respondedAt          DateTime? // first time the job left NEW (used for response-time reporting)
+  assignedAt           DateTime?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  closedAt             DateTime?
+  reopenCount          Int        @default(0)
+  overdueNotifiedAt    DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
-  client      Client          @relation(fields: [orgId, clientId], references: [orgId, id])
-  site        Site            @relation(fields: [orgId, siteId], references: [orgId, id])
-  location    Location?       @relation(fields: [orgId, locationId], references: [orgId, id])
-  asset       Asset?          @relation(fields: [orgId, assetId], references: [orgId, id])
-  technicians JobTechnician[]
-  assessments Assessment[]
-  quotes      Quote[]
-  updates     WorkUpdate[]
-  completions Completion[]
-  attachments Attachment[]
-  events      ActivityEvent[]
+  contractor      Contractor?      @relation(fields: [orgId, contractorId], references: [orgId, id])
+  site            Site             @relation(fields: [orgId, siteId], references: [orgId, id])
+  location        Location?        @relation(fields: [orgId, locationId], references: [orgId, id])
+  asset           Asset?           @relation(fields: [orgId, assetId], references: [orgId, id])
+  technicians     JobTechnician[]
+  assessments     Assessment[]
+  quotes          Quote[]
+  updates         WorkUpdate[]
+  completions     Completion[]
+  attachments     Attachment[]
+  contractorLinks ContractorLink[]
+  events          ActivityEvent[]
 
   @@unique([orgId, id])
   @@unique([orgId, reference])
   @@index([orgId, status])
-  @@index([orgId, clientId])
+  @@index([orgId, siteId])
   @@index([orgId, leadTechnicianId])
 }
 
@@ -381,6 +384,9 @@ model Quote {
   number        String
   version       Int         @default(1)
   kind          QuoteKind   @default(ORIGINAL)
+  contractorId  String?     @db.Uuid
+  leadTimeDays  Int?
+  viaLink       Boolean     @default(false) // submitted by the contractor through their link (vs captured by staff)
   status        QuoteStatus @default(DRAFT)
   scope         String      @default("")
   terms         String      @default("")
@@ -394,10 +400,10 @@ model Quote {
   decidedAt     DateTime?
   createdAt     DateTime    @default(now())
 
-  job      Job            @relation(fields: [orgId, jobId], references: [orgId, id])
-  lines    QuoteLine[]
-  decision Decision?
-  links    ApprovalLink[]
+  job        Job         @relation(fields: [orgId, jobId], references: [orgId, id])
+  lines      QuoteLine[]
+  decision   Decision?
+  contractor Contractor? @relation(fields: [orgId, contractorId], references: [orgId, id])
 
   @@unique([orgId, id])
   @@unique([orgId, number, version])
@@ -431,35 +437,60 @@ model Completion {
   workPerformed String
   observations  String           @default("")
   completedAt   DateTime
-  submittedById String           @db.Uuid
+  submittedById String?          @db.Uuid // null when the contractor submitted through their link
+  contractorId  String?          @db.Uuid
   createdAt     DateTime         @default(now())
 
-  job      Job            @relation(fields: [orgId, jobId], references: [orgId, id])
+  job      Job       @relation(fields: [orgId, jobId], references: [orgId, id])
   decision Decision?
-  links    ApprovalLink[]
 
   @@unique([orgId, id])
   @@unique([jobId, version])
 }
 
 // Secure customer review link. Only the SHA-256 of the token is stored.
-model ApprovalLink {
-  id             String      @id @default(uuid()) @db.Uuid
-  orgId          String      @db.Uuid
-  purpose        LinkPurpose
-  quoteId        String?     @db.Uuid
-  completionId   String?     @db.Uuid
-  tokenHash      String      @unique
-  recipientName  String
-  recipientEmail String
-  createdById    String      @db.Uuid
-  expiresAt      DateTime
-  usedAt         DateTime?
-  revokedAt      DateTime?
-  createdAt      DateTime    @default(now())
+// Secure link for an external contractor: submit a quote (QUOTE) or completion evidence (COMPLETION) for one job.
+// Only the SHA-256 of the token is stored.
+model ContractorLink {
+  id           String      @id @default(uuid()) @db.Uuid
+  orgId        String      @db.Uuid
+  jobId        String      @db.Uuid
+  contractorId String      @db.Uuid
+  purpose      LinkPurpose
+  tokenHash    String      @unique
+  createdById  String      @db.Uuid
+  expiresAt    DateTime
+  usedAt       DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime    @default(now())
 
-  quote      Quote?      @relation(fields: [orgId, quoteId], references: [orgId, id])
-  completion Completion? @relation(fields: [orgId, completionId], references: [orgId, id])
+  job        Job        @relation(fields: [orgId, jobId], references: [orgId, id])
+  contractor Contractor @relation(fields: [orgId, contractorId], references: [orgId, id])
+
+  @@index([orgId, jobId])
+}
+
+// External contractors the site uses. Not users: they work through ContractorLinks.
+model Contractor {
+  id            String   @id @default(uuid()) @db.Uuid
+  orgId         String   @db.Uuid
+  name          String
+  trade         String   @default("")
+  contactName   String   @default("")
+  email         String   @default("")
+  phone         String   @default("")
+  vatRegistered Boolean  @default(false)
+  vatNumber     String   @default("")
+  notes         String   @default("")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  jobs   Job[]
+  quotes Quote[]
+  links  ContractorLink[]
+
+  @@unique([orgId, id])
+  @@index([orgId, name])
 }
 
 // One decision per quote version / completion version (unique constraints stop duplicates under concurrency).
@@ -579,7 +610,7 @@ model Plan {
   name          String
   maxUsers      Int? // null = unlimited
   maxActiveJobs Int?
-  maxClients    Int?
+  maxSites      Int?
   active        Boolean @default(true)
 
   subscriptions Subscription[]

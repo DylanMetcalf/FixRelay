@@ -1,180 +1,178 @@
 /**
- * Quotations. Key rules (see WORKFLOWS.md, DATABASE.md):
- *  - Only DRAFT quotes are editable. Submitting freezes the content (also enforced by DB triggers).
- *  - A revision is a NEW row (same number, version + 1); earlier versions are kept forever.
- *  - Totals are always computed on the server from the line items (src/lib/money.ts).
- *  - ORIGINAL quotes drive the job status; VARIATION quotes cover additional work on a job already under way.
+ * Contractor quotations RECEIVED by the site.
+ *  - A manager requests quotes from one or more contractors (each gets a secure link; see contractor-links.ts).
+ *  - Quotes arrive through the contractor's link, or staff capture a quote that came by email/paper.
+ *  - Each contractor has one live quote per job; a revision is a new version (earlier versions are kept, frozen).
+ *  - Amounts are integer cents: price excl. VAT, VAT at 15% only if the contractor is VAT registered.
+ * Choosing / approving a quote is in approvals.ts.
  */
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { conflict, invalid, isUniqueViolation, notFound } from "@/lib/errors";
-import { computeTotals, lineTotalCents, parseQuantityMilli } from "@/lib/money";
+import { prisma, type Tx } from "@/lib/db";
+import { conflict, invalid, notFound } from "@/lib/errors";
+import { computeTotals } from "@/lib/money";
 import { can, jobScope, requirePerm, type Ctx } from "../permissions";
-import { actorOf, logEvent } from "./activity";
+import { actorOf, type Actor, logEvent } from "./activity";
+import { requireVerifiedEmail } from "./account";
+import { issueQuoteLink, revokeJobLinks } from "./contractor-links";
 import { loadJob, move } from "./jobs";
-import { clientRepIds, notify } from "./notifications";
+import { managerIds, notify } from "./notifications";
 
-const lineSchema = z.object({
-  kind: z.enum(["LABOUR", "MATERIAL", "OTHER"]),
-  description: z.string().trim().min(1, "Every line needs a description.").max(500),
-  quantity: z.string(),
-  unitPriceCents: z.number().int().min(0).max(2_000_000_000),
-  taxable: z.boolean().default(true),
-});
-const saveSchema = z.object({
-  scope: z.string().trim().max(5000).default(""),
-  terms: z.string().trim().max(5000).default(""),
-  validUntil: z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable()),
-  lines: z.array(lineSchema).max(200),
-});
-export type QuoteLineInput = z.input<typeof lineSchema>;
+export const SA_VAT_BPS = 1500;
+const optDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable());
 
-/** Start a quote (v1). ORIGINAL: job must be ASSESSED → QUOTING. VARIATION: job must be under way. */
-export async function createQuote(ctx: Ctx, jobId: string, kind: "ORIGINAL" | "VARIATION" = "ORIGINAL") {
+const requestSchema = z.object({
+  contractorIds: z.array(z.string().uuid()).min(1, "Choose at least one contractor.").max(10, "Choose up to 10 contractors."),
+  scope: z.string().trim().min(5, "Describe the work you need quoted.").max(5000),
+  deadline: optDate,
+});
+
+/**
+ * ASSESSED → QUOTING (route CONTRACTOR) and invite contractors; or invite more contractors while QUOTING.
+ * Returns one link per contractor (shown once; also emailed).
+ */
+export async function requestQuotes(ctx: Ctx, jobId: string, input: z.input<typeof requestSchema>) {
+  requirePerm(ctx, "quote.manage");
+  requireVerifiedEmail(ctx); // quote requests email people outside the organisation
+  const p = requestSchema.safeParse(input);
+  if (!p.success) throw invalid(p.error.issues[0]!.message);
+  const d = p.data;
+  if (d.deadline && d.deadline.getTime() < Date.now() - 86_400_000) throw invalid("The quote deadline is in the past.");
+  return prisma.$transaction(async (tx) => {
+    const job = await loadJob(tx, ctx, jobId);
+    const ids = [...new Set(d.contractorIds)];
+    const found = await tx.contractor.findMany({ where: { id: { in: ids }, orgId: ctx.orgId, active: true } });
+    if (found.length !== ids.length) throw invalid("Choose active contractors from your directory.");
+    if (job.status === "ASSESSED" || (job.status === "NEW" && job.emergency)) {
+      if (job.status === "NEW") { await move(tx, ctx.orgId, job, "ASSESSING", { ownerId: job.ownerId ?? ctx.userId }); job.status = "ASSESSING"; await move(tx, ctx.orgId, job, "ASSESSED"); job.status = "ASSESSED"; }
+      await move(tx, ctx.orgId, job, "QUOTING", { route: "CONTRACTOR", quoteDeadline: d.deadline, ownerId: job.ownerId ?? ctx.userId });
+    } else if (job.status === "QUOTING") {
+      if (d.deadline) await tx.job.update({ where: { id: job.id }, data: { quoteDeadline: d.deadline } });
+    } else throw conflict("Quotes can be requested once the fault has been assessed.");
+    const links = [];
+    for (const c of found) {
+      const r = await issueQuoteLink(tx, ctx, { ...job, quoteDeadline: d.deadline ?? job.quoteDeadline }, c.id, d.scope);
+      links.push({ contractorId: c.id, contractorName: c.name, url: r.url });
+    }
+    await logEvent(tx, actorOf(ctx), job.id, "rfq.requested", `Quotes requested from ${found.map((c) => c.name).join(", ")}`, { contractorIds: ids });
+    return links;
+  });
+}
+
+export interface QuoteFigures {
+  scope: string; priceExclVatCents: number; leadTimeDays?: number | null; validUntil?: Date | null; terms?: string;
+}
+const figuresSchema = z.object({
+  scope: z.string().trim().min(3, "Describe what the quote covers.").max(5000),
+  priceExclVatCents: z.number().int().min(1, "Enter the quoted price.").max(2_000_000_000),
+  leadTimeDays: z.number().int().min(0).max(3650).nullish(),
+  validUntil: z.date().nullish(),
+  terms: z.string().trim().max(3000).default(""),
+});
+
+/** Shared by staff capture and the contractor link. Creates a SUBMITTED, frozen quote (new version per contractor). */
+export async function insertContractorQuote(tx: Tx, actor: Actor, job: { id: string; reference: string; title: string; orgId: string; status: string }, contractorId: string, input: QuoteFigures, viaLink: boolean, createdById: string) {
+  const p = figuresSchema.safeParse(input);
+  if (!p.success) throw invalid(p.error.issues[0]!.message);
+  const d = p.data;
+  if (job.status !== "QUOTING") throw conflict("This job is no longer collecting quotes.");
+  if (d.validUntil && d.validUntil.getTime() < Date.now() - 86_400_000) throw invalid("The quote's validity date is in the past.");
+  const contractor = await tx.contractor.findFirstOrThrow({ where: { id: contractorId, orgId: job.orgId } });
+  const vatRateBps = contractor.vatRegistered ? SA_VAT_BPS : 0;
+  const totals = computeTotals([{ lineTotalCents: d.priceExclVatCents, taxable: true }], vatRateBps);
+  const previous = await tx.quote.findFirst({ where: { jobId: job.id, contractorId }, orderBy: { version: "desc" } });
+  if (previous?.status === "APPROVED") throw conflict("This contractor's quote has already been accepted.");
+  if (previous && previous.status === "SUBMITTED") {
+    const r = await tx.quote.updateMany({ where: { id: previous.id, status: "SUBMITTED" }, data: { status: "SUPERSEDED" } });
+    if (r.count !== 1) throw conflict("This quote was just decided. Refresh and try again.");
+  }
+  const number = previous?.number ?? `Q-${String((await tx.organisation.update({ where: { id: job.orgId }, data: { quoteSeq: { increment: 1 } } })).quoteSeq).padStart(5, "0")}`;
+  const q = await tx.quote.create({
+    data: {
+      orgId: job.orgId, jobId: job.id, contractorId, number, version: (previous?.version ?? 0) + 1, status: "DRAFT",
+      scope: d.scope, terms: d.terms, validUntil: d.validUntil ?? null, leadTimeDays: d.leadTimeDays ?? null, vatRateBps, viaLink, createdById,
+      ...totals,
+    },
+  });
+  await tx.quoteLine.create({
+    data: { orgId: job.orgId, quoteId: q.id, position: 0, kind: "OTHER", description: "Quoted price", quantity: 1, unitPriceCents: d.priceExclVatCents, taxable: true, lineTotalCents: d.priceExclVatCents },
+  });
+  await tx.quote.update({ where: { id: q.id }, data: { status: "SUBMITTED", submittedAt: new Date() } }); // frozen from here (DB trigger)
+  await logEvent(tx, actor, job.id, previous ? "quote.revised" : "quote.received",
+    `${previous ? "Revised quote" : "Quote"} ${number}${previous ? ` v${q.version}` : ""} received from ${contractor.name}${viaLink ? " (submitted online)" : " (captured by staff)"}`,
+    { quoteId: q.id, totalCents: totals.totalCents, contractorId });
+  await notify(tx, {
+    orgId: job.orgId, jobId: job.id, type: "quote.received", userIds: await managerIds(tx, job.orgId), exceptUserId: actor.userId,
+    title: `${job.reference}: quote received from ${contractor.name}`, body: job.title, eventKey: `quote-received:${q.id}`,
+  });
+  return { ...q, status: "SUBMITTED" as const, contractor };
+}
+
+/** Staff capture a quote received by email/paper (attach the document separately). */
+export async function recordQuote(ctx: Ctx, jobId: string, contractorId: string, input: QuoteFigures) {
   requirePerm(ctx, "quote.manage");
   return prisma.$transaction(async (tx) => {
     const job = await loadJob(tx, ctx, jobId);
-    if (kind === "ORIGINAL") {
-      if (job.status !== "ASSESSED") throw conflict("A quotation can be started once the request has been assessed.");
-      await move(tx, ctx.orgId, job, "QUOTING", { ownerId: job.ownerId ?? ctx.userId });
-    } else if (!["ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(job.status))
-      throw conflict("A variation quote is for additional work on a job that is already under way.");
-    const org = await tx.organisation.update({ where: { id: ctx.orgId }, data: { quoteSeq: { increment: 1 } } });
-    const q = await tx.quote.create({
-      data: {
-        orgId: ctx.orgId, jobId: job.id, number: `Q-${String(org.quoteSeq).padStart(5, "0")}`, kind, createdById: ctx.userId,
-        terms: org.quoteTerms, vatRateBps: org.vatRegistered ? org.vatRateBps : 0,
-        validUntil: new Date(Date.now() + org.quoteValidityDays * 86_400_000),
-      },
-    });
-    await logEvent(tx, actorOf(ctx), job.id, "quote.created", `${kind === "VARIATION" ? "Variation quote" : "Quote"} ${q.number} started`, { quoteId: q.id });
-    return q;
+    return insertContractorQuote(tx, actorOf(ctx), job, contractorId, input, false, ctx.userId);
   });
 }
 
-/** Replace the content of a DRAFT quote and recompute totals. */
-export async function saveQuote(ctx: Ctx, quoteId: string, input: z.input<typeof saveSchema>) {
+/** Stop waiting for one contractor (their quote link stops working; an existing quote is withdrawn). */
+export async function withdrawInvite(ctx: Ctx, jobId: string, contractorId: string) {
   requirePerm(ctx, "quote.manage");
-  const p = saveSchema.safeParse(input);
-  if (!p.success) throw invalid(p.error.issues[0]!.message);
-  const d = p.data;
   return prisma.$transaction(async (tx) => {
-    const q = await tx.quote.findFirst({ where: { id: quoteId, orgId: ctx.orgId } });
-    if (!q) throw notFound("Quote not found.");
-    if (q.status !== "DRAFT") throw conflict("This quote has been submitted and can no longer be edited. Create a revision instead.");
-    const lines = d.lines.map((l, i) => {
-      const milli = parseQuantityMilli(l.quantity);
-      return {
-        orgId: ctx.orgId, quoteId: q.id, position: i, kind: l.kind, description: l.description, taxable: l.taxable,
-        quantity: new Prisma.Decimal(milli.toString()).div(1000), unitPriceCents: l.unitPriceCents,
-        lineTotalCents: lineTotalCents(milli, l.unitPriceCents),
-      };
-    });
-    const totals = computeTotals(lines, q.vatRateBps);
-    await tx.quoteLine.deleteMany({ where: { quoteId: q.id } });
-    await tx.quoteLine.createMany({ data: lines });
-    // Guarded on status so a concurrent submit cannot be overwritten.
-    const r = await tx.quote.updateMany({ where: { id: q.id, status: "DRAFT" }, data: { scope: d.scope, terms: d.terms, validUntil: d.validUntil, ...totals } });
-    if (r.count !== 1) throw conflict("This quote was submitted while you were editing.");
-    return totals;
+    const job = await loadJob(tx, ctx, jobId);
+    if (job.status !== "QUOTING") throw conflict("This job is no longer collecting quotes.");
+    await revokeJobLinks(tx, ctx.orgId, job.id, "QUOTE", contractorId);
+    await tx.quote.updateMany({ where: { jobId: job.id, contractorId, status: "SUBMITTED" }, data: { status: "WITHDRAWN" } });
+    const c = await tx.contractor.findFirstOrThrow({ where: { id: contractorId, orgId: ctx.orgId } });
+    await logEvent(tx, actorOf(ctx), job.id, "rfq.withdrawn", `Stopped waiting for a quote from ${c.name}`);
   });
 }
 
-/** DRAFT → SUBMITTED (frozen). For an ORIGINAL quote the job moves to AWAITING_APPROVAL. */
-export async function submitQuote(ctx: Ctx, quoteId: string) {
-  requirePerm(ctx, "quote.manage");
-  try {
-    return await prisma.$transaction(async (tx) => {
-      const q = await tx.quote.findFirst({ where: { id: quoteId, orgId: ctx.orgId }, include: { lines: true } });
-      if (!q) throw notFound("Quote not found.");
-      if (q.lines.length === 0) throw invalid("Add at least one line item before submitting.");
-      if (!q.scope.trim()) throw invalid("Describe the scope of work before submitting.");
-      if (q.validUntil && q.validUntil < new Date()) throw invalid("The validity date is in the past.");
-      const totals = computeTotals(q.lines, q.vatRateBps);
-      const r = await tx.quote.updateMany({ where: { id: q.id, status: "DRAFT" }, data: { ...totals, status: "SUBMITTED", submittedAt: new Date() } });
-      if (r.count !== 1) throw conflict("This quote has already been submitted.");
-      const job = await loadJob(tx, ctx, q.jobId);
-      if (q.kind === "ORIGINAL") await move(tx, ctx.orgId, job, "AWAITING_APPROVAL");
-      else if (!["ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(job.status)) throw conflict("This job is no longer under way.");
-      await logEvent(tx, actorOf(ctx), job.id, q.version > 1 ? "quote.revised" : "quote.submitted",
-        `Quote ${q.number} v${q.version} submitted for approval`, { quoteId: q.id, totalCents: totals.totalCents });
-      await notify(tx, {
-        orgId: ctx.orgId, jobId: job.id, type: "quote.needs_approval", userIds: await clientRepIds(tx, ctx.orgId, job.clientId),
-        title: `Quotation ${q.number} needs your approval`, body: `${job.reference}: ${job.title}`, eventKey: `quote-submitted:${q.id}`,
-      });
-    });
-  } catch (e) {
-    if (isUniqueViolation(e)) throw conflict("Another quote for this job is already awaiting approval.");
-    throw e;
-  }
-}
-
-/**
- * Create the next version as a new DRAFT, copying the content. A SUBMITTED predecessor becomes SUPERSEDED
- * and its review links are revoked; a REJECTED one stays as the historical record. APPROVED quotes cannot be revised.
- */
-export async function reviseQuote(ctx: Ctx, quoteId: string) {
-  requirePerm(ctx, "quote.manage");
-  try {
-    return await prisma.$transaction(async (tx) => {
-      const q = await tx.quote.findFirst({ where: { id: quoteId, orgId: ctx.orgId }, include: { lines: true } });
-      if (!q) throw notFound("Quote not found.");
-      if (q.status !== "SUBMITTED" && q.status !== "REJECTED") throw conflict("Only a submitted or rejected quote can be revised.");
-      const job = await loadJob(tx, ctx, q.jobId);
-      if (q.status === "SUBMITTED") {
-        const r = await tx.quote.updateMany({ where: { id: q.id, status: "SUBMITTED" }, data: { status: "SUPERSEDED" } });
-        if (r.count !== 1) throw conflict("This quote was just decided. Refresh and try again.");
-        await tx.approvalLink.updateMany({ where: { quoteId: q.id, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
-        if (q.kind === "ORIGINAL") await move(tx, ctx.orgId, job, "QUOTING");
-      } else if (q.kind === "ORIGINAL" && job.status !== "QUOTING") throw conflict("This job is no longer waiting for a quotation.");
-      const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId } });
-      const next = await tx.quote.create({
-        data: {
-          orgId: ctx.orgId, jobId: q.jobId, number: q.number, version: q.version + 1, kind: q.kind, createdById: ctx.userId,
-          scope: q.scope, terms: q.terms, vatRateBps: q.vatRateBps, subtotalCents: q.subtotalCents, vatCents: q.vatCents, totalCents: q.totalCents,
-          validUntil: new Date(Date.now() + org.quoteValidityDays * 86_400_000),
-        },
-      });
-      await tx.quoteLine.createMany({ data: q.lines.map(({ id: _id, ...l }) => ({ ...l, quoteId: next.id })) });
-      await logEvent(tx, actorOf(ctx), job.id, "quote.revision_started", `Revision v${next.version} of quote ${q.number} started`, { quoteId: next.id, previousId: q.id });
-      return next;
-    });
-  } catch (e) {
-    if (isUniqueViolation(e)) throw conflict("A newer version of this quote already exists.");
-    throw e;
-  }
+/** Live quotes for a job, cheapest first, plus who was asked and has not responded yet. */
+export async function compareQuotes(ctx: Ctx, jobId: string) {
+  requirePerm(ctx, "quote.view");
+  const job = await prisma.job.findFirst({ where: { id: jobId, ...jobScope(ctx) }, select: { id: true, status: true, recommendedQuoteId: true } });
+  if (!job) throw notFound("Job not found.");
+  const [quotes, invited, org] = await Promise.all([
+    prisma.quote.findMany({
+      where: { jobId, orgId: ctx.orgId, contractorId: { not: null }, status: { in: ["SUBMITTED", "APPROVED", "REJECTED"] } },
+      include: { contractor: true, decision: true }, orderBy: { totalCents: "asc" },
+    }),
+    prisma.contractorLink.findMany({ where: { jobId, orgId: ctx.orgId, purpose: "QUOTE" }, include: { contractor: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" } }),
+    prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { minQuotes: true, multiQuoteThresholdCents: true, managerApprovalLimitCents: true, approverApprovalLimitCents: true, poRequired: true } }),
+  ]);
+  const quoted = new Set(quotes.map((q) => q.contractorId));
+  const seen = new Set<string>();
+  const waitingFor = invited.filter((l) => !quoted.has(l.contractorId) && !l.revokedAt && !seen.has(l.contractorId) && seen.add(l.contractorId)).map((l) => ({ ...l.contractor, expiresAt: l.expiresAt }));
+  const attachments = await prisma.attachment.findMany({ where: { orgId: ctx.orgId, quoteId: { in: quotes.map((q) => q.id) } }, select: { id: true, quoteId: true, filename: true, mimeType: true } });
+  return { job, quotes: quotes.map((q) => ({ ...q, files: attachments.filter((a) => a.quoteId === q.id) })), waitingFor, rules: org };
 }
 
 export async function getQuote(ctx: Ctx, quoteId: string) {
   requirePerm(ctx, "quote.view");
   if (!z.string().uuid().safeParse(quoteId).success) throw notFound("Quote not found.");
   const q = await prisma.quote.findFirst({
-    where: { id: quoteId, orgId: ctx.orgId, job: jobScope(ctx), ...(can(ctx, "quote.manage") || ctx.support ? {} : { status: { notIn: ["DRAFT", "WITHDRAWN"] } }) },
-    include: {
-      lines: { orderBy: { position: "asc" } }, decision: true,
-      job: { select: { id: true, reference: true, title: true, status: true, client: { select: { name: true, contactName: true, email: true } }, site: { select: { name: true } } } },
-      links: { where: { revokedAt: null }, select: { id: true, recipientName: true, recipientEmail: true, expiresAt: true, usedAt: true }, orderBy: { createdAt: "desc" } },
-    },
+    where: { id: quoteId, orgId: ctx.orgId, job: jobScope(ctx) },
+    include: { lines: { orderBy: { position: "asc" } }, decision: true, contractor: true, job: { select: { id: true, reference: true, title: true, status: true, site: { select: { name: true } } } } },
   });
   if (!q) throw notFound("Quote not found.");
   const [versions, attachments] = await Promise.all([
     prisma.quote.findMany({ where: { orgId: ctx.orgId, jobId: q.jobId, number: q.number }, select: { id: true, version: true, status: true, totalCents: true, createdAt: true }, orderBy: { version: "desc" } }),
     prisma.attachment.findMany({ where: { orgId: ctx.orgId, quoteId: q.id }, select: { id: true, filename: true, mimeType: true } }),
   ]);
-  return { ...q, versions: can(ctx, "quote.manage") || ctx.support ? versions : versions.filter((v) => v.status !== "DRAFT" && v.status !== "WITHDRAWN"), attachments };
+  return { ...q, versions, attachments, canManage: can(ctx, "quote.manage") };
 }
 
 export async function listQuotes(ctx: Ctx, f: { status?: string } = {}) {
   requirePerm(ctx, "quote.view");
-  const statuses = ["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "SUPERSEDED", "WITHDRAWN"] as const;
+  const statuses = ["SUBMITTED", "APPROVED", "REJECTED", "SUPERSEDED", "WITHDRAWN"] as const;
   const status = statuses.find((s) => s === f.status);
-  const hidden = can(ctx, "quote.manage") || ctx.support ? [] : (["DRAFT", "WITHDRAWN"] as const);
   return prisma.quote.findMany({
-    where: { orgId: ctx.orgId, job: jobScope(ctx), ...(status ? { status } : {}), NOT: { status: { in: [...hidden] } } },
+    where: { orgId: ctx.orgId, job: jobScope(ctx), contractorId: { not: null }, ...(status ? { status } : { status: { not: "DRAFT" } }) },
     select: {
-      id: true, number: true, version: true, kind: true, status: true, totalCents: true, validUntil: true, submittedAt: true, createdAt: true,
-      job: { select: { id: true, reference: true, title: true, client: { select: { name: true } } } },
+      id: true, number: true, version: true, status: true, totalCents: true, validUntil: true, submittedAt: true, createdAt: true, leadTimeDays: true,
+      contractor: { select: { name: true } }, job: { select: { id: true, reference: true, title: true, status: true, site: { select: { name: true } } } },
     },
     orderBy: { createdAt: "desc" }, take: 200,
   });

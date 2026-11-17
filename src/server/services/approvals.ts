@@ -1,258 +1,154 @@
 /**
- * Customer decisions on quotations and completed work, through three channels:
- *   LINK      – a secure, expiring, single-purpose review link (no account needed);
- *   PORTAL    – a signed-in client representative of that customer;
- *   IN_PERSON – sign-off captured on a staff device with the customer's name and drawn signature;
- *   INTERNAL  – a manager records an approval received another way (phone, purchase order). Clearly labelled.
- * Exactly one decision can exist per quote version / completion version: guarded status updates plus
- * unique constraints make double-submits and races fail safely.
- * NOTE: a drawn signature is recorded as evidence of acknowledgement only. It is NOT an advanced
- * electronic signature and no legal equivalence is claimed (see SECURITY.md).
+ * Spending approval for contractor quotes (see WORKFLOWS.md "Approvals").
+ *  - Authority by amount (incl. VAT): maintenance manager ≤ managerApprovalLimit; approver ≤ approverApprovalLimit
+ *    (unlimited if not set); owner unlimited. Site restrictions apply.
+ *  - Above multiQuoteThreshold, at least `minQuotes` quotes from different contractors are needed, otherwise a
+ *    written exception reason is recorded.
+ *  - PO number required when the organisation sets poRequired.
+ *  - Approving = accepting the quote: the contractor is appointed (job → ASSIGNED), receives a completion link,
+ *    and the other contractors are told they were not selected. One decision per quote (DB unique), guarded updates.
  */
-import type { DecisionOutcome, DecisionVia } from "@prisma/client";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/db";
 import { conflict, forbidden, invalid, isUniqueViolation, notFound } from "@/lib/errors";
-import { hashToken, newToken } from "@/lib/tokens";
-import { isManager, jobScope, requirePerm, type Ctx } from "../permissions";
-import { type Actor, actorOf, logEvent } from "./activity";
-import { storeSignature } from "./attachments";
-import { isAssigned, move } from "./jobs";
-import { requireVerifiedEmail } from "./account";
+import { formatZar } from "@/lib/money";
+import { approvalLimit, jobScope, requirePerm, type ApprovalRules, type Ctx } from "../permissions";
+import { actorOf, logEvent } from "./activity";
+import { issueCompletionLink, revokeJobLinks } from "./contractor-links";
+import { move } from "./jobs";
 import { managerIds, notify, queueEmail } from "./notifications";
-import { appUrl } from "@/lib/app-url";
 
-export const LINK_DAYS = 14;
-const endOfDay = (d: Date) => new Date(new Date(d).setHours(23, 59, 59, 999));
-
-const decisionSchema = z.object({
-  outcome: z.enum(["APPROVED", "REJECTED"]),
-  name: z.string().trim().min(2, "Enter your full name.").max(120),
+const opts = z.object({
+  poNumber: z.string().trim().max(60).default(""),
+  exceptionReason: z.string().trim().max(1000).default(""),
   comment: z.string().trim().max(2000).default(""),
-  signature: z.string().max(450_000).optional(),
-}).refine((d) => d.outcome === "APPROVED" || d.comment.length >= 3, { message: "Please say why you are rejecting, so it can be put right." });
-export type DecisionInput = z.input<typeof decisionSchema>;
-
-const parseDecision = (v: unknown) => {
-  const p = decisionSchema.safeParse(v);
-  if (!p.success) throw invalid(p.error.issues[0]!.message);
-  return p.data;
-};
-
-interface Decider {
-  via: DecisionVia; userId: string | null; name: string; email: string;
-  recordedById: string | null; linkId: string | null; ip: string;
-}
-
-// ---------- Core (always inside a transaction) ----------
-
-async function decideQuote(tx: Tx, quoteId: string, d: z.output<typeof decisionSchema>, who: Decider, actor: Actor) {
-  const q = await tx.quote.findUniqueOrThrow({ where: { id: quoteId }, include: { job: true } });
-  if (q.status !== "SUBMITTED") throw conflict("A decision has already been recorded for this quotation, or it has been replaced.");
-  if (d.outcome === "APPROVED" && q.validUntil && endOfDay(q.validUntil) < new Date())
-    throw conflict("This quotation has expired. Please ask for an updated quotation.");
-  const now = new Date();
-  const r = await tx.quote.updateMany({ where: { id: q.id, status: "SUBMITTED" }, data: { status: d.outcome, decidedAt: now } });
-  if (r.count !== 1) throw conflict("A decision has already been recorded for this quotation.");
-  await tx.decision.create({
-    data: { orgId: q.orgId, jobId: q.jobId, quoteId: q.id, outcome: d.outcome, via: who.via, deciderUserId: who.userId, deciderName: who.name,
-      deciderEmail: who.email, recordedById: who.recordedById, linkId: who.linkId, comment: d.comment, ipAddress: who.ip },
-  });
-  await tx.approvalLink.updateMany({ where: { quoteId: q.id, usedAt: null, revokedAt: null }, data: { revokedAt: now } });
-  if (q.kind === "ORIGINAL") await move(tx, q.orgId, q.job, d.outcome === "APPROVED" ? "APPROVED" : "QUOTING");
-  const verb = d.outcome === "APPROVED" ? "approved" : "rejected";
-  await logEvent(tx, actor, q.jobId, `quote.${verb}`, `Quote ${q.number} v${q.version} ${verb} by ${who.name}${VIA_NOTE[who.via]}`,
-    { quoteId: q.id, via: who.via, totalCents: q.totalCents });
-  await notify(tx, {
-    orgId: q.orgId, jobId: q.jobId, type: `quote.${verb}`, userIds: await managerIds(tx, q.orgId), exceptUserId: who.recordedById,
-    title: `Quote ${q.number} was ${verb}`, body: `${q.job.reference}: ${q.job.title}${d.comment ? `\n"${d.comment}"` : ""}`, eventKey: `quote-decided:${q.id}`,
-  });
-}
-
-const VIA_NOTE: Record<DecisionVia, string> = {
-  LINK: " (secure link)", PORTAL: " (customer portal)", IN_PERSON: " (signed in person)", INTERNAL: " (recorded by staff on the customer's behalf)",
-};
-
-async function decideCompletion(tx: Tx, completionId: string, d: z.output<typeof decisionSchema>, who: Decider, actor: Actor) {
-  const c = await tx.completion.findUniqueOrThrow({ where: { id: completionId }, include: { job: true } });
-  if (c.status !== "SUBMITTED" || c.job.status !== "AWAITING_VERIFICATION") throw conflict("A decision has already been recorded for this work.");
-  const r = await tx.completion.updateMany({ where: { id: c.id, status: "SUBMITTED" }, data: { status: d.outcome } });
-  if (r.count !== 1) throw conflict("A decision has already been recorded for this work.");
-  const sig = d.signature ? await storeSignature(tx, { orgId: c.orgId, jobId: c.jobId, completionId: c.id, dataUrl: d.signature }) : null;
-  await tx.decision.create({
-    data: { orgId: c.orgId, jobId: c.jobId, completionId: c.id, outcome: d.outcome, via: who.via, deciderUserId: who.userId, deciderName: who.name,
-      deciderEmail: who.email, recordedById: who.recordedById, linkId: who.linkId, comment: d.comment, ipAddress: who.ip, signatureAttachmentId: sig?.id ?? null },
-  });
-  await tx.approvalLink.updateMany({ where: { completionId: c.id, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
-  // Rejected work goes back to the technician; a new completion version will be needed.
-  await move(tx, c.orgId, c.job, d.outcome === "APPROVED" ? "VERIFIED" : "IN_PROGRESS", d.outcome === "APPROVED" ? {} : { completedAt: null });
-  const verb = d.outcome === "APPROVED" ? "approved" : "rejected";
-  await logEvent(tx, actor, c.jobId, `completion.${verb}`, `Completed work (v${c.version}) ${verb} by ${who.name}${VIA_NOTE[who.via]}`,
-    { completionId: c.id, via: who.via, signed: !!sig });
-  await notify(tx, {
-    orgId: c.orgId, jobId: c.jobId, type: `completion.${verb}`, exceptUserId: who.recordedById,
-    userIds: [...(await managerIds(tx, c.orgId)), c.job.leadTechnicianId, c.submittedById],
-    title: `${c.job.reference}: completed work ${verb}`, body: d.comment || c.job.title, eventKey: `completion-decided:${c.id}`,
-  });
-}
-
-const dup = async <T>(fn: () => Promise<T>): Promise<T> => {
-  try { return await fn(); } catch (e) {
-    if (isUniqueViolation(e)) throw conflict("A decision has already been recorded.");
-    throw e;
-  }
-};
-
-// ---------- Review links ----------
-
-const linkSchema = z.object({
-  recipientName: z.string().trim().min(2, "Enter the recipient's name.").max(120),
-  recipientEmail: z.string().trim().toLowerCase().email("Enter a valid email address."),
 });
+export type ApproveInput = z.input<typeof opts>;
+const parse = (v: unknown) => { const p = opts.safeParse(v); if (!p.success) throw invalid(p.error.issues[0]!.message); return p.data; };
 
-/** Create a review link for a SUBMITTED quote or completion. The token is returned once and never stored. */
-export async function createApprovalLink(ctx: Ctx, target: { quoteId: string } | { completionId: string }, input: z.input<typeof linkSchema>) {
-  requirePerm(ctx, "quoteId" in target ? "quote.manage" : "job.manage");
-  requireVerifiedEmail(ctx);
-  const p = linkSchema.safeParse(input);
-  if (!p.success) throw invalid(p.error.issues[0]!.message);
-  const token = newToken();
-  return prisma.$transaction(async (tx) => {
-    let expiresAt = new Date(Date.now() + LINK_DAYS * 86_400_000);
-    let jobId: string, subject: string, path: string, data: { quoteId: string } | { completionId: string };
-    const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId } });
-    if ("quoteId" in target) {
-      const q = await tx.quote.findFirst({ where: { id: target.quoteId, orgId: ctx.orgId, job: jobScope(ctx) }, include: { job: true } });
-      if (!q) throw notFound("Quote not found.");
-      if (q.status !== "SUBMITTED") throw conflict("Only a submitted quote can be sent for approval.");
-      if (q.validUntil && endOfDay(q.validUntil) < expiresAt) expiresAt = endOfDay(q.validUntil);
-      [jobId, subject, path, data] = [q.jobId, `Quotation ${q.number} from ${org.name} for your approval`, "q", { quoteId: q.id }];
-    } else {
-      const c = await tx.completion.findFirst({ where: { id: target.completionId, orgId: ctx.orgId, job: jobScope(ctx) }, include: { job: true } });
-      if (!c) throw notFound("Completion not found.");
-      if (c.status !== "SUBMITTED") throw conflict("This work is not awaiting verification.");
-      [jobId, subject, path, data] = [c.jobId, `Please verify completed work ${c.job.reference} by ${org.name}`, "v", { completionId: c.id }];
-    }
-    const link = await tx.approvalLink.create({
-      data: { orgId: ctx.orgId, purpose: "quoteId" in data ? "QUOTE" : "COMPLETION", ...data, tokenHash: hashToken(token),
-        recipientName: p.data.recipientName, recipientEmail: p.data.recipientEmail, createdById: ctx.userId, expiresAt },
-    });
-    const url = `${appUrl()}/${path}/${token}`;
-    await queueEmail(tx, {
-      orgId: ctx.orgId, to: p.data.recipientEmail, subject, dedupeKey: `link:${link.id}`,
-      body: `Dear ${p.data.recipientName},\n\n${org.name} has asked you to review this online:\n${url}\n\nThe link is personal to you and expires on ${expiresAt.toDateString()}.`,
-    });
-    await logEvent(tx, actorOf(ctx), jobId, "link.sent", `Secure review link sent to ${p.data.recipientName} <${p.data.recipientEmail}>`, { linkId: link.id, purpose: link.purpose });
-    return { id: link.id, token, url, expiresAt };
-  });
+const dup = async <T>(fn: () => Promise<T>) => {
+  try { return await fn(); } catch (e) { if (isUniqueViolation(e)) throw conflict("A decision has already been recorded for this quote."); throw e; }
+};
+
+async function loadForDecision(tx: Tx, ctx: Ctx, quoteId: string) {
+  if (!z.string().uuid().safeParse(quoteId).success) throw notFound("Quote not found.");
+  const q = await tx.quote.findFirst({ where: { id: quoteId, orgId: ctx.orgId, contractorId: { not: null }, job: jobScope(ctx) }, include: { job: true, contractor: true } });
+  if (!q) throw notFound("Quote not found.");
+  const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId } });
+  return { q, job: q.job, contractor: q.contractor!, org };
 }
 
-export async function revokeApprovalLink(ctx: Ctx, linkId: string) {
-  requirePerm(ctx, "quote.manage");
-  await prisma.approvalLink.updateMany({ where: { id: linkId, orgId: ctx.orgId, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
+/** Number of different contractors with a live quote on the job. */
+export const quoteCount = async (tx: Tx, jobId: string) =>
+  new Set((await tx.quote.findMany({ where: { jobId, contractorId: { not: null }, status: { in: ["SUBMITTED", "APPROVED", "REJECTED"] } }, select: { contractorId: true } })).map((q) => q.contractorId)).size;
+
+/** Throws unless the multi-quote rule is met or an exception reason is given. Returns the reason to record. */
+function checkQuoteRule(org: { minQuotes: number; multiQuoteThresholdCents: number }, totalCents: number, count: number, reason: string) {
+  if (totalCents <= org.multiQuoteThresholdCents || count >= org.minQuotes) return null;
+  if (reason.length < 10)
+    throw invalid(`Quotes above ${formatZar(org.multiQuoteThresholdCents)} need ${org.minQuotes} quotes (you have ${count}). Give a reason for going ahead with fewer (e.g. specialist supplier, emergency).`);
+  return reason;
 }
 
-/** What the public review page may show. Returns null for unknown or revoked links (indistinguishable to the caller). */
-export async function getLinkView(token: string) {
-  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  const link = await prisma.approvalLink.findUnique({
-    where: { tokenHash: hashToken(token) },
-    include: {
-      quote: { include: { lines: { orderBy: { position: "asc" } }, decision: true, job: { include: { client: true, site: true } } } },
-      completion: { include: { decision: true, job: { include: { client: true, site: true } } } },
-    },
-  });
-  if (!link || (link.revokedAt && !link.usedAt)) return null;
-  const subject = link.quote ?? link.completion!;
-  const job = subject.job;
-  const [org, attachments] = await Promise.all([
-    prisma.organisation.findUniqueOrThrow({ where: { id: link.orgId }, select: { name: true, brandColour: true, logoAttachmentId: true, phone: true, contactEmail: true, vatNumber: true, vatRegistered: true } }),
-    prisma.attachment.findMany({
-      where: { orgId: link.orgId, ...(link.quoteId ? { quoteId: link.quoteId } : { completionId: link.completionId }), kind: { not: "SIGNATURE" } },
-      select: { id: true, filename: true, mimeType: true, kind: true }, orderBy: { createdAt: "asc" },
-    }),
-  ]);
-  const pending = subject.status === "SUBMITTED";
-  const state: "open" | "decided" | "expired" = !pending ? "decided" : link.expiresAt < new Date() ? "expired" : "open";
-  return {
-    state, purpose: link.purpose, recipientName: link.recipientName, expiresAt: link.expiresAt, org,
-    job: { reference: job.reference, title: job.title, description: job.description, clientName: job.client.name, siteName: job.site.name },
-    quote: link.quote && { number: link.quote.number, version: link.quote.version, kind: link.quote.kind, scope: link.quote.scope, terms: link.quote.terms,
-      validUntil: link.quote.validUntil, vatRateBps: link.quote.vatRateBps, subtotalCents: link.quote.subtotalCents, vatCents: link.quote.vatCents,
-      totalCents: link.quote.totalCents, status: link.quote.status,
-      lines: link.quote.lines.map((l) => ({ id: l.id, kind: l.kind, description: l.description, quantity: l.quantity.toString(), unitPriceCents: l.unitPriceCents, lineTotalCents: l.lineTotalCents, taxable: l.taxable })) },
-    completion: link.completion && { version: link.completion.version, workPerformed: link.completion.workPerformed, observations: link.completion.observations,
-      completedAt: link.completion.completedAt, status: link.completion.status },
-    decision: subject.decision && { outcome: subject.decision.outcome, deciderName: subject.decision.deciderName, createdAt: subject.decision.createdAt },
-    attachments,
-  };
+/** Members who may approve this amount at this site (owners always). */
+export async function approverIdsFor(tx: Tx, orgId: string, siteId: string, amountCents: number) {
+  const org = await tx.organisation.findUniqueOrThrow({ where: { id: orgId } });
+  const ms = await tx.membership.findMany({ where: { orgId, active: true, roles: { hasSome: ["OWNER", "APPROVER", "MANAGER"] } }, include: { user: { select: { name: true, email: true } } } });
+  return ms.filter((m) => (!m.siteIds.length || m.siteIds.includes(siteId))
+    && approvalLimit({ roles: m.roles, support: false, locked: false } as unknown as Ctx, org) >= amountCents).map((m) => m.userId);
 }
+
+export const limitOf = (ctx: Ctx, rules: ApprovalRules) => approvalLimit(ctx, rules);
 
 /**
- * Record a decision through a review link. The link is claimed atomically (single use), must be unexpired
- * and unrevoked, and can only ever decide the one quote/completion it was issued for.
+ * Accept a quote within the caller's authority. Works from QUOTING (manager/approver choosing directly) or
+ * AWAITING_APPROVAL (approving the recommended quote). Appoints the contractor.
  */
-export async function decideViaLink(token: string, input: DecisionInput, ip = "") {
-  const d = parseDecision(input);
+export async function approveQuote(ctx: Ctx, quoteId: string, input: ApproveInput) {
+  requirePerm(ctx, "spend.approve");
+  const d = parse(input);
   return dup(() => prisma.$transaction(async (tx) => {
-    const link = await tx.approvalLink.findUnique({ where: { tokenHash: hashToken(token) } });
-    if (!link || link.revokedAt) throw notFound("This link is not valid.");
-    if (link.usedAt) throw conflict("This link has already been used to record a decision.");
-    if (link.expiresAt < new Date()) throw conflict("This link has expired. Please ask for a new one.");
-    const claimed = await tx.approvalLink.updateMany({ where: { id: link.id, usedAt: null, revokedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
-    if (claimed.count !== 1) throw conflict("This link has already been used to record a decision.");
-    const who: Decider = { via: "LINK", userId: null, name: d.name, email: link.recipientEmail, recordedById: null, linkId: link.id, ip };
-    const actor: Actor = { orgId: link.orgId, userId: null, label: `${d.name} (customer, via secure link)` };
-    if (link.purpose === "QUOTE") await decideQuote(tx, link.quoteId!, d, who, actor);
-    else await decideCompletion(tx, link.completionId!, d, who, actor);
-    return { outcome: d.outcome as DecisionOutcome };
+    const { q, job, contractor, org } = await loadForDecision(tx, ctx, quoteId);
+    if (q.status !== "SUBMITTED") throw conflict("This quote is no longer open for a decision.");
+    if (job.status === "AWAITING_APPROVAL" && job.recommendedQuoteId !== q.id) throw conflict("Another quote has been put forward for approval on this job.");
+    if (job.status !== "QUOTING" && job.status !== "AWAITING_APPROVAL") throw conflict("This job is not waiting for a quote decision.");
+    if (job.status === "QUOTING" && !ctx.roles.some((r) => r === "OWNER" || r === "MANAGER" || r === "APPROVER")) throw forbidden();
+    const limit = approvalLimit(ctx, org);
+    if (q.totalCents > limit)
+      throw forbidden(`This quote (${formatZar(q.totalCents)}) is above your approval limit of ${formatZar(limit)}. Send it for approval instead.`);
+    if (q.validUntil && new Date(new Date(q.validUntil).setHours(23, 59, 59, 999)) < new Date()) throw conflict("This quote has expired. Ask the contractor for an updated quote.");
+    const exception = checkQuoteRule(org, q.totalCents, await quoteCount(tx, job.id), d.exceptionReason || job.quoteExceptionReason || "");
+    if (org.poRequired && !d.poNumber) throw invalid("Enter the purchase order (PO) number.");
+    const now = new Date();
+    const r = await tx.quote.updateMany({ where: { id: q.id, status: "SUBMITTED" }, data: { status: "APPROVED", decidedAt: now } });
+    if (r.count !== 1) throw conflict("This quote was just decided by someone else.");
+    await tx.decision.create({
+      data: { orgId: ctx.orgId, jobId: job.id, quoteId: q.id, outcome: "APPROVED", via: "PORTAL", deciderUserId: ctx.userId, deciderName: ctx.userName,
+        deciderEmail: ctx.userEmail, comment: d.comment },
+    });
+    // Everyone else was not selected.
+    const others = await tx.quote.findMany({ where: { jobId: job.id, status: "SUBMITTED", id: { not: q.id } }, include: { contractor: true } });
+    await tx.quote.updateMany({ where: { id: { in: others.map((o) => o.id) } }, data: { status: "REJECTED", decidedAt: now } });
+    await revokeJobLinks(tx, ctx.orgId, job.id, "QUOTE");
+    const appointed = { contractorId: contractor.id, route: "CONTRACTOR" as const, approvedCostCents: q.totalCents, poNumber: d.poNumber || null, quoteExceptionReason: exception, recommendedQuoteId: null, ownerId: job.ownerId ?? ctx.userId };
+    await move(tx, ctx.orgId, job, "APPROVED", appointed);
+    await move(tx, ctx.orgId, { id: job.id, status: "APPROVED" }, "ASSIGNED", { assignedAt: now, leadTechnicianId: null });
+    await logEvent(tx, actorOf(ctx), job.id, "quote.approved",
+      `Quote ${q.number} v${q.version} from ${contractor.name} approved by ${ctx.userName} (${formatZar(q.totalCents)})${d.poNumber ? `, PO ${d.poNumber}` : ""}${exception ? ` – fewer quotes than required: ${exception}` : ""}`,
+      { quoteId: q.id, totalCents: q.totalCents, poNumber: d.poNumber || null });
+    await logEvent(tx, actorOf(ctx), job.id, "job.contractor_appointed", `${contractor.name} appointed`);
+    await issueCompletionLink(tx, ctx, { ...job, ...appointed });
+    for (const o of others)
+      await queueEmail(tx, {
+        orgId: ctx.orgId, to: o.contractor!.email, subject: `Quote ${o.number} for ${job.reference}: not selected`, dedupeKey: `quote-not-selected:${o.id}`,
+        body: `Hello ${o.contractor!.contactName || o.contractor!.name},\n\nThank you for quoting on "${job.title}" (${job.reference}). On this occasion another quotation was accepted.`,
+      });
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "quote.approved", exceptUserId: ctx.userId, userIds: [...(await managerIds(tx, ctx.orgId)), job.requesterId],
+      title: `${job.reference}: ${contractor.name} appointed`, body: job.title, eventKey: `quote-approved:${q.id}`,
+    });
   }));
 }
 
-// ---------- Signed-in channels ----------
-
-/** A signed-in client representative decides a quote for THEIR customer organisation. */
-export async function portalDecideQuote(ctx: Ctx, quoteId: string, input: Omit<DecisionInput, "name">, ip = "") {
-  requirePerm(ctx, "customer.decide");
-  const d = parseDecision({ ...input, name: ctx.userName });
-  return dup(() => prisma.$transaction(async (tx) => {
-    const q = await tx.quote.findFirst({ where: { id: quoteId, orgId: ctx.orgId, job: jobScope(ctx) } });
-    if (!q || !ctx.clientId) throw notFound("Quote not found.");
-    await decideQuote(tx, q.id, d, { via: "PORTAL", userId: ctx.userId, name: ctx.userName, email: ctx.userEmail, recordedById: null, linkId: null, ip }, actorOf(ctx));
-  }));
-}
-
-export async function portalDecideCompletion(ctx: Ctx, completionId: string, input: Omit<DecisionInput, "name">, ip = "") {
-  requirePerm(ctx, "customer.decide");
-  const d = parseDecision({ ...input, name: ctx.userName });
-  return dup(() => prisma.$transaction(async (tx) => {
-    const c = await tx.completion.findFirst({ where: { id: completionId, orgId: ctx.orgId, job: jobScope(ctx) } });
-    if (!c || !ctx.clientId) throw notFound("Not found.");
-    await decideCompletion(tx, c.id, d, { via: "PORTAL", userId: ctx.userId, name: ctx.userName, email: ctx.userEmail, recordedById: null, linkId: null, ip }, actorOf(ctx));
-  }));
-}
-
-/** A manager records a quote decision the customer gave another way. The audit trail says so explicitly. */
-export async function recordQuoteDecision(ctx: Ctx, quoteId: string, input: DecisionInput) {
+/** A manager puts a quote above their own limit forward for approval: QUOTING → AWAITING_APPROVAL. */
+export async function recommendQuote(ctx: Ctx, quoteId: string, input: ApproveInput) {
   requirePerm(ctx, "quote.manage");
-  const d = parseDecision(input);
-  if (d.comment.length < 3) throw invalid("Record how the customer gave this decision (e.g. PO number, phone call).");
-  return dup(() => prisma.$transaction(async (tx) => {
-    const q = await tx.quote.findFirst({ where: { id: quoteId, orgId: ctx.orgId, job: jobScope(ctx) } });
-    if (!q) throw notFound("Quote not found.");
-    await decideQuote(tx, q.id, d, { via: "INTERNAL", userId: null, name: d.name, email: "", recordedById: ctx.userId, linkId: null, ip: "" }, actorOf(ctx));
-  }));
+  const d = parse(input);
+  return prisma.$transaction(async (tx) => {
+    const { q, job, contractor, org } = await loadForDecision(tx, ctx, quoteId);
+    if (q.status !== "SUBMITTED") throw conflict("This quote is no longer open for a decision.");
+    if (job.status !== "QUOTING") throw conflict("This job is not collecting quotes.");
+    const exception = checkQuoteRule(org, q.totalCents, await quoteCount(tx, job.id), d.exceptionReason);
+    await move(tx, ctx.orgId, job, "AWAITING_APPROVAL", { recommendedQuoteId: q.id, quoteExceptionReason: exception });
+    await logEvent(tx, actorOf(ctx), job.id, "quote.recommended",
+      `Quote ${q.number} from ${contractor.name} (${formatZar(q.totalCents)}) sent for approval${d.comment ? `: ${d.comment}` : ""}`, { quoteId: q.id });
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "quote.needs_approval", exceptUserId: ctx.userId,
+      userIds: await approverIdsFor(tx, ctx.orgId, job.siteId, q.totalCents),
+      title: `Approval needed: ${job.reference} – ${formatZar(q.totalCents)}`, body: `${contractor.name} for "${job.title}"${d.comment ? `\n"${d.comment}"` : ""}`, eventKey: `quote-recommended:${q.id}`,
+    });
+  });
 }
 
-/** Customer signs off on a staff member's device: their name and a drawn signature are mandatory. */
-export async function captureSignoff(ctx: Ctx, completionId: string, input: DecisionInput) {
-  requirePerm(ctx, "signoff.capture");
-  const d = parseDecision(input);
-  if (!d.signature) throw invalid("The customer's signature is required.");
+/** An approver declines the recommended quote: AWAITING_APPROVAL → QUOTING (the manager can choose again). */
+export async function rejectRecommendation(ctx: Ctx, jobId: string, input: { comment: string }) {
+  requirePerm(ctx, "spend.approve");
+  const comment = (input.comment ?? "").trim();
+  if (comment.length < 3) throw invalid("Say why, so the maintenance team knows what to do next.");
   return dup(() => prisma.$transaction(async (tx) => {
-    const c = await tx.completion.findFirst({ where: { id: completionId, orgId: ctx.orgId, job: jobScope(ctx) }, include: { job: { include: { technicians: true } } } });
-    if (!c) throw notFound("Not found.");
-    if (!isManager(ctx) && !isAssigned(c.job, ctx.userId)) throw forbidden("You are not assigned to this job.");
-    await decideCompletion(tx, c.id, d, { via: "IN_PERSON", userId: null, name: d.name, email: "", recordedById: ctx.userId, linkId: null, ip: "" }, actorOf(ctx));
+    const job = await tx.job.findFirst({ where: { id: jobId, ...jobScope(ctx) } });
+    if (!job) throw notFound("Job not found.");
+    if (job.status !== "AWAITING_APPROVAL" || !job.recommendedQuoteId) throw conflict("This job is not waiting for approval.");
+    const { q, org, contractor } = await loadForDecision(tx, ctx, job.recommendedQuoteId);
+    if (q.totalCents > approvalLimit(ctx, org)) throw forbidden("This quote is above your approval limit.");
+    const r = await tx.quote.updateMany({ where: { id: q.id, status: "SUBMITTED" }, data: { status: "REJECTED", decidedAt: new Date() } });
+    if (r.count !== 1) throw conflict("This quote was just decided by someone else.");
+    await tx.decision.create({ data: { orgId: ctx.orgId, jobId: job.id, quoteId: q.id, outcome: "REJECTED", via: "PORTAL", deciderUserId: ctx.userId, deciderName: ctx.userName, deciderEmail: ctx.userEmail, comment } });
+    await move(tx, ctx.orgId, job, "QUOTING", { recommendedQuoteId: null });
+    await logEvent(tx, actorOf(ctx), job.id, "quote.rejected", `Quote ${q.number} from ${contractor.name} not approved by ${ctx.userName}: ${comment}`, { quoteId: q.id });
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "quote.rejected", exceptUserId: ctx.userId, userIds: await managerIds(tx, ctx.orgId),
+      title: `${job.reference}: quote not approved`, body: comment, eventKey: `quote-rejected:${q.id}`,
+    });
   }));
 }

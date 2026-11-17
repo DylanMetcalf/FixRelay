@@ -19,16 +19,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const brand = safeColour(org.brandColour);
   const manager = can(ctx, "job.viewAll");
   const tech = ctx.roles.includes("TECHNICIAN");
-  const home = manager ? "/dashboard" : tech ? "/my-jobs" : "/jobs";
+  const home = manager || can(ctx, "job.viewAll") ? "/dashboard" : tech ? "/my-jobs" : "/dashboard";
   const nav = [
     { href: "/dashboard", label: "Dashboard", show: true },
     { href: "/my-jobs", label: "My jobs", show: tech },
-    { href: "/jobs?view=requests", label: "Requests", show: true },
+    { href: "/jobs?view=requests", label: "Reports", show: true },
     { href: "/jobs?view=jobs", label: "Jobs", show: true },
     { href: "/quotes", label: "Quotes", show: can(ctx, "quote.view") },
-    { href: "/customers", label: "Customers", show: can(ctx, "clients.view") },
-    { href: "/assets", label: "Assets", show: can(ctx, "clients.view") },
-    { href: "/reports", label: "Reports", show: can(ctx, "reports.view") },
+    { href: "/sites", label: "Sites", show: can(ctx, "sites.view") },
+    { href: "/assets", label: "Equipment", show: can(ctx, "sites.view") },
+    { href: "/contractors", label: "Contractors", show: can(ctx, "contractors.view") },
+    { href: "/reports", label: "Insights", show: can(ctx, "reports.view") },
     { href: "/settings", label: "Settings", show: can(ctx, "team.view") },
   ].filter((n) => n.show);
   const side = "block rounded-md px-3 py-2.5 text-sm font-semibold text-slate-200 hover:bg-navy-2";
@@ -64,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/requests/new" className="btn btn-primary btn-sm hidden md:inline-flex">+ New request</Link>
+            <Link href="/requests/new" className="btn btn-primary btn-sm hidden md:inline-flex">+ Report a fault</Link>
             <Link href="/notifications" className="btn btn-secondary btn-sm relative" aria-label={`Alerts, ${unread} unread`}>
               Alerts{unread > 0 && <span className="ml-1 rounded-full bg-red-700 px-1.5 text-[11px] text-white" data-testid="unread">{unread}</span>}
             </Link>
@@ -90,8 +91,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <nav aria-label="Mobile" className="no-print fixed inset-x-0 bottom-0 z-30 flex border-t border-navy-3 bg-navy pb-[env(safe-area-inset-bottom)] md:hidden">
         <Suspense>
-          <NavLink href={home} className={tab} activeClass="!text-signal"><Icon d="M3 12l9-9 9 9M5 10v10h14V10" />{manager ? "Dashboard" : tech ? "My jobs" : "Jobs"}</NavLink>
-          <NavLink href="/requests/new" className={tab} activeClass="!text-signal"><Icon d="M12 5v14M5 12h14" />New request</NavLink>
+          <NavLink href={home} className={tab} activeClass="!text-signal"><Icon d="M3 12l9-9 9 9M5 10v10h14V10" />{home === "/my-jobs" ? "My jobs" : "Home"}</NavLink>
+          <NavLink href="/requests/new" className={tab} activeClass="!text-signal"><Icon d="M12 5v14M5 12h14" />Report fault</NavLink>
           <NavLink href="/notifications" className={tab} activeClass="!text-signal"><Icon d="M6 8a6 6 0 1112 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 004 0" />Alerts{unread > 0 ? ` (${unread})` : ""}</NavLink>
           <NavLink href="/profile" className={tab} activeClass="!text-signal"><Icon d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0" />Profile</NavLink>
         </Suspense>

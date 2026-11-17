@@ -43,6 +43,7 @@ describe("money", () => {
 describe("workflow state machine", () => {
   it("allows the primary path", () => {
     const path = ["NEW", "ASSESSING", "ASSESSED", "QUOTING", "AWAITING_APPROVAL", "APPROVED", "ASSIGNED", "IN_PROGRESS", "AWAITING_VERIFICATION", "VERIFIED", "CLOSED"] as const;
+    expect(canTransition("ASSIGNED", "AWAITING_VERIFICATION")).toBe(true); // contractor submits from ASSIGNED
     for (let i = 0; i < path.length - 1; i++) expect(canTransition(path[i]!, path[i + 1]!)).toBe(true);
   });
   it("blocks illegal jumps", () => {
@@ -54,8 +55,11 @@ describe("workflow state machine", () => {
     expect(TRANSITIONS.CANCELLED).toEqual([]);
   });
   it("names the next action and responsible party", () => {
-    expect(nextAction({ status: "AWAITING_APPROVAL", customerSignoffRequired: true })).toEqual({ label: "Approve or reject the quote", party: "Customer" });
-    expect(nextAction({ status: "AWAITING_VERIFICATION", customerSignoffRequired: false }).party).toBe("Manager");
+    expect(nextAction({ status: "AWAITING_APPROVAL", reporterConfirmation: true })).toEqual({ label: "Approve or reject the recommended quote", party: "Approver" });
+    expect(nextAction({ status: "AWAITING_VERIFICATION", reporterConfirmation: true }).party).toBe("Reporter");
+    expect(nextAction({ status: "AWAITING_VERIFICATION", reporterConfirmation: false }).party).toBe("Maintenance manager");
+    expect(nextAction({ status: "ASSIGNED", route: "CONTRACTOR", reporterConfirmation: true }).party).toBe("Contractor");
+    expect(nextAction({ status: "ASSIGNED", route: "IN_HOUSE", reporterConfirmation: true }).party).toBe("Technician");
   });
 });
 

@@ -18,7 +18,8 @@ import * as approvals from "@/server/services/approvals";
 import { addJobAttachment, readAttachment } from "@/server/services/attachments";
 import { processOutbox, purgeRetention } from "@/server/services/notifications";
 import * as orgs from "@/server/services/orgs";
-import { code, newJob, PNG, quotedJob, tenant, uniq } from "../helpers";
+import { assessedJob, code, newJob, PNG, tenant, uniq } from "../helpers";
+import * as quotes from "@/server/services/quotes";
 
 const PASSWORD = "correct-horse-battery";
 const EICAR = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
@@ -52,12 +53,12 @@ describe("email verification", () => {
     await expect(account.resendVerification(s2.ctx!)).rejects.toEqual(code("CONFLICT"));
   });
 
-  it("an unverified manager cannot send customer review links; resending invalidates the old link", async () => {
+  it("an unverified manager cannot send contractor quote requests; resending invalidates the old link", async () => {
     const t = await tenant();
-    const { quote } = await quotedJob(t);
+    const job = await assessedJob(t);
     await prisma.user.update({ where: { id: t.manager.userId }, data: { emailVerifiedAt: null } });
     const unverified = { ...t.manager, emailVerified: false };
-    await expect(approvals.createApprovalLink(unverified, { quoteId: quote.id }, { recipientName: "Carl C", recipientEmail: "c@x.co" })).rejects.toThrow(/confirm your email/);
+    await expect(quotes.requestQuotes(unverified, job.id, { contractorIds: [t.contractors[0].id], scope: "Quote please", deadline: null })).rejects.toThrow(/confirm your email/);
     await account.resendVerification(unverified);
     const first = tokenFrom((await lastEmail(t.manager.userEmail))!.body, "verify-email")!;
     await account.resendVerification(unverified);
@@ -273,8 +274,9 @@ describe("email delivery", () => {
     const t = await tenant();
     await prisma.organisation.update({ where: { id: t.orgId }, data: { brandColour: "#0e7490", contactEmail: "office@acme.test" } });
     await prisma.outboxEmail.updateMany({ where: { status: "PENDING" }, data: { status: "SENT" } });
-    const { quote } = await quotedJob(t);
-    await approvals.createApprovalLink(t.manager, { quoteId: quote.id }, { recipientName: "Carl", recipientEmail: `carl-${uniq()}@client.test` });
+    const job = await assessedJob(t);
+    const realContractor = await prisma.contractor.create({ data: { orgId: t.orgId, name: "Real Co", email: `carl-${uniq()}@client-co.co.za` } });
+    await quotes.requestQuotes(t.manager, job.id, { contractorIds: [realContractor.id], scope: "Please quote", deadline: null });
     const sent: { html: string; replyTo?: string; to: string }[] = [];
     await processOutbox({ name: "test", send: async (m) => { sent.push(m); } }, 50);
     const m = sent.find((x) => x.to.startsWith("carl-"))!;

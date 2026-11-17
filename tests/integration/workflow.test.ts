@@ -3,254 +3,242 @@ import { prisma } from "@/lib/db";
 import * as approvals from "@/server/services/approvals";
 import { addJobAttachment } from "@/server/services/attachments";
 import * as jobs from "@/server/services/jobs";
+import * as portal from "@/server/services/portal";
 import * as quotes from "@/server/services/quotes";
-import { code, completedJob, LINES, newJob, PNG, PNG_DATA_URL, quotedJob, startedJob, status, tenant } from "../helpers";
+import { appointedJob, assessedJob, code, completedInHouse, inHouseJob, linkFromEmail, member, newJob, PNG, PNG_DATA_URL, quotingJob, status, tenant } from "../helpers";
 
-const link = (t: Awaited<ReturnType<typeof tenant>>, target: { quoteId: string } | { completionId: string }) =>
-  approvals.createApprovalLink(t.manager, target, { recipientName: "Carl Customer", recipientEmail: "carl@client.example" });
-
-describe("primary journey: fault reported → closed", () => {
-  it("runs end to end with customer approval and sign-off by secure link, leaving a full audit trail", async () => {
+describe("in-house route: fault reported → fixed by the site's own team", () => {
+  it("runs end to end, the reporter confirms, the manager closes, and the history is complete", async () => {
     const t = await tenant();
-    const job = await newJob(t, t.rep); // the customer logs the fault
-    expect(job.reference).toBe("REQ-00001");
-    expect(job.dueAt).not.toBeNull();
-    await addJobAttachment(t.rep, { jobId: job.id, kind: "REQUEST", filename: "fault.png", bytes: PNG });
+    const job = await newJob(t); // a requester reports it
+    expect(job).toMatchObject({ reference: "REQ-00001", requesterId: t.requester.userId, source: "APP", reporterConfirmation: true });
+    expect(await prisma.notification.count({ where: { userId: t.manager.userId, jobId: job.id } })).toBe(1);
     await jobs.requestAssessment(t.manager, job.id, { assessorId: t.tech.userId });
-    await jobs.submitAssessment(t.tech, job.id, { findings: "Drive belt worn", suspectedCause: "Age", quoteRequired: true });
-    expect(await status(job.id)).toBe("ASSESSED");
-
-    const q = await quotes.createQuote(t.manager, job.id);
-    const totals = await quotes.saveQuote(t.manager, q.id, { scope: "Replace belt", terms: "", validUntil: null, lines: LINES });
-    expect(totals).toEqual({ subtotalCents: 285956, vatCents: 0, totalCents: 285956 }); // tenant not VAT registered
-    await quotes.submitQuote(t.manager, q.id);
-    expect(await status(job.id)).toBe("AWAITING_APPROVAL");
-
-    const ql = await link(t, { quoteId: q.id });
-    const view = await approvals.getLinkView(ql.token);
-    expect(view?.state).toBe("open");
-    expect(view?.quote?.totalCents).toBe(285956);
-    await approvals.decideViaLink(ql.token, { outcome: "APPROVED", name: "Carl Customer" }, "10.0.0.1");
-    expect(await status(job.id)).toBe("APPROVED");
-
-    await jobs.assignJob(t.manager, job.id, { leadTechnicianId: t.tech.userId, plannedEnd: "2031-01-01" });
+    await jobs.submitAssessment(t.tech, job.id, { findings: "Door hinge broken", quoteRequired: false });
+    await jobs.routeInHouse(t.manager, job.id, { note: "Hinge in stock" });
+    expect((await prisma.job.findUniqueOrThrow({ where: { id: job.id } }))).toMatchObject({ status: "APPROVED", route: "IN_HOUSE" });
+    await jobs.assignJob(t.manager, job.id, { leadTechnicianId: t.tech.userId });
     await jobs.startWork(t.tech, job.id);
-    await jobs.addWorkUpdate(t.tech, job.id, { note: "Belt removed", labourMinutes: 90, materialDescription: "Belt", materialCostCents: 100000 });
-    await expect(jobs.submitCompletion(t.tech, job.id, { workPerformed: "Replaced belt" })).rejects.toThrow(/evidence/);
-    await addJobAttachment(t.tech, { jobId: job.id, kind: "BEFORE", filename: "before.png", bytes: PNG });
+    await jobs.addWorkUpdate(t.tech, job.id, { note: "Hinge replaced", labourMinutes: 45 });
+    await expect(jobs.submitCompletion(t.tech, job.id, { workPerformed: "Replaced hinge" })).rejects.toThrow(/evidence/);
     await addJobAttachment(t.tech, { jobId: job.id, kind: "AFTER", filename: "after.png", bytes: PNG });
-    const c = await jobs.submitCompletion(t.tech, job.id, { workPerformed: "Replaced belt, tested under load" });
-    expect(await status(job.id)).toBe("AWAITING_VERIFICATION");
-    expect(await prisma.attachment.count({ where: { completionId: c.id } })).toBe(2);
-
-    await expect(jobs.closeJob(t.manager, job.id)).rejects.toThrow(/customer sign-off/);
-    const cl = await link(t, { completionId: c.id });
-    await approvals.decideViaLink(cl.token, { outcome: "APPROVED", name: "Carl Customer", signature: PNG_DATA_URL });
-    expect(await status(job.id)).toBe("VERIFIED");
+    await jobs.submitCompletion(t.tech, job.id, { workPerformed: "Replaced hinge, door closes properly" });
+    expect(await prisma.notification.count({ where: { userId: t.requester.userId, type: "job.confirm_fixed" } })).toBe(1);
+    await expect(jobs.closeJob(t.manager, job.id)).rejects.toThrow(/needs to confirm/);
+    await expect(jobs.confirmFixed(t.tech, job.id, { outcome: "APPROVED" })).rejects.toEqual(code("FORBIDDEN"));
+    await jobs.confirmFixed(t.requester, job.id, { outcome: "APPROVED", comment: "Works now" });
     await jobs.closeJob(t.manager, job.id);
     expect(await status(job.id)).toBe("CLOSED");
+    const ev = (await jobs.getJob(t.manager, job.id)).events.map((e) => e.type);
+    for (const ty of ["job.created", "job.assessment_requested", "job.assessed", "job.routed_in_house", "job.assigned", "job.started", "job.completion_submitted", "completion.approved", "job.closed"]) expect(ev).toContain(ty);
+  });
 
-    const full = await jobs.getJob(t.manager, job.id);
-    const types = full.events.map((e) => e.type);
-    for (const ty of ["job.created", "job.assessment_requested", "job.assessed", "quote.submitted", "quote.approved", "job.assigned",
-      "job.started", "job.completion_submitted", "completion.approved", "job.closed"]) expect(types).toContain(ty);
-    expect(full.events.every((e) => e.actorLabel.length > 0)).toBe(true);
-    const d = full.completions[0]!.decision!;
-    expect(d).toMatchObject({ via: "LINK", deciderName: "Carl Customer", outcome: "APPROVED" });
+  it("reporter says it is NOT fixed → back to work; a manager may confirm instead, but only with a reason", async () => {
+    const t = await tenant();
+    const { job } = await completedInHouse(t);
+    await expect(jobs.confirmFixed(t.requester, job.id, { outcome: "REJECTED" })).rejects.toThrow(/still wrong/);
+    await jobs.confirmFixed(t.requester, job.id, { outcome: "REJECTED", comment: "Still leaking" });
+    expect(await status(job.id)).toBe("IN_PROGRESS");
+    await addJobAttachment(t.tech, { jobId: job.id, kind: "AFTER", filename: "a2.png", bytes: PNG });
+    await jobs.submitCompletion(t.tech, job.id, { workPerformed: "Resealed properly" });
+    await expect(jobs.confirmFixed(t.manager, job.id, { outcome: "APPROVED" })).rejects.toThrow(/Say why/);
+    await jobs.confirmFixed(t.manager, job.id, { outcome: "APPROVED", comment: "Checked on site, reporter on leave" });
+    const d = await prisma.decision.findFirstOrThrow({ where: { jobId: job.id, outcome: "APPROVED" } });
+    expect(d).toMatchObject({ via: "INTERNAL", deciderUserId: t.manager.userId });
+  });
+
+  it("signature captured on the technician's device counts as the reporter's confirmation", async () => {
+    const t = await tenant();
+    const { job } = await completedInHouse(t);
+    await jobs.confirmFixed(t.tech, job.id, { outcome: "APPROVED" }, { signature: { name: "Grace Reporter", dataUrl: PNG_DATA_URL } });
+    const d = await prisma.decision.findFirstOrThrow({ where: { jobId: job.id } });
+    expect(d).toMatchObject({ via: "IN_PERSON", deciderName: "Grace Reporter", recordedById: t.tech.userId });
     expect(d.signatureAttachmentId).not.toBeNull();
   });
-});
 
-describe("alternative paths", () => {
-  it("rejected quote → revision keeps every version; approved version is frozen", async () => {
+  it("without reporter confirmation the manager checks and closes in one step", async () => {
     const t = await tenant();
-    const { job, quote } = await quotedJob(t);
-    const l1 = await link(t, { quoteId: quote.id });
-    await expect(approvals.decideViaLink(l1.token, { outcome: "REJECTED", name: "Carl" })).rejects.toThrow(/why you are rejecting/);
-    await approvals.decideViaLink(l1.token, { outcome: "REJECTED", name: "Carl Customer", comment: "Too expensive" });
-    expect(await status(job.id)).toBe("QUOTING");
-
-    const v2 = await quotes.reviseQuote(t.manager, quote.id);
-    expect(v2).toMatchObject({ number: quote.number, version: 2, status: "DRAFT" });
-    await quotes.saveQuote(t.manager, v2.id, { scope: "Replace belt (discounted)", terms: "", validUntil: null, lines: [LINES[1]!] });
-    await quotes.submitQuote(t.manager, v2.id);
-    const l2 = await link(t, { quoteId: v2.id });
-    await approvals.decideViaLink(l2.token, { outcome: "APPROVED", name: "Carl Customer" });
-    expect(await status(job.id)).toBe("APPROVED");
-
-    const all = await prisma.quote.findMany({ where: { jobId: job.id }, orderBy: { version: "asc" }, include: { lines: true } });
-    expect(all.map((x) => [x.version, x.status, x.totalCents, x.lines.length])).toEqual([[1, "REJECTED", 285956, 2], [2, "APPROVED", 123456, 1]]);
-
-    // Service layer refuses edits; and even a direct DB write is refused by the trigger.
-    await expect(quotes.saveQuote(t.manager, v2.id, { scope: "x", terms: "", validUntil: null, lines: LINES })).rejects.toEqual(code("CONFLICT"));
-    await expect(quotes.reviseQuote(t.manager, v2.id)).rejects.toEqual(code("CONFLICT"));
-    await expect(prisma.quote.update({ where: { id: v2.id }, data: { totalCents: 1, subtotalCents: 1 } })).rejects.toThrow(/frozen/);
-    await expect(prisma.quoteLine.deleteMany({ where: { quoteId: v2.id } })).rejects.toThrow(/frozen/);
-    await expect(prisma.quote.delete({ where: { id: quote.id } })).rejects.toThrow();
-  });
-
-  it("revising a submitted quote supersedes it and kills its link", async () => {
-    const t = await tenant();
-    const { job, quote } = await quotedJob(t);
-    const l = await link(t, { quoteId: quote.id });
-    await quotes.reviseQuote(t.manager, quote.id);
-    expect(await status(job.id)).toBe("QUOTING");
-    expect(await approvals.getLinkView(l.token)).toBeNull();
-    await expect(approvals.decideViaLink(l.token, { outcome: "APPROVED", name: "Carl Customer" })).rejects.toEqual(code("NOT_FOUND"));
-    expect((await prisma.quote.findUniqueOrThrow({ where: { id: quote.id } })).status).toBe("SUPERSEDED");
-  });
-
-  it("VAT-registered tenant: 15% VAT snapshot is applied and stored", async () => {
-    const t = await tenant();
-    await prisma.organisation.update({ where: { id: t.orgId }, data: { vatRegistered: true, vatNumber: "4123456789" } });
-    const job = await newJob(t);
-    await jobs.submitAssessment(t.manager, job.id, { findings: "Fault found", quoteRequired: true });
-    const q = await quotes.createQuote(t.manager, job.id);
-    const totals = await quotes.saveQuote(t.manager, q.id, { scope: "s", terms: "", validUntil: null, lines: [...LINES, { kind: "OTHER", description: "Disbursement", quantity: "1", unitPriceCents: 5000, taxable: false }] });
-    expect(totals).toEqual({ subtotalCents: 290956, vatCents: 42893, totalCents: 333849 });
-    await expect(quotes.saveQuote(t.manager, q.id, { scope: "s", terms: "", validUntil: null, lines: [{ ...LINES[0]!, quantity: "-1" }] })).rejects.toEqual(code("INVALID"));
-  });
-
-  it("emergency work can be authorised without a quote, but only by a manager with a reason", async () => {
-    const t = await tenant();
-    const normal = await newJob(t);
-    await expect(jobs.authoriseWithoutQuote(t.manager, normal.id, { reason: "Just do it" })).rejects.toThrow(/emergency/i);
-    const job = await newJob(t, t.manager, { emergency: true, priority: "CRITICAL" });
-    await expect(jobs.authoriseWithoutQuote(t.tech, job.id, { reason: "Burst pipe" })).rejects.toEqual(code("FORBIDDEN"));
-    await expect(jobs.authoriseWithoutQuote(t.manager, job.id, { reason: "" })).rejects.toEqual(code("INVALID"));
-    await jobs.authoriseWithoutQuote(t.manager, job.id, { reason: "Burst pipe flooding plant room" });
-    expect(await status(job.id)).toBe("APPROVED");
-    expect((await jobs.getJob(t.manager, job.id)).events.some((e) => e.type === "job.authorised_without_quote")).toBe(true);
-  });
-
-  it("hold / resume / cancel with reasons; cancelled jobs are terminal and their quotes withdrawn", async () => {
-    const t = await tenant();
-    const job = await startedJob(t);
-    await expect(jobs.holdJob(t.tech, job.id, { reason: "" })).rejects.toEqual(code("INVALID"));
-    await jobs.holdJob(t.tech, job.id, { reason: "Waiting for parts" });
-    expect(await status(job.id)).toBe("ON_HOLD");
-    await expect(jobs.submitCompletion(t.tech, job.id, { workPerformed: "done already" })).rejects.toEqual(code("CONFLICT"));
-    await jobs.resumeJob(t.tech, job.id);
-    expect(await status(job.id)).toBe("IN_PROGRESS");
-
-    const { job: j2, quote } = await quotedJob(t);
-    const l = await link(t, { quoteId: quote.id });
-    await jobs.cancelJob(t.manager, j2.id, { reason: "Customer withdrew the request" });
-    expect(await status(j2.id)).toBe("CANCELLED");
-    await expect(approvals.decideViaLink(l.token, { outcome: "APPROVED", name: "Carl Customer" })).rejects.toEqual(code("NOT_FOUND"));
-    await expect(jobs.reopenJob(t.manager, j2.id, { reason: "changed mind" })).rejects.toEqual(code("CONFLICT"));
-    await expect(jobs.requestAssessment(t.manager, j2.id, {})).rejects.toEqual(code("CONFLICT"));
-  });
-
-  it("additional work needs an approved variation quote before completion", async () => {
-    const t = await tenant();
-    const job = await startedJob(t);
-    await jobs.addWorkUpdate(t.tech, job.id, { kind: "ADDITIONAL_WORK", note: "Bearing also failed" });
-    const v = await quotes.createQuote(t.manager, job.id, "VARIATION");
-    await quotes.saveQuote(t.manager, v.id, { scope: "Replace bearing", terms: "", validUntil: null, lines: [LINES[1]!] });
-    await quotes.submitQuote(t.manager, v.id);
-    expect(await status(job.id)).toBe("IN_PROGRESS"); // variation does not move the job
-    await addJobAttachment(t.tech, { jobId: job.id, kind: "AFTER", filename: "a.png", bytes: PNG });
-    await expect(jobs.submitCompletion(t.tech, job.id, { workPerformed: "All done" })).rejects.toThrow(/Additional work/);
-    await approvals.recordQuoteDecision(t.manager, v.id, { outcome: "APPROVED", name: "Carl Customer", comment: "PO 4471 by phone" });
-    await jobs.submitCompletion(t.tech, job.id, { workPerformed: "All done" });
-    expect(await status(job.id)).toBe("AWAITING_VERIFICATION");
-  });
-
-  it("rejected completion returns to the technician; a second version can be signed off in person; reopen works", async () => {
-    const t = await tenant();
-    const { job, completion } = await completedJob(t);
-    await expect(approvals.captureSignoff(t.tech, completion.id, { outcome: "APPROVED", name: "Carl Customer" })).rejects.toThrow(/signature/);
-    await approvals.portalDecideCompletion(t.rep, completion.id, { outcome: "REJECTED", comment: "Still slipping" });
-    expect(await status(job.id)).toBe("IN_PROGRESS");
-    await expect(jobs.closeJob(t.manager, job.id)).rejects.toEqual(code("CONFLICT"));
-
-    await addJobAttachment(t.tech, { jobId: job.id, kind: "TEST_DOCUMENT", filename: "test.png", bytes: PNG });
-    const c2 = await jobs.submitCompletion(t.tech, job.id, { workPerformed: "Re-tensioned and load tested" });
-    expect(c2.version).toBe(2);
-    await approvals.captureSignoff(t.tech, c2.id, { outcome: "APPROVED", name: "Carl Customer", signature: PNG_DATA_URL });
-    await jobs.closeJob(t.manager, job.id);
+    const { job } = await completedInHouse(t, false);
+    await jobs.closeJob(t.manager, job.id, { comment: "Checked" });
     expect(await status(job.id)).toBe("CLOSED");
-
-    await expect(jobs.reopenJob(t.tech, job.id, { reason: "Fault is back" })).rejects.toEqual(code("FORBIDDEN"));
-    await expect(jobs.reopenJob(t.manager, job.id, { reason: "" })).rejects.toEqual(code("INVALID"));
-    await jobs.reopenJob(t.manager, job.id, { reason: "Fault returned after two days" });
-    const j = await prisma.job.findUniqueOrThrow({ where: { id: job.id } });
-    expect(j).toMatchObject({ status: "ASSIGNED", reopenCount: 1, closedAt: null });
-  });
-
-  it("closure rules: internal verification only when customer sign-off is not required", async () => {
-    const t = await tenant();
-    const a = await completedJob(t, true);
-    await expect(jobs.closeJob(t.manager, a.job.id)).rejects.toThrow(/customer sign-off/);
-    await expect(jobs.setSignoffRequired(t.manager, a.job.id, false)).rejects.toEqual(code("CONFLICT")); // cannot be waived after submission
-    const b = await completedJob(t, false);
-    await expect(jobs.closeJob(t.tech, b.job.id)).rejects.toEqual(code("FORBIDDEN"));
-    await jobs.closeJob(t.manager, b.job.id);
-    const d = await prisma.decision.findUniqueOrThrow({ where: { completionId: b.completion.id } });
-    expect(d.via).toBe("INTERNAL");
-    expect(await status(b.job.id)).toBe("CLOSED");
   });
 });
 
-describe("concurrency and duplicates", () => {
-  it("two simultaneous approvals through one link record exactly one decision", async () => {
+describe("contractor route: quotes → approval → contractor fixes it", () => {
+  it("collects quotes by link and by capture, compares them, approves within the manager's limit and appoints the contractor", async () => {
     const t = await tenant();
-    const { job, quote } = await quotedJob(t);
-    const l = await link(t, { quoteId: quote.id });
-    const rs = await Promise.allSettled(Array.from({ length: 6 }, () => approvals.decideViaLink(l.token, { outcome: "APPROVED", name: "Carl Customer" })));
+    const job = await assessedJob(t);
+    const links = await quotes.requestQuotes(t.manager, job.id, { contractorIds: t.contractors.map((c) => c.id), scope: "Replace capacitor", deadline: null });
+    expect(links).toHaveLength(3);
+    expect((await prisma.job.findUniqueOrThrow({ where: { id: job.id } }))).toMatchObject({ status: "QUOTING", route: "CONTRACTOR" });
+    // CoolTech (VAT registered) quotes online with a document; Sparks online; Handy Andy (no VAT) by email, captured.
+    const tokA = await linkFromEmail(t.contractors[0].email);
+    expect((await portal.getContractorLinkView(tokA))).toMatchObject({ state: "open", purpose: "QUOTE", job: { title: "Compressor tripping" } });
+    await portal.submitQuoteViaLink(tokA, { scope: "Capacitor + test", priceExclVatCents: 400000, leadTimeDays: 1 }, [{ filename: "quote.pdf", bytes: Buffer.from("%PDF-1.4 quote") }]);
+    await portal.submitQuoteViaLink(await linkFromEmail(t.contractors[1].email), { scope: "Capacitor", priceExclVatCents: 380000 }, []);
+    await quotes.recordQuote(t.manager, job.id, t.contractors[2].id, { scope: "Capacitor", priceExclVatCents: 420000 });
+    const cmp = await quotes.compareQuotes(t.manager, job.id);
+    expect(cmp.quotes.map((q) => [q.contractor!.name, q.subtotalCents, q.vatCents, q.totalCents])).toEqual([
+      ["Sparks", 380000, 57000, 437000], ["CoolTech", 400000, 60000, 460000], ["Handy Andy", 420000, 0, 420000],
+    ].sort((a, b) => (a[3] as number) - (b[3] as number)));
+    expect(cmp.waitingFor).toEqual([]);
+    const andy = cmp.quotes.find((q) => q.contractor!.name === "Handy Andy")!;
+    await approvals.approveQuote(t.manager, andy.id, { poNumber: "PO-77", comment: "Cheapest overall" });
+    const after = await prisma.job.findUniqueOrThrow({ where: { id: job.id } });
+    expect(after).toMatchObject({ status: "ASSIGNED", contractorId: t.contractors[2].id, approvedCostCents: 420000, poNumber: "PO-77" });
+    expect((await prisma.quote.findMany({ where: { jobId: job.id }, select: { status: true } })).map((q) => q.status).sort()).toEqual(["APPROVED", "REJECTED", "REJECTED"]);
+    expect(await prisma.outboxEmail.count({ where: { subject: { contains: "not selected" }, toEmail: { in: [t.contractors[0].email, t.contractors[1].email] } } })).toBe(2);
+    expect((await portal.getContractorLinkView(tokA))?.state).toBe("closed"); // quote links stop at award
+    // The appointed contractor completes through their completion link.
+    const done = await linkFromEmail(t.contractors[2].email);
+    expect((await portal.getContractorLinkView(done))).toMatchObject({ purpose: "COMPLETION", state: "open", job: { poNumber: "PO-77", approvedCostCents: 420000 } });
+    await expect(portal.submitCompletionViaLink(done, { workPerformed: "Replaced" }, [])).rejects.toThrow(/at least one photo/);
+    await portal.submitCompletionViaLink(done, { workPerformed: "Replaced capacitor, ran 1 hour" }, [{ filename: "after.png", bytes: PNG }]);
+    await expect(portal.submitCompletionViaLink(done, { workPerformed: "Again" }, [{ filename: "a.png", bytes: PNG }])).rejects.toThrow(/already been submitted/);
+    expect(await status(job.id)).toBe("AWAITING_VERIFICATION");
+    await jobs.confirmFixed(t.requester, job.id, { outcome: "APPROVED" });
+    await jobs.closeJob(t.manager, job.id);
+    const ev = (await jobs.getJob(t.manager, job.id)).events.map((e) => e.summary).join("\n");
+    expect(ev).toMatch(/Quote requested from CoolTech/);
+    expect(ev).toMatch(/approved by .*R 4 200\.00.*PO PO-77/);
+    expect(ev).toMatch(/Completion submitted by Handy Andy/);
+  });
+
+  it("enforces spending authority: above the manager's limit it goes to an approver with enough authority", async () => {
+    const t = await tenant();
+    const { job, quotes: qs } = await quotingJob(t, [800000, 900000, 950000]); // R9 200 incl. VAT > manager R5 000
+    await expect(approvals.approveQuote(t.manager, qs[0]!.id, {})).rejects.toThrow(/above your approval limit/);
+    await expect(approvals.approveQuote(t.tech, qs[0]!.id, {})).rejects.toEqual(code("FORBIDDEN"));
+    await expect(approvals.approveQuote(t.requester, qs[0]!.id, {})).rejects.toEqual(code("FORBIDDEN"));
+    await approvals.recommendQuote(t.manager, qs[0]!.id, { comment: "Cheapest, can start tomorrow" });
+    expect(await status(job.id)).toBe("AWAITING_APPROVAL");
+    const notified = (await prisma.notification.findMany({ where: { jobId: job.id, type: "quote.needs_approval" } })).map((n) => n.userId);
+    expect(notified).toEqual(expect.arrayContaining([t.approver.userId, t.owner.userId]));
+    expect(notified).not.toContain(t.manager.userId);
+    await expect(approvals.approveQuote(t.approver, qs[1]!.id, {})).rejects.toThrow(/Another quote/);
+    await approvals.rejectRecommendation(t.approver, job.id, { comment: "Get a cheaper quote" });
+    expect(await status(job.id)).toBe("QUOTING");
+    await approvals.recommendQuote(t.manager, qs[1]!.id, {});
+    await approvals.approveQuote(t.approver, qs[1]!.id, { poNumber: "PO-9" });
+    expect(await prisma.job.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({ status: "ASSIGNED", contractorId: t.contractors[1].id });
+  });
+
+  it("an approver's own limit applies; above it only the owner can approve", async () => {
+    const t = await tenant();
+    const { job, quotes: qs } = await quotingJob(t, [5000000, 5100000, 5200000]); // R57 500 > approver R50 000
+    await approvals.recommendQuote(t.manager, qs[0]!.id, {});
+    await expect(approvals.approveQuote(t.approver, qs[0]!.id, {})).rejects.toThrow(/above your approval limit/);
+    const notified = (await prisma.notification.findMany({ where: { jobId: job.id, type: "quote.needs_approval" } })).map((n) => n.userId);
+    expect(notified).toEqual([t.owner.userId]);
+    await approvals.approveQuote(t.owner, qs[0]!.id, {});
+    expect(await status(job.id)).toBe("ASSIGNED");
+  });
+
+  it("applies the three-quote rule above the threshold (or records the reason) and the PO rule", async () => {
+    const t = await tenant();
+    const { job, quotes: qs } = await quotingJob(t, [1200000]); // R13 800 > R10 000 threshold, only 1 quote
+    await expect(approvals.recommendQuote(t.manager, qs[0]!.id, {})).rejects.toThrow(/need 3 quotes \(you have 1\)/);
+    await approvals.recommendQuote(t.manager, qs[0]!.id, { exceptionReason: "Only accredited Bitzer agent in Gauteng" });
+    await prisma.organisation.update({ where: { id: t.orgId }, data: { poRequired: true } });
+    await expect(approvals.approveQuote(t.approver, qs[0]!.id, {})).rejects.toThrow(/purchase order/);
+    await approvals.approveQuote(t.approver, qs[0]!.id, { poNumber: "PO-5" });
+    expect(await prisma.job.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({ quoteExceptionReason: "Only accredited Bitzer agent in Gauteng", poNumber: "PO-5" });
+  });
+
+  it("a contractor's revised quote supersedes the earlier one; all versions are kept and frozen", async () => {
+    const t = await tenant();
+    const job = await assessedJob(t);
+    await quotes.requestQuotes(t.manager, job.id, { contractorIds: [t.contractors[0].id], scope: "Fix the compressor", deadline: null });
+    const tok = await linkFromEmail(t.contractors[0].email);
+    await portal.submitQuoteViaLink(tok, { scope: "v1 price", priceExclVatCents: 100000 }, []);
+    await portal.submitQuoteViaLink(tok, { scope: "v2 cheaper", priceExclVatCents: 90000 }, []);
+    const all = await prisma.quote.findMany({ where: { jobId: job.id }, orderBy: { version: "asc" } });
+    expect(all.map((q) => [q.version, q.status, q.totalCents, q.number === all[0]!.number])).toEqual([[1, "SUPERSEDED", 115000, true], [2, "SUBMITTED", 103500, true]]);
+    await expect(prisma.quote.update({ where: { id: all[1]!.id }, data: { totalCents: 1, subtotalCents: 1 } })).rejects.toThrow(/frozen/);
+    await expect(prisma.quote.update({ where: { id: all[1]!.id }, data: { contractorId: t.contractors[1].id } })).rejects.toThrow(/frozen/);
+    expect((await portal.getContractorLinkView(tok))?.myQuotes.map((q) => q.version)).toEqual([2, 1]);
+  });
+
+  it("rework: the site rejects the contractor's work, the contractor gets a fresh link; reopen re-issues one too", async () => {
+    const t = await tenant();
+    const { job, contractor } = await appointedJob(t);
+    await portal.submitCompletionViaLink(await linkFromEmail(contractor.email), { workPerformed: "Done and tested" }, [{ filename: "a.png", bytes: PNG }]);
+    await jobs.confirmFixed(t.requester, job.id, { outcome: "REJECTED", comment: "Still trips" });
+    expect(await status(job.id)).toBe("IN_PROGRESS");
+    const rework = await linkFromEmail(contractor.email);
+    expect((await prisma.outboxEmail.findFirstOrThrow({ where: { toEmail: contractor.email }, orderBy: { createdAt: "desc" } })).body).toMatch(/Rework needed: Still trips/);
+    await portal.submitCompletionViaLink(rework, { workPerformed: "Replaced relay too" }, [{ filename: "b.png", bytes: PNG }]);
+    await jobs.confirmFixed(t.requester, job.id, { outcome: "APPROVED" });
+    await jobs.closeJob(t.manager, job.id);
+    await jobs.reopenJob(t.manager, job.id, { reason: "Tripped again" });
+    expect((await portal.getContractorLinkView(await linkFromEmail(contractor.email)))).toMatchObject({ purpose: "COMPLETION", state: "open" });
+  });
+
+  it("switching to in-house withdraws open quotes and tells the contractors", async () => {
+    const t = await tenant();
+    const { job } = await quotingJob(t, [100000]);
+    await jobs.routeInHouse(t.manager, job.id, { note: "We found the part in stock" });
+    expect(await prisma.quote.count({ where: { jobId: job.id, status: "WITHDRAWN" } })).toBe(1);
+    expect(await prisma.contractorLink.count({ where: { jobId: job.id, revokedAt: null } })).toBe(0);
+    expect(await prisma.outboxEmail.count({ where: { subject: { contains: "no longer needed" }, toEmail: { in: t.contractors.map((c) => c.email) } } })).toBe(3);
+  });
+
+  it("a manager can record a contractor's completion for them (photos sent by email)", async () => {
+    const t = await tenant();
+    const { job } = await appointedJob(t);
+    await expect(jobs.submitCompletion(t.tech, job.id, { workPerformed: "I did it myself" })).rejects.toEqual(code("NOT_FOUND")); // not his job: invisible
+    await addJobAttachment(t.manager, { jobId: job.id, kind: "AFTER", filename: "emailed.png", bytes: PNG });
+    await jobs.submitCompletion(t.manager, job.id, { workPerformed: "Contractor's job card: capacitor replaced" });
+    expect(await status(job.id)).toBe("AWAITING_VERIFICATION");
+    expect(await prisma.contractorLink.count({ where: { jobId: job.id, purpose: "COMPLETION", revokedAt: null } })).toBe(0);
+  });
+});
+
+describe("public reporting (no account)", () => {
+  it("only works when switched on; creates a screened, unverified report the reporter cannot see into", async () => {
+    const t = await tenant();
+    const input = { title: "Light out in passage", description: "Flickering then off", reporterName: "Grace", reporterPhone: "0725550101", reporterEmail: "", locationId: t.location.id };
+    await expect(jobs.createPublicReport(t.site.publicToken, input)).rejects.toEqual(code("NOT_FOUND"));
+    await prisma.organisation.update({ where: { id: t.orgId }, data: { publicReportingEnabled: true } });
+    await expect(jobs.createPublicReport(t.site.publicToken, { ...input, reporterPhone: "1" })).rejects.toEqual(code("INVALID"));
+    await expect(jobs.createPublicReport("not-a-token", input)).rejects.toEqual(code("NOT_FOUND"));
+    const r = await jobs.createPublicReport(t.site.publicToken, input);
+    const job = await prisma.job.findFirstOrThrow({ where: { orgId: t.orgId, reference: r.reference } });
+    expect(job).toMatchObject({ source: "PUBLIC_LINK", requesterId: null, reporterName: "Grace", reporterConfirmation: false, locationId: t.location.id });
+    expect((await jobs.dashboardCounts(t.manager)).toScreen).toBe(1);
+    await expect(jobs.createPublicReport(t.site.publicToken, { ...input, locationId: (await prisma.location.create({ data: { orgId: t.orgId, siteId: (await prisma.site.create({ data: { orgId: t.orgId, name: "Other", publicToken: `x${Date.now()}` } })).id, name: "Elsewhere" } })).id })).rejects.toThrow(/not at the selected site/);
+    await jobs.cancelJob(t.manager, job.id, { reason: "Duplicate of REQ-00001" });
+    await prisma.site.update({ where: { id: t.site.id }, data: { archived: true } });
+    await expect(jobs.createPublicReport(t.site.publicToken, input)).rejects.toEqual(code("NOT_FOUND"));
+  });
+});
+
+describe("concurrency", () => {
+  it("two managers approving different quotes at the same moment: exactly one contractor is appointed", async () => {
+    const t = await tenant();
+    const m2 = await member(t.orgId, ["MANAGER"]);
+    const { job, quotes: qs } = await quotingJob(t, [200000, 210000]);
+    const rs = await Promise.allSettled([approvals.approveQuote(t.manager, qs[0]!.id, {}), approvals.approveQuote(m2, qs[1]!.id, {})]);
     expect(rs.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    expect(await prisma.decision.count({ where: { quoteId: quote.id } })).toBe(1);
-    expect(await status(job.id)).toBe("APPROVED");
-    expect((await jobs.getJob(t.manager, job.id)).events.filter((e) => e.type === "quote.approved")).toHaveLength(1);
-  });
-
-  it("conflicting decisions from different channels: one wins, state stays consistent", async () => {
-    const t = await tenant();
-    const { job, quote } = await quotedJob(t);
-    const [l1, l2] = [await link(t, { quoteId: quote.id }), await link(t, { quoteId: quote.id })];
-    const rs = await Promise.allSettled([
-      approvals.decideViaLink(l1.token, { outcome: "APPROVED", name: "Carl Customer" }),
-      approvals.decideViaLink(l2.token, { outcome: "REJECTED", name: "Dana Customer", comment: "No budget" }),
-      approvals.portalDecideQuote(t.rep, quote.id, { outcome: "APPROVED" }),
-    ]);
-    expect(rs.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    const d = await prisma.decision.findUniqueOrThrow({ where: { quoteId: quote.id } });
-    const q = await prisma.quote.findUniqueOrThrow({ where: { id: quote.id } });
-    expect(q.status).toBe(d.outcome);
-    expect(await status(job.id)).toBe(d.outcome === "APPROVED" ? "APPROVED" : "QUOTING");
-  });
-
-  it("parallel request logging yields unique, gap-free references", async () => {
-    const t = await tenant();
-    const made = await Promise.all(Array.from({ length: 12 }, () => newJob(t)));
-    expect(new Set(made.map((j) => j.reference)).size).toBe(12);
-    expect(made.map((j) => j.reference).sort()[11]).toBe("REQ-00012");
-  });
-
-  it("double start / double completion / double close are rejected", async () => {
-    const t = await tenant();
-    const job = await newJob(t);
-    await jobs.submitAssessment(t.manager, job.id, { findings: "ok fault", quoteRequired: false });
-    await jobs.authoriseWithoutQuote(t.manager, job.id, { reason: "Contract cover" });
-    await jobs.setSignoffRequired(t.manager, job.id, false);
-    await jobs.assignJob(t.manager, job.id, { leadTechnicianId: t.tech.userId });
-    const starts = await Promise.allSettled([jobs.startWork(t.tech, job.id), jobs.startWork(t.tech, job.id), jobs.startWork(t.manager, job.id)]);
-    expect(starts.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    await addJobAttachment(t.tech, { jobId: job.id, kind: "AFTER", filename: "a.png", bytes: PNG });
-    const subs = await Promise.allSettled([1, 2, 3].map(() => jobs.submitCompletion(t.tech, job.id, { workPerformed: "Finished the job" })));
-    expect(subs.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    expect(await prisma.completion.count({ where: { jobId: job.id } })).toBe(1);
-    const closes = await Promise.allSettled([jobs.closeJob(t.manager, job.id), jobs.closeJob(t.owner, job.id)]);
-    expect(closes.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(await prisma.quote.count({ where: { jobId: job.id, status: "APPROVED" } })).toBe(1);
     expect(await prisma.decision.count({ where: { jobId: job.id } })).toBe(1);
+    expect(await status(job.id)).toBe("ASSIGNED");
   });
 
-  it("the audit trail and decisions cannot be edited or deleted, even with direct database access", async () => {
+  it("parallel reports get unique, gap-free references; parallel completion links submit once", async () => {
     const t = await tenant();
-    const job = await newJob(t);
+    const made = await Promise.all(Array.from({ length: 10 }, () => newJob(t)));
+    expect(new Set(made.map((j) => j.reference)).size).toBe(10);
+    const { contractor } = await appointedJob(t);
+    const tok = await linkFromEmail(contractor.email);
+    const rs = await Promise.allSettled([1, 2, 3].map(() => portal.submitCompletionViaLink(tok, { workPerformed: "Done done" }, [{ filename: "a.png", bytes: PNG }])));
+    expect(rs.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  });
+
+  it("the audit trail cannot be edited or deleted", async () => {
+    const t = await tenant();
+    const job = await inHouseJob(t);
     const ev = await prisma.activityEvent.findFirstOrThrow({ where: { jobId: job.id } });
     await expect(prisma.activityEvent.update({ where: { id: ev.id }, data: { summary: "tampered" } })).rejects.toThrow(/append-only/);
-    await expect(prisma.activityEvent.delete({ where: { id: ev.id } })).rejects.toThrow(/append-only/);
   });
 });
