@@ -1,6 +1,6 @@
 # Deployment
 
-Three supported ways to run FixRelay. All use the same code and environment variables. A fresh clone was installed, migrated, seeded, built and started from these docs against an empty database on 2026-11-17 (see TESTING.md). **A live public deployment has not been made yet.** Choose a host below.
+Three supported ways to run FixRelay. All use the same code and environment variables. A fresh clone was installed, migrated, seeded, built and started from these docs against an empty database on 2026-11-17 (see TESTING.md). **Live demo:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**, so move to the paid `render.yaml` before real use. Demo email is sent through Resend from `dylan@meacreo.co.za` with a sending-only key restricted to that domain, stored only in Render's environment.
 
 ## Option A: Render (simplest; `render.yaml` is included)
 1. Push the repository to GitHub. In Render: **New → Blueprint**, then select the repository.

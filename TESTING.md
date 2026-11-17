@@ -31,6 +31,7 @@ npm run typecheck
 - `npm run test:e2e`: **18 / 18 passed** (3 journey tests plus 15 feature tests), run twice in a row, about 70s
 - `npm run build`: **pass**
 - Fresh-clone install from README/DEPLOYMENT (empty database → migrate → seed → build → start with in-process worker → sign up → confirmation email delivered): **pass**
+- **Live deployment** (https://fixrelay-demo.onrender.com): smoke test passed (landing, manifest, service worker, CSP/HSTS, sign-up, `__Host-` cookie, demo workspace). The live sign-up confirmation email was **delivered** (Resend status), and a direct Resend transport test was also delivered
 - axe-core WCAG 2.1 AA: **0 violations** on 19 pages at desktop and phone sizes (also enforced by e2e test 14)
 
 ### Real services used in tests
@@ -38,7 +39,7 @@ npm run typecheck
 |---|---|
 | Antivirus | **Real ClamAV daemon** (clamd INSTREAM over TCP). The official signature download is blocked in the sandbox, so a custom EICAR body signature (`/var/lib/clamav/fixrelay-test.ndb`) was loaded; production uses `freshclam` |
 | Email (SMTP) | **Real SMTP server** (`smtp-server`), with AUTH, multipart text + HTML, and a wrong-password failure |
-| Email (Resend) | Local HTTP stand-in that checks the exact API request; not a live Resend account |
+| Email (Resend) | Local HTTP stand-in that checks the exact request, **and live Resend delivery** (2026-11-17) |
 | File storage (S3) | `s3rver` (S3-compatible API) with a 3 MB object round trip; not AWS/R2 itself |
 | Rate limiter | Real Postgres, 12 concurrent requests |
 | Photo metadata | Real JPEG with GPS + camera EXIF and rotation, decoded after upload |

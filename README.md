@@ -2,6 +2,8 @@
 
 **From fault reported to job completed. Every request, quote, approval and repair in one place.**
 
+**Live demo:** https://fixrelay-demo.onrender.com (free tier: the first load after idle takes about a minute).
+
 FixRelay is a multi-tenant SaaS for independent industrial and commercial maintenance contractors. It manages one workflow end to end:
 
 > Fault reported → Assessment → Quotation → Customer approval → Assignment → Work in progress → Completion with evidence → Customer verification → Closure (and reopening)

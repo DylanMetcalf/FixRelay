@@ -21,20 +21,20 @@ Last updated: 2026-11-17. Legend: ✅ implemented and tested · 🟡 implemented
 | 13 | Job can be closed or reopened appropriately | ✅ | e2e plus integration |
 | 14 | Complete audit history | ✅ | e2e timeline/report; DB trigger |
 | 15 | Main workflow passes meaningful automated tests | ✅ | 68 integration/unit + 18 e2e, all green |
-| 16 | Installed, configured and deployed using the documentation | 🟡 | **Fresh clone → empty DB → migrate → seed → build → run → sign-up → email delivered: verified from the docs.** Render blueprint, Dockerfile and docker-compose are written; **no live public deployment yet**, and the Docker files were not built here (no Docker in sandbox) |
+| 16 | Installed, configured and deployed using the documentation | ✅ | Fresh clone from the docs verified, and **deployed live from `render.demo.yaml`: https://fixrelay-demo.onrender.com** (2026-11-17). The live smoke test passed (landing, PWA, headers, sign-up, `__Host-` cookie, demo workspace) and the live confirmation email was **delivered via Resend**. The Dockerfile and docker-compose are still not built (no Docker in the sandbox) |
 
 ## Previously open gaps (this round)
 
 | Gap | Status | Notes |
 |---|---|---|
 | Forgot password / email verification | ✅ | Hashed single-use tokens; unverified users cannot email others; e2e 4–6 |
-| Real email provider | 🟡 | SMTP and Resend transports with branded HTML; **SMTP proven against a real SMTP server**; not yet sent through a live provider account (needs your credentials) |
+| Real email provider | ✅ | **Live Resend delivery verified** (test email via the app's transport, plus the live demo's confirmation email); SMTP proven against a real SMTP server |
 | Files on one server's disk | ✅ | Default `db` storage (multi-instance); `s3` driver tested with an S3-compatible server |
 | Rate limit per server | ✅ | Postgres-backed, atomic, concurrency-tested; client IP read safely behind proxies |
 | Antivirus | ✅ | ClamAV INSTREAM, fails closed; proven with a real clamd. PDF scripts blocked |
 | Photo location data | ✅ | All metadata stripped by re-encoding; e2e 8 |
 | Security / POPIA review | 🟡 | Self-audits (AUDITS.md) and POPIA.md engineering review done. **An independent security test and legal review are still needed** |
-| Deployment | 🟡 | See criterion 16 |
+| Deployment | ✅ | Live free demo on Render (see criterion 16). Production needs the paid `render.yaml` and the reviews below |
 
 ## Modules
 | Area | Status | Notes |
