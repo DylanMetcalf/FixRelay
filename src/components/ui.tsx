@@ -123,7 +123,7 @@ export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }
               return (
                 <tr key={j.id} className="hover:bg-gray-50">
                   <td className="td whitespace-nowrap font-bold"><Link className="link" href={`/jobs/${j.id}`}>{j.reference}</Link></td>
-                  <td className="td max-w-xs font-semibold">{j.title}</td>
+                  <td className="td max-w-xs font-semibold"><Link href={`/jobs/${j.id}`} className="hover:underline">{j.title}</Link></td>
                   <td className="td">{j.client.name}<br /><span className="text-gray-600">{j.site.name}</span></td>
                   <td className="td"><StatusBadge status={j.status} /></td>
                   <td className="td whitespace-nowrap"><PriorityBadge priority={j.priority} emergency={j.emergency} /></td>

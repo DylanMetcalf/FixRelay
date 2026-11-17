@@ -6,6 +6,7 @@ import { AppError } from "@/lib/errors";
 import { formatZar } from "@/lib/money";
 import { can } from "@/server/permissions";
 import { getJob } from "@/server/services/jobs";
+import { markJobRead } from "@/server/services/notifications";
 import { listAssignable } from "@/server/services/orgs";
 import { nextAction } from "@/server/workflow";
 import { ActionsPanel } from "./actions-panel";
@@ -17,6 +18,7 @@ const KIND_LABEL: Record<string, string> = { REQUEST: "Reported with the request
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
   const { ctx } = await requireSession();
   const job = await getJob(ctx, (await params).id).catch((e) => { if (e instanceof AppError) notFound(); throw e; });
+  if (!ctx.support) await markJobRead(ctx, job.id);
   const staff = can(ctx, "clients.view") || ctx.support;
   const team = can(ctx, "job.manage") ? await listAssignable(ctx, ["TECHNICIAN", "MANAGER", "OWNER"]) : [];
   const next = nextAction(job);
@@ -77,8 +79,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
                 {a.recommendedWork && <Item label="Recommended work">{a.recommendedWork}</Item>}
                 {a.materials && <Item label="Materials needed">{a.materials}</Item>}
                 <Item label="Labour estimate">{a.labourHoursEstimate ? `${a.labourHoursEstimate.toString()} h` : "—"}</Item>
-                <div className="flex gap-2"><Pill tone={a.quoteRequired ? "amber" : "green"}>{a.quoteRequired ? "Quotation required" : "No quotation required"}</Pill>{a.externalHelpRequired && <Pill tone="red">Specialist help needed</Pill>}</div>
               </dl>
+              <div className="mt-2 flex gap-2"><Pill tone={a.quoteRequired ? "amber" : "green"}>{a.quoteRequired ? "Quotation required" : "No quotation required"}</Pill>{a.externalHelpRequired && <Pill tone="red">Specialist help needed</Pill>}</div>
             </Card>
           ))}
 

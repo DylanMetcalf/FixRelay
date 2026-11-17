@@ -166,3 +166,7 @@ export async function purgeRetention(now = new Date()) {
   ]);
   return { emails: emails.count, notifications: readN.count + oldN.count, tokens: tokens.count, sessions: sessions.count, rateLimits: limits.count };
 }
+
+/** Opening a job clears its alerts for that person. */
+export const markJobRead = (ctx: Ctx, jobId: string) =>
+  prisma.notification.updateMany({ where: { orgId: ctx.orgId, userId: ctx.userId, jobId, readAt: null }, data: { readAt: new Date() } });

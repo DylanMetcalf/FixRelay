@@ -314,6 +314,7 @@ model Job {
   dueAt                   DateTime?
   customerSignoffRequired Boolean   @default(true)
   reportedAt              DateTime  @default(now())
+  respondedAt             DateTime? // first time the job left NEW (used for response-time reporting)
   assignedAt              DateTime?
   startedAt               DateTime?
   completedAt             DateTime?

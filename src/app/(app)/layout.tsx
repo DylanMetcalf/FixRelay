@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { resendVerificationAction, switchWorkspaceAction } from "@/app/actions/auth";
 import { requireSession } from "@/app/_lib/session";
 import { NavLink } from "@/components/client";
+import { Mark } from "@/components/logo";
 import { Form, Submit } from "@/components/form";
 import { readableOn, safeColour } from "@/lib/colour";
 import { can } from "@/server/permissions";
@@ -44,6 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/profile" className="block truncate text-sm font-bold text-white">{s.user.name}</Link>
           <p className="truncate text-xs text-slate-400">{ctx.support ? "Platform support (read-only)" : ctx.roles.join(", ").toLowerCase()}</p>
           <form method="post" action="/api/logout"><button className="mt-2 text-xs font-bold text-slate-300 underline">Sign out</button></form>
+          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400"><Mark size={14} /> Powered by FixRelay</p>
         </div>
       </aside>
 
@@ -63,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
           <div className="flex items-center gap-2">
             <Link href="/requests/new" className="btn btn-primary btn-sm hidden md:inline-flex">+ New request</Link>
-            <Link href="/notifications" className="btn btn-secondary btn-sm relative" aria-label={`Notifications, ${unread} unread`}>
+            <Link href="/notifications" className="btn btn-secondary btn-sm relative" aria-label={`Alerts, ${unread} unread`}>
               Alerts{unread > 0 && <span className="ml-1 rounded-full bg-red-700 px-1.5 text-[11px] text-white" data-testid="unread">{unread}</span>}
             </Link>
           </div>

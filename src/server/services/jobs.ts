@@ -29,7 +29,8 @@ export const CATEGORIES = ["General", "Electrical", "Mechanical", "Plumbing", "H
 /** Guarded status change: succeeds only if the job is still in the status we read. */
 export async function move(tx: Tx, orgId: string, job: { id: string; status: JobStatus }, to: JobStatus, data: Prisma.JobUncheckedUpdateManyInput = {}) {
   assertTransition(job.status, to);
-  const r = await tx.job.updateMany({ where: { id: job.id, orgId, status: job.status }, data: { ...data, status: to } });
+  const first = job.status === "NEW" ? { respondedAt: new Date() } : {};
+  const r = await tx.job.updateMany({ where: { id: job.id, orgId, status: job.status }, data: { ...data, ...first, status: to } });
   if (r.count !== 1) throw conflict("This job was just changed by someone else. Refresh and try again.");
 }
 
@@ -380,6 +381,12 @@ export async function addWorkUpdate(ctx: Ctx, jobId: string, input: z.input<type
       await notify(tx, {
         orgId: ctx.orgId, jobId: job.id, type: `work.${d.kind.toLowerCase()}`, userIds: await managerIds(tx, ctx.orgId), exceptUserId: ctx.userId,
         title: `${job.reference}: ${label}`, body: d.note.slice(0, 300), eventKey: `update:${u.id}`,
+      });
+    } else if (!isAssigned(job, ctx.userId)) {
+      // A manager replying on the job (e.g. answering a clarification) alerts the technicians doing the work.
+      await notify(tx, {
+        orgId: ctx.orgId, jobId: job.id, type: "work.manager_note", userIds: assignees(job), exceptUserId: ctx.userId,
+        title: `${job.reference}: new note from ${ctx.userName}`, body: d.note.slice(0, 300), eventKey: `update:${u.id}`,
       });
     }
     return u;

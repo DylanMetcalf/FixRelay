@@ -7,7 +7,16 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "no-referrer" },
   { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
+  {
+    key: "Content-Security-Policy",
+    // Scripts, data requests, images and fonts may only come from this site; nothing can frame us or post forms elsewhere.
+    // 'unsafe-inline' is needed for Next.js's inline bootstrap scripts (a nonce-based policy is a roadmap item).
+    value: [
+      "default-src 'self'", "script-src 'self' 'unsafe-inline'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
+      "font-src 'self' data:", "connect-src 'self'", "manifest-src 'self'", "worker-src 'self'", "frame-ancestors 'none'",
+      "base-uri 'self'", "form-action 'self'", "object-src 'none'",
+    ].join("; "),
+  },
 ];
 
 const config: NextConfig = {

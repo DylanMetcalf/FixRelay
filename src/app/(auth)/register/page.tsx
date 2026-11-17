@@ -1,5 +1,6 @@
 import Link from "@/components/link";
 import { registerAction } from "@/app/actions/auth";
+import { PasswordField } from "@/components/client";
 import { Form, Submit } from "@/components/form";
 import { Field } from "@/components/ui";
 
@@ -14,7 +15,7 @@ export default function RegisterPage() {
         <Field label="Company name" name="companyName" autoComplete="organization" required />
         <Field label="Your name" name="name" autoComplete="name" required />
         <Field label="Work email" name="email" type="email" autoComplete="email" required />
-        <Field label="Password" name="password" type="password" autoComplete="new-password" minLength={10} required hint="At least 10 characters." />
+        <PasswordField label="Password" name="password" autoComplete="new-password" minLength={10} hint="At least 10 characters. A short sentence is easy to remember." />
         <Submit className="btn btn-primary w-full">Create account</Submit>
       </Form>
       <p className="muted mt-4 text-center">Already registered? <Link className="link" href="/login">Sign in</Link></p>

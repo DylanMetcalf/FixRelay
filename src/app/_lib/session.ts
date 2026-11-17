@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { loadSession, SESSION_DAYS, type SessionView } from "@/server/auth";
 import { can, type Ctx, type Permission } from "@/server/permissions";
 
-export const COOKIE = "fr_session";
+// "__Host-" prefix (production): the browser only accepts it over HTTPS, for this exact host, path "/".
+export const COOKIE = process.env.NODE_ENV === "production" ? "__Host-fr_session" : "fr_session";
 
 export async function setSessionCookie(token: string) {
   (await cookies()).set(COOKIE, token, {
@@ -33,7 +34,18 @@ export async function requirePage(perm: Permission) {
   return s;
 }
 
+/**
+ * The client's IP for rate limiting and decision records. X-Forwarded-For is client-controlled except for the
+ * entries appended by YOUR proxies, so we take the address TRUSTED_PROXY_HOPS from the right (default 1 = one
+ * reverse proxy / load balancer, the usual PaaS setup). Taking the leftmost entry would let anyone bypass rate
+ * limits by sending a fake header.
+ */
 export async function clientIp(): Promise<string> {
-  const h = await headers();
-  return (h.get("x-forwarded-for")?.split(",")[0] ?? h.get("x-real-ip") ?? "unknown").trim().slice(0, 60);
+  return ipFromHeaders(await headers(), Number(process.env.TRUSTED_PROXY_HOPS ?? 1));
+}
+
+export function ipFromHeaders(h: { get(name: string): string | null }, hops: number): string {
+  const chain = (h.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const ip = hops > 0 && chain.length > 0 ? chain[Math.max(0, chain.length - hops)] : undefined;
+  return (ip ?? "direct").slice(0, 60);
 }

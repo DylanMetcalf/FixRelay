@@ -14,7 +14,9 @@ export async function loginAction(_: ActionState, fd: FormData) {
     const ip = await clientIp();
     await rateLimit(`login:ip:${ip}`, 20, 10 * 60_000);
     await rateLimit(`login:email:${str(fd, "email").toLowerCase()}`, 8, 10 * 60_000);
+    const previous = await sessionToken();
     await setSessionCookie(await auth.login(str(fd, "email"), str(fd, "password")));
+    if (previous) await auth.logout(previous); // never keep a session from before sign-in
     return { redirect: "/dashboard" };
   });
 }

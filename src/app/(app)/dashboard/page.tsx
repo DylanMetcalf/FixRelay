@@ -38,12 +38,28 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     { label: "Verified – ready to close", n: counts.readyToClose, href: "?status=VERIFIED" },
     { label: "Overdue", n: counts.overdue, href: "?overdue=true", alert: true },
   ];
-  const setup = can(ctx, "org.manage") && !s.org.isDemo ? await onboarding(ctx.orgId) : null;
+  const setup = can(ctx, "org.manage") && !s.org.isDemo ? await onboarding(ctx.orgId, s.user.emailVerified) : null;
+  const decide = can(ctx, "customer.decide") ? await listJobs(ctx, { view: "all" }, 50).then((js) => js.filter((j) => j.status === "AWAITING_APPROVAL" || (j.status === "AWAITING_VERIFICATION" && j.customerSignoffRequired))) : [];
   return (
     <>
       <PageHeader title="Dashboard" subtitle={manager ? "Every number below is a live count of jobs. Tap one to see them." : "Jobs you are involved in."}>
         <Link href="/requests/new" className="btn btn-primary">+ New request</Link>
       </PageHeader>
+
+      {can(ctx, "customer.decide") && (
+        <Card title="Needs your decision" className="mb-5 !border-l-8 !border-l-signal">
+          {decide.length === 0 ? <p className="text-sm" data-testid="nothing-to-decide">Nothing is waiting for you. We will alert you when a quote or completed work needs your approval.</p> : (
+            <ul className="divide-y divide-gray-200" data-testid="needs-decision">
+              {decide.map((j) => (
+                <li key={j.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span><span className="text-xs font-bold text-gray-600">{j.reference} · {j.site.name}</span><span className="block font-semibold">{j.title}</span></span>
+                  <Link href={`/jobs/${j.id}`} className="btn btn-primary btn-sm">{j.status === "AWAITING_APPROVAL" ? "Review quote" : "Verify work"}</Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       {setup && setup.some((x) => !x.done) && (
         <Card title="Getting started" className="mb-5">
@@ -82,13 +98,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 }
 
 /** Onboarding checklist computed from real records (nothing is "ticked" by hand). */
-async function onboarding(orgId: string) {
+async function onboarding(orgId: string, emailVerified: boolean) {
   const [org, members, invites, clients, sites, jobs] = await Promise.all([
     prisma.organisation.findUniqueOrThrow({ where: { id: orgId } }),
     prisma.membership.count({ where: { orgId } }), prisma.invitation.count({ where: { orgId } }),
     prisma.client.count({ where: { orgId } }), prisma.site.count({ where: { orgId } }), prisma.job.count({ where: { orgId } }),
   ]);
   return [
+    { label: "Confirm your email address (check your inbox)", href: "/profile", done: emailVerified },
     { label: "Add your business details and branding", href: "/settings", done: !!org.address || !!org.phone || !!org.logoAttachmentId },
     { label: "Invite your team", href: "/settings#team", done: members + invites > 1 },
     { label: "Add your first customer", href: "/customers", done: clients > 0 },

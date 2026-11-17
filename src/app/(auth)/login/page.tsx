@@ -2,6 +2,7 @@ import Link from "@/components/link";
 import { redirect } from "next/navigation";
 import { loginAction } from "@/app/actions/auth";
 import { getSession } from "@/app/_lib/session";
+import { PasswordField } from "@/components/client";
 import { Form, Submit } from "@/components/form";
 import { Field } from "@/components/ui";
 
@@ -14,7 +15,7 @@ export default async function LoginPage() {
       <h1 className="mb-4 text-xl font-extrabold">Sign in</h1>
       <Form action={loginAction}>
         <Field label="Email" name="email" type="email" autoComplete="email" required />
-        <Field label="Password" name="password" type="password" autoComplete="current-password" required />
+        <PasswordField label="Password" name="password" autoComplete="current-password" />
         <p className="-mt-1 text-right text-sm"><Link className="link" href="/forgot-password">Forgot password?</Link></p>
         <Submit className="btn btn-primary w-full">Sign in</Submit>
       </Form>

@@ -45,8 +45,8 @@ export async function inviteAction(_: ActionState, fd: FormData) {
 
 export async function updateMemberAction(_: ActionState, fd: FormData) {
   return run(async () => {
-    await orgs.updateMember(await requireCtx(), str(fd, "membershipId"), { roles: list(fd, "roles") as Role[], active: bool(fd, "active") });
-    return { ok: "Member updated." };
+    const r = await orgs.updateMember(await requireCtx(), str(fd, "membershipId"), { roles: list(fd, "roles") as Role[], active: bool(fd, "active") });
+    return { ok: r.openJobsToReassign ? `${r.name} still leads ${r.openJobsToReassign} open job${r.openJobsToReassign === 1 ? "" : "s"}. Reassign them from the Jobs list (filter by technician).` : "Member updated." };
   });
 }
 

@@ -23,7 +23,9 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
   );
   return (
     <>
-      <PageHeader title="Reports" subtitle="Operational figures calculated directly from your job records. Each figure states exactly how it is counted." />
+      <PageHeader title="Reports" subtitle="Operational figures calculated directly from your job records. Each figure states exactly how it is counted.">
+        <a className="btn btn-secondary" href={`/api/reports/jobs.csv?from=${from}&to=${to}${clientId ? `&clientId=${clientId}` : ""}`} download>Download jobs (CSV)</a>
+      </PageHeader>
       <form method="get" className="card no-print mb-5 flex flex-wrap items-end gap-3 !p-3">
         <div><label className="label" htmlFor="from">From</label><input id="from" type="date" name="from" defaultValue={from} className="input" /></div>
         <div><label className="label" htmlFor="to">To</label><input id="to" type="date" name="to" defaultValue={to} className="input" /></div>
@@ -38,6 +40,9 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
         <Stat label="Outstanding quotes" value={<>{r.outstandingQuotes.count} <span className="text-base font-bold text-gray-600">{formatZar(r.outstandingQuotes.totalCents)}</span></>} def={DEF.outstandingQuotes} />
         <Stat label="Approval turnaround" value={h(r.avgApprovalHours)} def={DEF.avgApprovalHours} />
         <Stat label="Overdue jobs" value={r.overdueJobs} def={DEF.overdueJobs} />
+        <Stat label="Responded on time" value={r.respondedOnTime.pct == null ? "—" : `${r.respondedOnTime.pct}%`} def={`${r.respondedOnTime.onTime} on time, ${r.respondedOnTime.late} late. ${DEF.respondedOnTime}`} />
+        <Stat label="Quote win rate" value={r.quoteWinRate.pct == null ? "—" : `${r.quoteWinRate.pct}%`} def={`${r.quoteWinRate.won} of ${r.quoteWinRate.decided} · ${formatZar(r.quoteWinRate.wonCents)} of ${formatZar(r.quoteWinRate.decidedCents)}. ${DEF.quoteWinRate}`} />
+        <Stat label="Reopened jobs" value={r.reopened.count} def={`${r.reopened.pct == null ? "" : `${r.reopened.pct}% of closed. `}${DEF.reopened}`} />
       </div>
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <Card title="Workload by technician"><p className="muted mb-2">{DEF.workload}</p>

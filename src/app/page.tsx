@@ -133,11 +133,11 @@ function PhoneMock() {
   return (
     <div aria-hidden className="mx-auto w-full max-w-xs rounded-[2.2rem] border-8 border-navy-3 bg-mist p-3 shadow-2xl">
       <div className="rounded-xl bg-white p-4 shadow-sm">
-        <p className="text-[11px] font-bold text-gray-500">REQ-00128 · Karoo Cold Storage</p>
+        <p className="text-[11px] font-bold text-gray-700">REQ-00128 · Karoo Cold Storage</p>
         <p className="mt-1 text-base font-extrabold">Compressor 2 tripping</p>
         <div className="mt-2 flex gap-1.5"><span className="badge bg-sky-200 text-sky-950">In progress</span><span className="badge bg-red-700 text-white">Critical</span></div>
         <div className="mt-3 rounded-lg border-l-4 border-relay bg-mist p-3">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">What happens next</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-700">What happens next</p>
           <p className="text-sm font-extrabold">Complete the work and submit evidence</p>
           <p className="text-xs text-gray-600">Responsible: Technician – Sipho M.</p>
         </div>
@@ -146,7 +146,7 @@ function PhoneMock() {
       </div>
       <div className="mt-3 rounded-xl bg-white p-3 shadow-sm">
         <p className="text-xs font-bold text-green-800">✓ Quote Q-00041 approved by customer</p>
-        <p className="text-[11px] text-gray-500">via secure link · 2 min ago</p>
+        <p className="text-[11px] text-gray-700">via secure link · 2 min ago</p>
       </div>
     </div>
   );

@@ -112,3 +112,19 @@ export function SignaturePad({ name = "signature" }: { name?: string }) {
     </div>
   );
 }
+
+/** Password input with a show/hide toggle (easier to type long passwords correctly on a phone). */
+export function PasswordField({ label, name, hint, autoComplete, minLength }: { label: string; name: string; hint?: string; autoComplete: string; minLength?: number }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <label className="label" htmlFor={name}>{label} <span className="text-red-700">*</span></label>
+      <div className="relative">
+        <input id={name} name={name} type={show ? "text" : "password"} required autoComplete={autoComplete} minLength={minLength} className="input pr-20" />
+        <button type="button" onClick={() => setShow((v) => !v)} aria-pressed={show} aria-controls={name}
+          className="absolute inset-y-0 right-0 my-1 mr-1 rounded px-3 text-sm font-semibold text-gray-700 hover:bg-gray-100">{show ? "Hide" : "Show"}</button>
+      </div>
+      {hint && <p className="mt-1 text-xs text-gray-600">{hint}</p>}
+    </div>
+  );
+}

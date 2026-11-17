@@ -6,6 +6,7 @@ import { conflict, forbidden, invalid, isUniqueViolation, notFound } from "@/lib
 import { hashToken, newToken } from "@/lib/tokens";
 import { createSession, emailSchema, hashPassword, passwordSchema } from "../auth";
 import { requirePerm, type Ctx } from "../permissions";
+import { OPEN_STATUSES } from "../workflow";
 import { actorOf, logEvent } from "./activity";
 import { assertWithinPlan, ensureDefaultPlans, TRIAL_DAYS } from "./billing";
 import { sendVerificationEmail, requireVerifiedEmail } from "./account";
@@ -254,6 +255,10 @@ export async function updateMember(ctx: Ctx, membershipId: string, input: z.inpu
     if (!p.data.active) await tx.session.updateMany({ where: { userId: m.userId, activeOrgId: ctx.orgId }, data: { activeOrgId: null } });
     await logEvent(tx, actorOf(ctx), null, "team.member_changed",
       `${m.user.name}: ${p.data.active ? `roles set to ${p.data.roles.join(", ")}` : "access removed"}`);
+    // Tell the owner which open jobs this person still leads, so nothing is silently orphaned.
+    const stillLeads = p.data.active && p.data.roles.some((r) => r === "TECHNICIAN" || r === "MANAGER" || r === "OWNER") ? 0
+      : await tx.job.count({ where: { orgId: ctx.orgId, leadTechnicianId: m.userId, status: { in: OPEN_STATUSES } } });
+    return { openJobsToReassign: stillLeads, name: m.user.name };
   });
 }
 
