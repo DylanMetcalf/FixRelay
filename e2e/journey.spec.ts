@@ -1,306 +1,340 @@
-import { type Browser, expect, type Page, test } from "@playwright/test";
-import { verifyEmail } from "./helpers";
+import { expect, test } from "@playwright/test";
+import {
+  acceptInvite, addContractor, addSite, card, db, f, gotoReady, invite, lastEmail, logRequest, newPage, openPanel, pathFrom, register, sign, status, uid, verifyEmail,
+} from "./helpers";
 
-const uid = Math.random().toString(36).slice(2, 8);
-const PASSWORD = "correct-horse-battery";
+const id = uid();
 const PHOTO = "public/icon-192.png";
-const owner = { email: `owner-${uid}@e2e.example`, company: `E2E Maintenance ${uid}` };
-const tech = { email: `tech-${uid}@e2e.example`, name: "Tina Tech" };
-
-const f = (p: Page, name: string) => p.locator(`:is(input,select,textarea)[name="${name}"]`);
-const card = (p: Page, title: string) => p.locator("section.card", { has: p.getByRole("heading", { name: title, exact: true }) });
-const panel = (p: Page, label: string) => p.locator("details.action", { has: p.locator("summary", { hasText: label }) });
-async function openPanel(p: Page, label: string) {
-  const d = panel(p, label);
-  if (!(await d.getAttribute("open") !== null)) await d.locator("summary").click();
-  return d;
-}
-const status = (p: Page) => p.locator(".badge").first();
-
-async function register(p: Page, who: { email: string; company: string }) {
-  await p.goto("/register");
-  await p.waitForLoadState("networkidle");
-  await f(p, "companyName").fill(who.company);
-  await f(p, "name").fill("Olive Owner");
-  await f(p, "email").fill(who.email);
-  await f(p, "password").fill(PASSWORD);
-  await p.getByRole("button", { name: "Create account" }).click();
-  await expect(p).toHaveURL(/dashboard/);
-}
-async function login(p: Page, email: string) {
-  await p.goto("/login");
-  await p.waitForLoadState("networkidle");
-  await f(p, "email").fill(email);
-  await f(p, "password").fill(PASSWORD);
-  await p.getByRole("button", { name: "Sign in" }).click();
-  await expect(p).not.toHaveURL(/login/);
-}
-async function shareLink(scope: ReturnType<Page["locator"]>) {
-  const v = await scope.getByTestId("share-link").locator("input").inputValue();
-  return new URL(v).pathname;
-}
-const fresh = async (b: Browser, mobile = false) => (await b.newContext(mobile ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } : {})).newPage();
+const owner = { email: `owner-${id}@e2e.example`, company: `E2E Foods ${id}` };
+const techEmail = `tech-${id}@e2e.example`;
+const reporterEmail = `rita-${id}@e2e.example`;
+const approverEmail = `fin-${id}@e2e.example`;
+const cool = { name: "CoolTech Refrigeration", email: `cooltech-${id}@contractor.example` };
+const sparks = { name: "Sparks Electrical", email: `sparks-${id}@contractor.example` };
 
 test.describe.configure({ mode: "serial" });
-let jobUrl = "";
+test.afterAll(async () => { await db.$disconnect(); });
+
+let inHouseJob = "";
 let fileUrl = "";
+let sitePath = "";
+let loserQuoteLink = "";
 
-test("primary journey: register → request → assess → quote → approve → assign → complete → sign-off → close → history", async ({ page, browser }) => {
+test("in-house journey: reporter logs a fault on a phone → assess → in-house → assign → work → reporter confirms → close → history", async ({ page, browser }) => {
   page.on("dialog", (d) => d.accept());
-
-  // 1. Register a maintenance company; onboarding checklist is shown.
   await register(page, owner);
   await expect(page.getByText("Getting started")).toBeVisible();
-  await verifyEmail(page, owner.email); // required before inviting people or sending customer links
+  await verifyEmail(page, owner.email);
+  sitePath = await addSite(page, "Germiston Plant", ["Cold Room 2", "Packing Hall"]);
 
-  // Company settings: VAT registered + brand colour.
-  await page.goto("/settings");
-  await f(page, "vatRegistered").check();
-  await f(page, "vatNumber").fill("4123456789");
-  await f(page, "phone").fill("011 555 0100");
-  await f(page, "brandColour").fill("#b91c1c");
-  await page.getByRole("button", { name: "Save company settings" }).click();
-  await expect(page.getByText("Company settings saved.")).toBeVisible();
+  const tech = await acceptInvite(browser, await invite(page, techEmail, "Tina Tech", ["TECHNICIAN"]), true);
+  const rita = await acceptInvite(browser, await invite(page, reporterEmail, "Rita Reporter", ["REQUESTER"]), true);
 
-  // Invite a technician, who accepts in their own browser.
-  const invite = card(page, "Invite a team member");
-  await invite.locator('[name="email"]').fill(tech.email);
-  await invite.locator('[name="name"]').fill(tech.name);
-  await invite.getByRole("button", { name: "Send invitation" }).click();
-  const invitePath = await shareLink(invite);
-  const techPage = await fresh(browser, true);
-  techPage.on("dialog", (d) => d.accept());
-  await techPage.goto(invitePath);
-  await f(techPage, "password").fill(PASSWORD);
-  await techPage.getByRole("button", { name: "Accept invitation" }).click();
-  await expect(techPage).toHaveURL(/dashboard/);
+  // 1. Someone on site reports a fault from their phone, with a photo. Reporters get the simple home screen.
+  await expect(rita.getByRole("heading", { name: "Hello, Rita" })).toBeVisible();
+  await gotoReady(rita, "/requests/new");
+  await f(rita, "title").fill("Cold room door not sealing");
+  await f(rita, "description").fill("Ice building up on the floor at the door.");
+  await f(rita, "locationId").selectOption({ label: "Cold Room 2" });
+  await f(rita, "files").setInputFiles(PHOTO);
+  await rita.getByRole("button", { name: "Send report" }).click();
+  await expect(rita).toHaveURL(/jobs\/[0-9a-f-]{36}$/);
+  inHouseJob = new URL(rita.url()).pathname;
+  await expect(status(rita)).toHaveText("New report");
+  await expect(rita.locator("summary", { hasText: "Send for assessment" })).toHaveCount(0); // reporters follow, they don't manage
+  fileUrl = (await rita.locator('img[src^="/api/files/"]').last().getAttribute("src"))!;
 
-  // 2–3. Add a client and a site.
-  await page.goto("/customers");
-  const add = card(page, "Add a customer");
-  await add.locator('[name="name"]').fill("Karoo Cold Storage");
-  await add.locator('[name="contactName"]').fill("Carl Customer");
-  await add.locator('[name="email"]').fill("carl@karoo.example");
-  await add.getByRole("button", { name: "Add customer" }).click();
-  await expect(page).toHaveURL(/customers\/[0-9a-f-]{36}/);
-  const site = await openPanel(page, "Add a site");
-  await site.locator('[name="name"]').fill("Germiston Depot");
-  await site.getByRole("button", { name: "Add site" }).click();
-  await expect(page.getByText("Germiston Depot").first()).toBeVisible();
-
-  // 4. Log a maintenance request with a photo.
-  await page.goto("/requests/new");
-  await f(page, "title").fill("Compressor tripping on overload");
-  await f(page, "description").fill("Trips after 20 minutes of running.");
-  await f(page, "priority").selectOption("HIGH");
-  await f(page, "files").setInputFiles(PHOTO);
-  await page.getByRole("button", { name: "Log request" }).click();
-  await expect(page).toHaveURL(/jobs\/[0-9a-f-]{36}$/);
-  jobUrl = new URL(page.url()).pathname;
-  await expect(status(page)).toHaveText("New request");
-  await expect(page.getByTestId("next-action")).toContainText("Review and send for assessment");
-  fileUrl = (await page.locator('img[src^="/api/files/"]').last().getAttribute("src"))!;
-
-  // 5. Send for assessment; the technician assesses on a phone.
-  const req = await openPanel(page, "Send for assessment");
-  await req.locator('[name="assessorId"]').selectOption({ label: tech.name });
-  await req.getByRole("button", { name: "Send for assessment" }).click();
+  // 2. The maintenance manager screens it and sends it to a technician to assess.
+  await gotoReady(page, inHouseJob);
+  await expect(page.getByTestId("next-action")).toContainText("Review the report and send it for assessment");
+  const send = await openPanel(page, "Send for assessment");
+  await send.locator('[name="assessorId"]').selectOption({ label: "Tina Tech" });
+  await send.getByRole("button", { name: "Send for assessment" }).click();
   await expect(status(page)).toHaveText("Awaiting assessment");
 
-  await techPage.goto("/my-jobs");
-  await techPage.getByText("Compressor tripping on overload").filter({ visible: true }).click();
-  const assess = await openPanel(techPage, "Record assessment");
-  await assess.locator('[name="findings"]').fill("Start capacitor degraded.");
-  await assess.locator('[name="quoteRequired"]').selectOption("yes");
+  await gotoReady(tech, "/my-jobs");
+  await tech.getByText("Cold room door not sealing").filter({ visible: true }).click();
+  const assess = await openPanel(tech, "Record assessment");
+  await assess.locator('[name="findings"]').fill("Door gasket torn along the bottom.");
+  await assess.locator('[name="quoteRequired"]').selectOption("no");
   await assess.getByRole("button", { name: "Submit assessment" }).click();
-  await expect(status(techPage)).toHaveText("Assessed");
-  await expect(techPage.getByText("Quotations")).toHaveCount(0); // technicians never see pricing
+  await expect(status(tech)).toHaveText("Assessed – decide how to fix");
+  await expect(tech.getByRole("heading", { name: "Contractor quotes" })).toHaveCount(0); // technicians never see pricing
 
-  // 6. Generate a quotation with labour + material lines; totals include 15% VAT.
+  // 3. The manager decides: fix it in-house, then assigns the technician.
   await page.reload();
-  await page.getByRole("button", { name: "Prepare quotation" }).click();
-  await expect(page).toHaveURL(/quotes\//);
-  await f(page, "scope").fill("Replace start capacitor and test under load.");
-  const line = (i: number) => page.getByTestId("quote-line").nth(i);
-  await line(0).getByLabel("Description").fill("Technician labour");
-  await line(0).getByLabel("Quantity").fill("2.5");
-  await line(0).getByLabel("Unit price in rand").fill("650");
-  await page.getByRole("button", { name: "+ Add line" }).click();
-  await line(1).getByLabel("Type").selectOption("MATERIAL");
-  await line(1).getByLabel("Description").fill("Start capacitor");
-  await line(1).getByLabel("Unit price in rand").fill("1 234,56");
-  await expect(page.getByTestId("quote-totals")).toContainText("R 2 859.56"); // 1625.00 + 1234.56
-  await expect(page.getByTestId("quote-totals")).toContainText("R 428.93"); // 15%
-  await expect(page.getByTestId("quote-totals")).toContainText("R 3 288.49");
-  await page.getByRole("button", { name: "Save and submit for approval" }).click();
-  await expect(page.getByTestId("quote-total")).toHaveText("R 3 288.49"); // server-computed
-
-  // 7. Send it to the client via a secure link.
-  const send = card(page, "Send to customer");
-  await send.getByRole("button", { name: "Create secure review link" }).click();
-  const quotePath = await shareLink(send);
-  expect(quotePath).toMatch(/^\/q\/[A-Za-z0-9_-]{43}$/);
-
-  // 8. The customer (no account) approves.
-  const customer = await fresh(browser, true);
-  await customer.goto(quotePath);
-  await expect(customer.getByText(owner.company).first()).toBeVisible();
-  await expect(customer.getByTestId("quote-total")).toHaveText("R 3 288.49");
-  await f(customer, "outcome").selectOption("APPROVED");
-  await customer.getByRole("button", { name: "Submit decision" }).click();
-  await expect(customer.getByTestId("decision-recorded")).toContainText("approved");
-  await customer.reload(); // the link cannot be used twice
-  await expect(customer.getByRole("button", { name: "Submit decision" })).toHaveCount(0);
-
-  // 9. Assign the technician.
-  await page.goto(jobUrl);
+  const ih = await openPanel(page, "Fix it in-house");
+  await ih.getByRole("button", { name: "Give to the in-house team" }).click();
   await expect(status(page)).toHaveText("Approved – awaiting assignment");
   const assign = await openPanel(page, "Assign a technician");
-  await assign.locator('[name="leadTechnicianId"]').selectOption({ label: tech.name });
-  await assign.locator('[name="instructions"]').fill("Isolate power first.");
+  await assign.locator('[name="leadTechnicianId"]').selectOption({ label: "Tina Tech" });
+  await assign.locator('[name="instructions"]').fill("Gasket is in the store room.");
   await assign.getByRole("button", { name: "Assign job" }).click();
   await expect(status(page)).toHaveText("Assigned");
+  await expect(page.getByText("In-house team").first()).toBeVisible();
 
-  // 10–11. Technician starts, records work, and submits completion with evidence.
-  await techPage.goto("/notifications");
-  await expect(techPage.getByText(/You have been assigned/)).toBeVisible();
-  await techPage.goto(jobUrl);
-  await expect(techPage.getByText("Isolate power first.")).toBeVisible();
-  await techPage.getByRole("button", { name: "Start work" }).click();
-  await expect(status(techPage)).toHaveText("In progress");
-  const upd = await openPanel(techPage, "Add update / note");
-  await upd.locator('[name="note"]').fill("Old capacitor removed.");
-  await upd.locator('[name="labourMinutes"]').fill("90");
+  // 4. The technician starts, logs time, and must attach evidence to finish.
+  await gotoReady(tech, inHouseJob);
+  await expect(tech.getByText("Gasket is in the store room.")).toBeVisible();
+  await tech.getByRole("button", { name: "Start work" }).click();
+  await expect(status(tech)).toHaveText("In progress");
+  const upd = await openPanel(tech, "Add update / note");
+  await upd.locator('[name="note"]').fill("Old gasket removed.");
+  await upd.locator('[name="labourMinutes"]').fill("45");
   await upd.getByRole("button", { name: "Add update" }).click();
-  await expect(techPage.getByText("Old capacitor removed.")).toBeVisible();
-  const done = await openPanel(techPage, "Complete work and submit evidence");
-  await done.locator('[name="workPerformed"]').fill("Replaced capacitor, ran for one hour.");
-  await done.getByRole("button", { name: "Submit for verification" }).click();
-  await expect(done.locator("p[role=alert]")).toContainText("after-photo"); // evidence is mandatory
+  await expect(tech.getByText("Old gasket removed.")).toBeVisible();
+  const done = await openPanel(tech, "Work finished – submit evidence");
+  await done.locator('[name="workPerformed"]').fill("Fitted new gasket, door seals.");
+  await done.getByRole("button", { name: "Submit for confirmation" }).click();
+  await expect(done.locator("p[role=alert]")).toContainText("after-photo");
   await done.locator('[name="after"]').setInputFiles(PHOTO);
-  await done.getByRole("button", { name: "Submit for verification" }).click();
-  await expect(status(techPage)).toHaveText("Awaiting verification");
+  await done.getByRole("button", { name: "Submit for confirmation" }).click();
+  await expect(status(tech)).toHaveText("Awaiting confirmation");
 
-  // 12. Customer sign-off by secure link with a drawn signature. The manager cannot close before it.
+  // 5. The person who reported it confirms it is fixed. The manager cannot close before that.
   await page.reload();
   await expect(page.getByRole("button", { name: "Close job" })).toHaveCount(0);
-  const vl = await openPanel(page, "Send verification link to customer");
-  await vl.getByRole("button", { name: "Create secure link" }).click();
-  const verifyPath = await shareLink(vl);
-  await customer.goto(verifyPath);
-  await expect(customer.getByText("Replaced capacitor, ran for one hour.")).toBeVisible();
-  await expect(customer.locator('img[src*="/api/public/files/"]').first()).toBeVisible();
-  const pad = customer.getByTestId("signature-pad");
-  const box = (await pad.boundingBox())!;
-  await pad.dispatchEvent("pointerdown", { clientX: box.x + 20, clientY: box.y + 30, pointerId: 1 });
-  await pad.dispatchEvent("pointermove", { clientX: box.x + 120, clientY: box.y + 60, pointerId: 1 });
-  await pad.dispatchEvent("pointerup", { clientX: box.x + 120, clientY: box.y + 60, pointerId: 1 });
-  await f(customer, "outcome").selectOption("APPROVED");
-  await customer.getByRole("button", { name: "Submit decision" }).click();
-  await expect(customer.getByTestId("decision-recorded")).toContainText("approved");
+  await gotoReady(rita, "/dashboard");
+  const ask = rita.getByTestId("needs-confirmation");
+  await expect(ask).toContainText("Cold room door not sealing");
+  await ask.getByRole("link", { name: "Confirm" }).click();
+  await expect(rita.getByText("Fitted new gasket, door seals.")).toBeVisible();
+  const yes = await openPanel(rita, "Is it fixed?");
+  await yes.locator('[name="outcome"]').selectOption("APPROVED");
+  await yes.getByRole("button", { name: "Send my answer" }).click();
+  await expect(status(rita)).toHaveText("Confirmed fixed – ready to close");
 
-  // 13. Close the job.
+  // 6. Close; complete history; printable report; insights count it.
   await page.reload();
-  await expect(status(page)).toHaveText("Verified – ready to close");
   await page.getByRole("button", { name: "Close job" }).click();
   await expect(status(page)).toHaveText("Closed");
-
-  // 14. Complete history and the printable report.
   const timeline = page.getByTestId("timeline");
-  for (const t of ["Request logged", "Sent for assessment", "Assessment completed", "submitted for approval", "approved by Carl Customer (secure link)",
-    "Assigned to Tina Tech", "Work started", "Completion submitted", "Completed work (v1) approved by Carl Customer", "Job closed"]) await expect(timeline).toContainText(t);
-  await expect(page.locator('img[alt^="Signature of"]')).toBeVisible();
+  for (const t of ["Fault reported", "Sent for assessment", "Assessment completed", "in-house", "Assigned to Tina Tech", "Work started", "Completion submitted", "Rita Reporter", "Job closed"]) await expect(timeline).toContainText(t);
   await page.getByRole("link", { name: "Job report" }).click();
   await expect(page.getByTestId("report-history")).toContainText("Job closed");
-  await expect(page.getByText("R 3 288.49")).toBeVisible();
-  await page.goto("/reports");
-  await expect(page.locator(".card", { hasText: "Jobs completed" }).first()).toContainText("1");
+  await gotoReady(page, "/reports");
+  await expect(page.locator(".card", { hasText: "Jobs closed" }).first()).toContainText("1");
 
-  // Reopen with a reason.
-  await page.goto(jobUrl);
+  // Reopen with a reason goes back to the same technician.
+  await gotoReady(page, inHouseJob);
   const re = await openPanel(page, "Reopen job");
-  await re.locator('[name="reason"]').fill("Tripped again after two days");
+  await re.locator('[name="reason"]').fill("Ice is back after two days");
   await re.getByRole("button", { name: "Reopen job" }).click();
   await expect(status(page)).toHaveText("Assigned");
   await expect(page.getByText("Reopened ×1")).toBeVisible();
 });
 
-test("rejected quote → revision keeps history; cancelled job; permission failures", async ({ page, browser }) => {
+test("contractor journey: quotes by secure link → compare → over-limit goes to approver → PO → contractor completes → confirm → close", async ({ page, browser }) => {
   page.on("dialog", (d) => d.accept());
-  await login(page, owner.email);
-  await page.goto("/requests/new");
-  await f(page, "title").fill("Roller door stuck");
-  await f(page, "description").fill("Will not close.");
-  await page.getByRole("button", { name: "Log request" }).click();
-  await expect(page).toHaveURL(/jobs\/[0-9a-f-]{36}$/);
-  const url = new URL(page.url()).pathname;
-  const assess = await openPanel(page, "Assess it myself now");
-  await assess.locator('[name="findings"]').fill("Spring broken.");
-  await assess.getByRole("button", { name: "Submit assessment" }).click();
-  await page.getByRole("button", { name: "Prepare quotation" }).click();
-  await f(page, "scope").fill("Replace spring.");
-  await page.getByTestId("quote-line").first().getByLabel("Description").fill("Spring");
-  await page.getByTestId("quote-line").first().getByLabel("Unit price in rand").fill("1000");
-  await page.getByRole("button", { name: "Save and submit for approval" }).click();
-  const send = card(page, "Send to customer");
-  await send.getByRole("button", { name: "Create secure review link" }).click();
-  const path = await shareLink(send);
+  await gotoReady(page, "/login");
+  await f(page, "email").fill(owner.email);
+  await f(page, "password").fill("correct-horse-battery");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/dashboard/);
 
-  const customer = await fresh(browser);
-  await customer.goto(path);
-  await f(customer, "outcome").selectOption("REJECTED");
-  await customer.getByRole("button", { name: "Submit decision" }).click();
-  await expect(customer.locator("p[role=alert]")).toContainText("why you are rejecting");
-  await f(customer, "comment").fill("Too expensive");
-  await customer.getByRole("button", { name: "Submit decision" }).click();
-  await expect(customer.getByTestId("decision-recorded")).toContainText("rejected");
+  // Approval rules: the owner sets limits; a finance approver approves bigger spend with a PO.
+  await gotoReady(page, "/settings");
+  const rules = card(page, "Approval rules");
+  await rules.locator('[name="managerLimit"]').fill("5000");
+  await rules.locator('[name="approverLimit"]').fill("");
+  await rules.locator('[name="quoteThreshold"]').fill("10000");
+  await rules.locator('[name="minQuotes"]').fill("2");
+  await rules.locator('[name="poRequired"]').check();
+  await rules.getByRole("button", { name: "Save approval rules" }).click();
+  await expect(page.getByText("Approval rules saved.")).toBeVisible();
+  // A manager (limit R 5 000) runs the job; the owner would be unlimited.
+  const mgr = await acceptInvite(browser, await invite(page, `mgr-${id}@e2e.example`, "Mo Manager", ["MANAGER"]));
+  const fin = await acceptInvite(browser, await invite(page, approverEmail, "Fiona Finance", ["APPROVER"]));
+  mgr.on("dialog", (d) => d.accept());
+  await addContractor(page, cool.name, cool.email, true);
+  await addContractor(page, sparks.name, sparks.email, false);
 
-  await page.reload();
-  await expect(page.getByText("“Too expensive”")).toBeVisible();
-  await page.getByRole("button", { name: "Create revision" }).click();
-  await expect(page.getByRole("heading", { name: /v2$/ })).toBeVisible();
-  await expect(page.getByTestId("quote-versions")).toContainText("Version 1");
-  await expect(page.getByTestId("quote-versions")).toContainText("Rejected");
+  // Fault logged and assessed: needs a contractor.
+  const job = await logRequest(mgr, "Compressor 2 tripping on overload", async (p) => { await f(p, "priority").selectOption("HIGH"); });
+  const a = await openPanel(mgr, "Assess it myself now");
+  await a.locator('[name="findings"]').fill("Start capacitor degraded; contactor pitted.");
+  await a.locator('[name="quoteRequired"]').selectOption("yes");
+  await a.getByRole("button", { name: "Submit assessment" }).click();
+  await expect(status(mgr)).toHaveText("Assessed – decide how to fix");
 
-  await page.goto(url);
-  await expect(status(page)).toHaveText("Quote being prepared");
-  const cancel = await openPanel(page, "Cancel job");
-  await cancel.locator('[name="reason"]').fill("Customer will replace the door");
-  await cancel.getByRole("button", { name: "Cancel job" }).click();
-  await expect(status(page)).toHaveText("Cancelled");
-  await expect(page.getByTestId("actions")).toHaveCount(0);
+  // Ask both contractors for a quote.
+  const rfq = await openPanel(mgr, "Get contractor quotes");
+  await rfq.getByLabel(cool.name).check();
+  await rfq.getByLabel(sparks.name).check();
+  await rfq.locator('[name="scope"]').fill("Replace capacitor and contactor, test run 1 hour.");
+  await rfq.getByRole("button", { name: "Send quote requests" }).click();
+  await expect(rfq.getByTestId("share-link")).toBeVisible(); // stays on screen so it can also be sent by WhatsApp
+  await mgr.reload();
+  await expect(status(mgr)).toHaveText("Getting quotes");
 
-  // Technician: no settings, no quotes, no customers management, and cannot open a job they are not on.
-  const t = await fresh(browser);
-  await login(t, tech.email);
-  for (const p of ["/settings", "/quotes", "/reports"]) { await t.goto(p); await expect(t).toHaveURL(/forbidden/); }
-  expect((await t.goto(url))!.status()).toBe(404);
-  await expect(t.getByText("Roller door stuck")).toHaveCount(0); // nothing about the job leaks
-  await t.goto("/platform");
-  await expect(t).toHaveURL(/forbidden/);
+  // Each contractor opens the emailed link (no account) and quotes. VAT only for the VAT-registered one.
+  const coolLink = pathFrom((await lastEmail(cool.email, /Request for quotation/)).body, "c");
+  const sparksLink = pathFrom((await lastEmail(sparks.email, /Request for quotation/)).body, "c");
+  loserQuoteLink = sparksLink;
+  const c1 = await newPage(browser, { mobile: true });
+  await gotoReady(c1, coolLink);
+  await expect(c1.getByTestId("rfq-scope")).toContainText("Replace capacitor and contactor, test run 1 hour.");
+  await f(c1, "price").fill("6 000");
+  await f(c1, "scope").fill("Capacitor, contactor, labour and call-out.");
+  await f(c1, "leadTimeDays").fill("1");
+  await c1.getByRole("button", { name: "Submit quote" }).click();
+  await expect(c1.getByTestId("my-quote")).toContainText("R 6 900.00");
+  const c2 = await newPage(browser);
+  await gotoReady(c2, sparksLink);
+  await f(c2, "price").fill("7400");
+  await f(c2, "scope").fill("Capacitor and contactor replacement.");
+  await c2.getByRole("button", { name: "Submit quote" }).click();
+  await expect(c2.getByTestId("my-quote")).toContainText("R 7 400.00");
 
-  // Signed-out visitors are sent to sign in; files are not served.
-  const anon = await fresh(browser);
-  await anon.goto(jobUrl);
-  await expect(anon).toHaveURL(/login/);
-  expect((await anon.request.get(fileUrl)).status()).toBe(404);
-  expect((await anon.request.get("/q/" + "A".repeat(43))).status()).toBe(200);
-  await anon.goto("/q/" + "A".repeat(43));
-  await expect(anon.getByText("This link is not valid")).toBeVisible();
+  // Side-by-side comparison; the cheapest is marked. R 6 900 is above the manager's R 5 000 limit.
+  await mgr.reload();
+  const compare = mgr.getByTestId("quote-compare");
+  await expect(compare).toContainText("Cheapest");
+  await expect(compare.locator("tr", { hasText: cool.name })).toContainText("R 6 900.00");
+  await expect(compare.locator("tr", { hasText: sparks.name })).toContainText("R 7 400.00");
+  const choose = mgr.getByTestId(`choose-${cool.name}`);
+  await choose.locator("summary").click();
+  await expect(choose).toContainText("above your limit");
+  await choose.getByRole("button", { name: "Send for approval" }).click();
+  await expect(status(mgr)).toHaveText("Awaiting spend approval");
+
+  // The approver sees it on their dashboard and approves it with a PO number.
+  await gotoReady(fin, "/dashboard");
+  const needs = fin.getByTestId("needs-approval");
+  await expect(needs).toContainText("Compressor 2 tripping on overload");
+  await expect(needs).toContainText("R 6 900.00");
+  await needs.getByRole("link", { name: "Review" }).click();
+  const decide = fin.getByTestId("approval-decision");
+  await expect(decide.locator('[name="poNumber"]')).toHaveAttribute("required", ""); // PO required by the rules
+  await decide.locator('[name="poNumber"]').fill("PO-2001");
+  await decide.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(status(fin)).toHaveText("Assigned");
+  await expect(fin.getByText("PO-2001").first()).toBeVisible();
+
+  // The losing contractor's link is closed and they are told; the winner gets a completion link.
+  await gotoReady(c2, sparksLink);
+  await expect(c2.getByTestId("link-closed")).toBeVisible();
+  await lastEmail(sparks.email, /not selected/);
+  const doneLink = pathFrom((await lastEmail(cool.email, /You have been appointed/)).body, "c");
+  await gotoReady(c1, doneLink);
+  await expect(c1.getByText("PO-2001").first()).toBeVisible();
+  await f(c1, "workPerformed").fill("Replaced capacitor and contactor; ran for one hour, no trips.");
+  await expect(f(c1, "files")).toHaveAttribute("required", ""); // a photo is required (also enforced on the server)
+  await f(c1, "files").setInputFiles(PHOTO);
+  await c1.getByRole("button", { name: "Submit completion" }).click();
+  await expect(c1.getByTestId("completion-received")).toBeVisible();
+  await gotoReady(c1, doneLink); // single use
+  await expect(c1.getByRole("button", { name: "Submit completion" })).toHaveCount(0);
+
+  // The manager reported it, so they confirm it's fixed, with a signature from the operator on their device.
+  await gotoReady(mgr, job);
+  await expect(status(mgr)).toHaveText("Awaiting confirmation");
+  const so = await openPanel(mgr, "Get the reporter's signature on this device");
+  await so.locator('[name="name"]').fill("Sipho Operator");
+  await so.locator('[name="outcome"]').selectOption("APPROVED");
+  await sign(mgr);
+  await so.getByRole("button", { name: "Record sign-off" }).click();
+  await expect(status(mgr)).toHaveText("Confirmed fixed – ready to close");
+  await mgr.getByRole("button", { name: "Close job" }).click();
+  await expect(status(mgr)).toHaveText("Closed");
+  const t = mgr.getByTestId("timeline");
+  for (const x of ["Quotes requested", "CoolTech Refrigeration", "Fiona Finance", "PO-2001", "Job closed"]) await expect(t).toContainText(x);
+  await expect(mgr.locator('img[alt^="Signature of"]')).toBeVisible();
+
+  // Contractor performance shows on Insights.
+  await gotoReady(page, "/reports");
+  await expect(card(page, "Contractor performance")).toContainText(cool.name);
 });
 
-test("a second company cannot reach the first company's jobs or files; PWA manifest is tenant-branded", async ({ page }) => {
-  await register(page, { email: `rival-${uid}@e2e.example`, company: `Rival Repairs ${uid}` });
-  expect((await page.goto(jobUrl))!.status()).toBe(404);
-  expect((await page.request.get(fileUrl)).status()).toBe(404);
-  expect((await page.request.get(`${jobUrl}/report`)).status()).toBe(404);
-  await page.goto("/jobs");
-  await expect(page.getByText("Compressor tripping on overload")).toHaveCount(0);
-  const manifest = await (await page.request.get("/api/manifest")).json();
-  expect(manifest.name).toContain("Rival Repairs");
-  expect(manifest.display).toBe("standalone");
-  expect((await page.request.get("/sw.js")).status()).toBe(200);
-  const headers = (await page.request.get("/login")).headers();
-  expect(headers["x-frame-options"]).toBe("DENY");
-  expect(headers["referrer-policy"]).toBe("no-referrer");
+test("QR reporting without an account: off by default; when on, the scanned location is pre-filled and the report lands for screening", async ({ page, browser }) => {
+  page.on("dialog", (d) => d.accept());
+  await gotoReady(page, "/login");
+  await f(page, "email").fill(owner.email);
+  await f(page, "password").fill("correct-horse-battery");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/dashboard/);
+
+  await gotoReady(page, sitePath);
+  const link = new URL(await page.getByTestId("site-report-link").inputValue()).pathname;
+  expect(link).toMatch(/^\/r\/[A-Za-z0-9_-]{20,}$/);
+  const anon = await newPage(browser, { mobile: true });
+  await gotoReady(anon, link);
+  await expect(anon).toHaveURL(/login/); // public reporting is off: staff are asked to sign in
+
+  await gotoReady(page, "/settings");
+  await f(page, "publicReportingEnabled").check();
+  await page.getByRole("button", { name: "Save company settings" }).click();
+  await expect(page.getByText("Company settings saved.")).toBeVisible();
+
+  // The QR sheet has one label for the site and one per location.
+  await gotoReady(page, `${sitePath}/qr`);
+  await expect(page.getByText("Scan to report a fault")).toHaveCount(3);
+  const loc = await db.location.findFirstOrThrow({ where: { name: "Packing Hall", site: { publicToken: link.slice(3) } } });
+
+  await gotoReady(anon, `${link}?l=${loc.id}`);
+  await expect(anon.getByRole("heading", { name: "What needs fixing?" })).toBeVisible();
+  await expect(f(anon, "locationId")).toHaveValue(loc.id);
+  await f(anon, "title").fill("Conveyor guard loose");
+  await f(anon, "description").fill("Guard rattles when the belt runs.");
+  await f(anon, "reporterName").fill("Vusi Visitor");
+  await f(anon, "reporterPhone").fill("082 555 0101");
+  await anon.getByRole("button", { name: "Send report" }).click();
+  await expect(anon.getByText(/REQ-\d{5}/)).toBeVisible();
+
+  await gotoReady(page, "/dashboard");
+  await expect(page.locator("a.card", { hasText: "Public reports to screen" })).toContainText("1");
+  await page.locator("a.card", { hasText: "Public reports to screen" }).click();
+  await page.getByText("Conveyor guard loose").filter({ visible: true }).first().click();
+  await expect(page.getByTestId("public-reporter")).toContainText("Vusi Visitor");
+  await expect(page.getByText("Packing Hall").first()).toBeVisible();
+
+  // A new link makes the printed QR codes stop working.
+  await gotoReady(page, sitePath);
+  await page.getByRole("button", { name: "Replace link" }).click();
+  await expect(page.getByText(/old ones no longer work/)).toBeVisible();
+  await gotoReady(anon, link);
+  await expect(anon.getByText("This report link is not active")).toBeVisible();
+});
+
+test("permissions and tenancy: technicians and reporters are limited; another company sees nothing", async ({ browser }) => {
+  const t = await newPage(browser);
+  await gotoReady(t, "/login");
+  await f(t, "email").fill(techEmail);
+  await f(t, "password").fill("correct-horse-battery");
+  await t.getByRole("button", { name: "Sign in" }).click();
+  await expect(t).not.toHaveURL(/login/);
+  for (const p of ["/settings", "/quotes", "/reports", "/contractors", "/platform"]) { await gotoReady(t, p); await expect(t).toHaveURL(/forbidden/); }
+
+  // The reporter can't see someone else's job (the contractor job), only their own.
+  const r = await newPage(browser);
+  await gotoReady(r, "/login");
+  await f(r, "email").fill(reporterEmail);
+  await f(r, "password").fill("correct-horse-battery");
+  await r.getByRole("button", { name: "Sign in" }).click();
+  await expect(r).toHaveURL(/dashboard/);
+  const org = await db.organisation.findFirstOrThrow({ where: { name: owner.company } });
+  const other = await db.job.findFirstOrThrow({ where: { title: "Compressor 2 tripping on overload", orgId: org.id } });
+  expect((await r.goto(`/jobs/${other.id}`))!.status()).toBe(404);
+  await gotoReady(r, "/jobs");
+  await expect(r.getByText("Compressor 2 tripping").filter({ visible: true })).toHaveCount(0);
+
+  // Signed-out visitors: sent to sign in; files are not served; bad contractor links explain themselves.
+  const anon = await newPage(browser);
+  await anon.goto(inHouseJob);
+  await expect(anon).toHaveURL(/login/);
+  expect((await anon.request.get(fileUrl)).status()).toBe(404);
+  await gotoReady(anon, "/c/" + "A".repeat(43));
+  await expect(anon.getByText("This link is not valid")).toBeVisible();
+  await gotoReady(anon, loserQuoteLink);
+  await expect(anon.getByTestId("link-closed")).toBeVisible();
+
+  // A second company cannot reach the first company's jobs or files.
+  const rival = await newPage(browser);
+  await register(rival, { email: `rival-${id}@e2e.example`, company: `Rival Mills ${id}` });
+  expect((await rival.goto(inHouseJob))!.status()).toBe(404);
+  expect((await rival.request.get(fileUrl)).status()).toBe(404);
+  expect((await rival.request.get(`${inHouseJob}/report`)).status()).toBe(404);
+  expect((await rival.goto(sitePath))!.status()).toBe(404);
+  const manifest = await (await rival.request.get("/api/manifest")).json();
+  expect(manifest.name).toContain("Rival Mills");
 });

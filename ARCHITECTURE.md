@@ -31,7 +31,7 @@ Worker ── src/worker.ts              email outbox (SKIP LOCKED), overdue ale
 | Validation | Zod 3 | Every service input is parsed |
 | Styling | Tailwind CSS 4, small in-house component set (`src/components/ui.tsx`) | No heavy UI library. Components are simple and accessible (labels, focus rings, 44px targets) |
 | Auth | Own email/password with bcrypt and opaque DB sessions (see SECURITY.md) | A small, fully understood surface. Sessions are revocable instantly. No third-party identity dependency. Can be swapped for Auth.js or a provider later |
-| Files | `Storage` interface; local-disk driver (`STORAGE_DIR`) | Swap to S3-compatible storage by implementing 2 methods |
+| Files | `Storage` interface; Postgres, local-disk or S3 drivers | Chosen by `STORAGE_DRIVER` |
 | Background jobs | DB-backed outbox + polling worker | Transactional: a notification exists only if its business change committed. No extra infrastructure |
 | Money | Integer cents, BigInt arithmetic, half-up rounding | No floating-point error (`src/lib/money.ts`) |
 | Tests | Vitest (real Postgres), Playwright (real browser, production build) | |
@@ -42,10 +42,13 @@ Worker ── src/worker.ts              email outbox (SKIP LOCKED), overdue ale
 |---|---|
 | `auth.ts` (in `src/server`) | Passwords, sessions, loading the acting context, switching workspace |
 | `orgs.ts` | Tenant registration, settings, priority rules, team, invitations, support-access grants, platform tenant list |
-| `clients.ts` | Customers, sites, locations, assets, request-form options |
-| `jobs.ts` | Request logging, triage, assessment, direct authorisation, assignment, execution, hold/resume, cancel, completion, closure, reopen, lists and dashboard counts |
-| `quotes.ts` | Quote create, save, submit, revise, view, list |
-| `approvals.ts` | Review links, and customer decisions via link, portal, in person or internal recording |
+| `sites.ts` | Sites (QR token, rotation), locations, equipment with spend, request-form options |
+| `contractors.ts` | Contractor directory |
+| `contractor-links.ts` | Secure contractor links (quote request, appointment/completion), their emails and revocation |
+| `portal.ts` | What a contractor sees and submits through a link |
+| `jobs.ts` | Fault reports (app and public QR), triage, assessment, in-house routing, assignment, execution, hold/resume, cancel, completion, confirm fixed, closure, reopen, lists and dashboard counts |
+| `quotes.ts` | Request quotes, capture quotes, contractor quote versions, comparison, withdraw |
+| `approvals.ts` | Spend approval by limit, send for approval, not approved, three-quote and PO rules, contractor appointment |
 | `attachments.ts` | Upload validation (content sniffing), private reads, signatures, logo |
 | `notifications.ts` | In-app notifications, email outbox, worker processing, overdue scan |
 | `activity.ts` | Append-only audit events |
@@ -55,17 +58,18 @@ Worker ── src/worker.ts              email outbox (SKIP LOCKED), overdue ale
 
 Shared foundations: `src/server/permissions.ts` (permission matrix and `jobScope`), `src/server/workflow.ts` (state machine, labels, next action), `src/lib/*` (db client, errors, money, tokens, rate limiting, colour).
 
-## Request / data flow example: customer approves a quote by link
+## Request / data flow example: contractor quote → approval → appointment
 
-1. A manager submits the quote (`quotes.submitQuote`): totals are recomputed on the server, the status becomes SUBMITTED (the DB trigger now freezes it), the job moves to AWAITING_APPROVAL, and an audit event and notifications are written in **one transaction**.
-2. The manager creates a link (`approvals.createApprovalLink`): a 256-bit token is generated and only its SHA-256 is stored. An email is queued in the outbox, and the URL is shown once (copy / WhatsApp).
-3. The customer opens `/q/<token>`, a public page rendered from `getLinkView`, which shows only that quote, its files and the tenant branding.
-4. On submit (`decideViaLink`), one transaction claims the link (`usedAt`, guarded update), sets the quote to APPROVED (guarded), inserts the Decision (unique per quote), revokes sibling links, moves the job with a guarded `move()`, writes the audit event and notifies managers. Any concurrent second attempt fails cleanly.
+1. The manager requests quotes (`quotes.requestQuotes`): in **one transaction** the job moves ASSESSED → QUOTING (route CONTRACTOR), one `ContractorLink` per contractor is created (256-bit token, only its SHA-256 stored, plus the scope), the RFQ emails are queued in the outbox and the audit events written.
+2. Each contractor opens `/c/<token>` (public page rendered from `portal.getContractorLinkView`: only that job, its fault photos and the company branding) and submits a price (`submitQuoteViaLink` → `insertContractorQuote`: VAT if registered, earlier version superseded, quote frozen by trigger once submitted).
+3. The manager compares (`compareQuotes`) and chooses one. `approvals.approveQuote` checks the caller's limit, validity, the three-quote rule and the PO rule; then records the Decision, rejects the other quotes and revokes their links, moves the job APPROVED → ASSIGNED with contractor, value and PO (guarded `move()`), issues the completion link and queues the appointment and "not selected" emails. Above the limit, `recommendQuote` sends it to the approvers who can approve that amount.
+4. The contractor submits the completion with photos (`submitCompletionViaLink`, single use) → AWAITING_VERIFICATION → the reporter is asked "Is it fixed?".
 5. The worker delivers queued emails, retrying with backoff.
 
 ## UI conventions
 
 - Server components fetch through services. Forms use `<Form action={serverAction}>` (`src/components/form.tsx`).
 - After a successful action the page **reloads** (or navigates to `redirectTo`) and shows a flash message. See the "Next.js caveat" in AI_HANDOVER.md for why this is used instead of `router.refresh()`.
-- Desktop: a sidebar (Dashboard, Requests, Jobs, Quotes, Customers, Assets, Reports, Settings). Phone: a bottom bar (My jobs/Dashboard, New request, Alerts, Profile).
+- Desktop: a sidebar (Dashboard, Reports, Jobs, Quotes, Sites, Equipment, Contractors, Insights, Settings; technicians also get My jobs). Phone: a bottom bar (My jobs/Home, Report fault, Alerts, Profile).
+- Public pages (`/r/<siteToken>` fault report, `/c/<linkToken>` contractor portal) use `PublicShell` with the company's branding and no app navigation.
 - Every job page shows **what happens next and who is responsible** (`nextAction()` in workflow.ts).

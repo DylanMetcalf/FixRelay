@@ -59,25 +59,63 @@ export async function verifyEmail(p: Page, email: string) {
   await expect(p.getByTestId("verified")).toBeVisible();
 }
 
-/** Registered, verified company with one customer and site. */
+/** Adds a site (and optional locations) and returns its page path. */
+export async function addSite(p: Page, name = "Germiston Plant", locations: string[] = []) {
+  await gotoReady(p, "/sites");
+  const add = card(p, "Add a site");
+  await add.locator('[name="name"]').fill(name);
+  await add.locator('[name="address"]').fill("14 Refinery Rd, Germiston");
+  await add.getByRole("button", { name: "Add site" }).click();
+  await expect(p).toHaveURL(/sites\/[0-9a-f-]{36}$/);
+  const sitePath = new URL(p.url()).pathname;
+  for (const l of locations) {
+    await p.getByPlaceholder("Add a location, e.g. Plant room").fill(l);
+    await p.getByRole("button", { name: "Add location" }).click();
+    await expect(p.locator(".badge, span", { hasText: new RegExp(`^${l}`) }).filter({ visible: true }).first()).toBeVisible();
+    await p.waitForLoadState("networkidle");
+  }
+  return sitePath;
+}
+
+/** Adds a contractor; quote requests go to their email (queued in the outbox). */
+export async function addContractor(p: Page, name: string, email: string, vat = false) {
+  await gotoReady(p, "/contractors");
+  const add = card(p, "Add a contractor");
+  await add.locator('[name="name"]').fill(name);
+  await add.locator('[name="trade"]').fill("Refrigeration");
+  await add.locator('[name="email"]').fill(email);
+  if (vat) { await add.locator('[name="vatRegistered"]').check(); await add.locator('[name="vatNumber"]').fill("4123456789"); }
+  await add.getByRole("button", { name: "Add contractor" }).click();
+  await expect(p).toHaveURL(/contractors\/[0-9a-f-]{36}$/);
+}
+
+/** Registered, verified company with one site. */
 export async function company(b: Browser) {
   const p = await newPage(b);
   const email = `owner-${uid()}@e2e.example`;
-  await register(p, { email, company: `E2E Co ${uid()}` });
+  await register(p, { email, company: `E2E Foods ${uid()}` });
   await verifyEmail(p, email);
-  await gotoReady(p, "/customers");
-  const add = card(p, "Add a customer");
-  await add.locator('[name="name"]').fill("Karoo Cold Storage");
-  await add.locator('[name="contactName"]').fill("Carl Customer");
-  await add.locator('[name="email"]').fill(`carl-${uid()}@client.example`);
-  await add.getByRole("button", { name: "Add customer" }).click();
-  await expect(p).toHaveURL(/customers\/[0-9a-f-]{36}/);
-  const customerUrl = new URL(p.url()).pathname;
-  const site = await openPanel(p, "Add a site");
-  await site.locator('[name="name"]').fill("Germiston Depot");
-  await site.getByRole("button", { name: "Add site" }).click();
-  await expect(p.getByText("Germiston Depot").first()).toBeVisible();
-  return { p, email, customerUrl };
+  const sitePath = await addSite(p, "Germiston Plant", ["Cold Room 2"]);
+  return { p, email, sitePath };
+}
+
+export async function invite(p: Page, email: string, name: string, roles: string[]) {
+  await gotoReady(p, "/settings");
+  const inv = card(p, "Invite someone");
+  await inv.locator('[name="email"]').fill(email);
+  await inv.locator('[name="name"]').fill(name);
+  for (const box of await inv.locator('[name="roles"]').all()) await box.setChecked(roles.includes((await box.getAttribute("value"))!));
+  await inv.getByRole("button", { name: "Send invitation" }).click();
+  return shareLink(inv);
+}
+
+export async function acceptInvite(b: Browser, path: string, mobile = false) {
+  const q = await newPage(b, { mobile });
+  await gotoReady(q, path);
+  await f(q, "password").fill(PASSWORD);
+  await q.getByRole("button", { name: "Accept invitation" }).click();
+  await expect(q).toHaveURL(/dashboard/);
+  return q;
 }
 
 export async function logRequest(p: Page, title: string, extra: (p: Page) => Promise<void> = async () => {}) {
@@ -85,11 +123,21 @@ export async function logRequest(p: Page, title: string, extra: (p: Page) => Pro
   await f(p, "title").fill(title);
   await f(p, "description").fill("Reported during e2e test.");
   await extra(p);
-  await p.getByRole("button", { name: "Log request" }).click();
+  await p.getByRole("button", { name: "Send report" }).click();
   await expect(p).toHaveURL(/jobs\/[0-9a-f-]{36}$/);
   return new URL(p.url()).pathname;
 }
 
+export const status = (p: Page) => p.locator(".badge").first();
+
 export async function shareLink(scope: Locator) {
   return new URL(await scope.getByTestId("share-link").locator("input").inputValue()).pathname;
+}
+
+export async function sign(p: Page) {
+  const pad = p.getByTestId("signature-pad");
+  const box = (await pad.boundingBox())!;
+  await pad.dispatchEvent("pointerdown", { clientX: box.x + 20, clientY: box.y + 30, pointerId: 1 });
+  await pad.dispatchEvent("pointermove", { clientX: box.x + 120, clientY: box.y + 60, pointerId: 1 });
+  await pad.dispatchEvent("pointerup", { clientX: box.x + 120, clientY: box.y + 60, pointerId: 1 });
 }

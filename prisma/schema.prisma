@@ -457,6 +457,8 @@ model ContractorLink {
   jobId        String      @db.Uuid
   contractorId String      @db.Uuid
   purpose      LinkPurpose
+  /// What the contractor is asked to quote for (QUOTE links), shown on their page.
+  scope        String?
   tokenHash    String      @unique
   createdById  String      @db.Uuid
   expiresAt    DateTime

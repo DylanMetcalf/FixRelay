@@ -23,11 +23,11 @@ export async function revokeJobLinks(tx: Tx, orgId: string, jobId: string, purpo
   });
 }
 
-async function issue(tx: Tx, ctx: Ctx, jobId: string, contractorId: string, purpose: LinkPurpose, expiresAt: Date) {
+async function issue(tx: Tx, ctx: Ctx, jobId: string, contractorId: string, purpose: LinkPurpose, expiresAt: Date, scope?: string) {
   await revokeJobLinks(tx, ctx.orgId, jobId, purpose, contractorId); // only the newest link of each kind works
   const token = newToken();
   const link = await tx.contractorLink.create({
-    data: { orgId: ctx.orgId, jobId, contractorId, purpose, tokenHash: hashToken(token), createdById: ctx.userId, expiresAt },
+    data: { orgId: ctx.orgId, jobId, contractorId, purpose, scope: scope ?? null, tokenHash: hashToken(token), createdById: ctx.userId, expiresAt },
   });
   return { link, token, url: `${appUrl()}/c/${token}` };
 }
@@ -40,7 +40,7 @@ export async function issueQuoteLink(tx: Tx, ctx: Ctx, job: { id: string; refere
     tx.job.findUniqueOrThrow({ where: { id: job.id }, select: { site: { select: { name: true, address: true } } } }),
   ]);
   const expires = job.quoteDeadline ? endOfDay(job.quoteDeadline) : new Date(Date.now() + 14 * 86_400_000);
-  const r = await issue(tx, ctx, job.id, contractorId, "QUOTE", expires);
+  const r = await issue(tx, ctx, job.id, contractorId, "QUOTE", expires, scope);
   await queueEmail(tx, {
     orgId: ctx.orgId, to: c.email, subject: `Request for quotation ${job.reference}: ${job.title}`, dedupeKey: `rfq:${r.link.id}`,
     body: `Hello ${c.contactName || c.name},\n\n${org.name} would like a quotation for:\n"${job.title}" at ${site.site.name}${site.site.address ? `, ${site.site.address}` : ""}.\n\n${scope}\n\nView the details and photos, and submit your quote here (no account needed):\n${r.url}\n\nPlease respond by ${expires.toDateString()}. This link is personal to your company.`,

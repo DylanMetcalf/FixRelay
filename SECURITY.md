@@ -1,6 +1,6 @@
 # Security
 
-> Not security-certified and **not** certified POPIA compliant. An independent security review and a POPIA assessment are required before production use with real customer data.
+> Not security-certified and **not** certified POPIA compliant. An independent security review and a POPIA assessment are required before production use with real personal data.
 
 ## Authentication (`src/server/auth.ts`)
 
@@ -12,7 +12,7 @@
 - Rate limits (shared Postgres limiter, `src/lib/rate-limit.ts`, works across instances): login (20 per 10 min per IP, 8 per email), registration (10 per hour per IP), password reset (10 per hour per IP, 3 per email), invitation acceptance, review-link decisions, verification resends, exports.
 - Client IP = the `X-Forwarded-For` entry `TRUSTED_PROXY_HOPS` from the right (default 1). The leftmost entries are client-controlled and are ignored, so rate limits cannot be bypassed with a fake header.
 - **Password reset**: 256-bit single-use token (hash stored), 60 minutes, only the newest works, same response whether or not the email exists, weak passwords rejected before the token is used, completion signs out every device and emails a "password changed" notice.
-- **Email verification**: 48-hour single-use link at sign-up (resendable). Unverified accounts cannot send invitations or customer review links. Accepting an emailed invitation counts as verified.
+- **Email verification**: 48-hour single-use link at sign-up (resendable). Unverified accounts cannot send invitations or contractor quote requests. Accepting an emailed invitation counts as verified.
 - Session cookie `__Host-fr_session` in production (HTTPS-only, host-locked). Signing in replaces any previous session in that browser.
 - Forms always POST (never GET) so credentials cannot end up in URLs, even if submitted before scripts load.
 - **Not implemented yet:** MFA (recommended for owners and the platform operator).
@@ -21,30 +21,29 @@
 
 All checks are server-side in the service layer. The UI only hides controls.
 
-| Permission | Owner | Manager | Technician | Client rep | Requester | Platform support* |
+| Permission | Owner | Manager | Approver | Technician | Reports faults only | Platform support* |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
-| org.manage (settings, branding, support grants) | ✓ | | | | | |
-| team.manage (invite staff, roles, deactivate) | ✓ | | | | | |
+| org.manage (settings, branding, approval rules, support grants) | ✓ | | | | | |
+| team.manage (invite staff, roles, sites, deactivate) | ✓ | | | | | |
 | team.view | ✓ | ✓ | | | | ✓ |
-| clients.manage (customers, sites, assets, invite customer users) | ✓ | ✓ | | | | |
-| clients.view | ✓ | ✓ | ✓ | | | ✓ |
-| job.create | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| job.viewAll | ✓ | ✓ | | | | ✓ |
-| job.manage (triage, authorise, assign, cancel, close, reopen, priority) | ✓ | ✓ | | | | |
-| job.assess / job.work | ✓ | ✓ | ✓ (assigned jobs only) | | | |
-| quote.manage | ✓ | ✓ | | | | |
-| quote.view (non-draft only for clients) | ✓ | ✓ | | ✓ | | ✓ |
-| customer.decide (portal approvals and sign-off) | | | | ✓ | | |
-| signoff.capture (customer signs on staff device) | ✓ | ✓ | ✓ (assigned) | | | |
-| reports.view | ✓ | ✓ | | | | ✓ |
+| sites.manage (sites, locations, equipment, QR codes, invite fault reporters) | ✓ | ✓ | | | | |
+| sites.view | ✓ | ✓ | ✓ | ✓ | | ✓ |
+| contractors.manage / contractors.view | ✓ / ✓ | ✓ / ✓ | – / ✓ | | | – / ✓ |
+| job.create (report a fault) | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| job.viewAll (within the member's sites) | ✓ | ✓ | ✓ | | | ✓ |
+| job.manage (triage, route, quotes, assign, hold, cancel, close, reopen) | ✓ | ✓ | | | | |
+| job.assess / job.work | ✓ | ✓ | | ✓ (assigned jobs only) | | |
+| quote.manage / quote.view | ✓ / ✓ | ✓ / ✓ | – / ✓ | | | – / ✓ |
+| spend.approve (limited by amount) | unlimited | manager limit | approver limit | | | |
+| reports.view | ✓ | ✓ | ✓ | | | ✓ |
 
-\*Platform support is read-only and needs a grant from the tenant (see below).
+\*Platform support is read-only and needs a grant from the tenant (see below). "Reports faults only" members are free (not counted as seats).
 
 **Row-level job visibility (`jobScope`)**, which every job query uses:
-- Owner/Manager: all jobs in the tenant. Technician: jobs they lead, are added to, or reported. Client rep: jobs of their own client only. Requester: jobs they reported.
-- A member with `clientId` can **never** see another client's jobs, whatever roles they hold. Customer users cannot be given staff roles (enforced when inviting and updating).
-- Customer-side views remove internal data **in the service** (`getJob`): assessments, work log, instructions, internal attachments (progress/assessment photos), draft and withdrawn quotes, and internal audit events. Technicians never receive pricing.
-- Cross-tenant IDs return **404 Not Found** (never 403), so they don't reveal that records exist.
+- Owner / Manager / Approver: all jobs in the tenant, limited to `Membership.siteIds` when set. Technician: jobs they lead, are added to, or reported. Fault reporters: only the jobs they reported.
+- Approvals are offered only to members whose limit covers the amount and who cover that site (`approverIdsFor`).
+- Fault reporters see the fault, the progress status and the work evidence (after photos, test documents, signature), not assessments, quotes, prices, internal notes or internal photos. Technicians never receive pricing.
+- Cross-tenant and out-of-scope IDs return **404 Not Found** (never 403), so they don't reveal that records exist.
 
 **Subscription lock**: write permissions are refused when a subscription is suspended or expired past grace. Reading and printing stay available.
 
@@ -60,12 +59,19 @@ All checks are server-side in the service layer. The UI only hides controls.
 - `User.isPlatformAdmin` (the SaaS operator) is **not** a tenant role. The platform console (`/platform`) shows only account and subscription metadata.
 - To view a tenant, the tenant's **Owner must grant support access** (with a reason; 4h, 24h or 72h maximum; revocable). The operator then enters a **read-only** session, and the entry is written to the tenant's audit trail. Expired or revoked grants end access immediately.
 
-## Customer review links
+## Contractor links (`/c/<token>`)
 
-- 256-bit tokens. Only the SHA-256 is stored. A link is scoped to one quote or one completion, expires (14 days, capped at the quote's validity), is single-use, and is revoked when the quote is revised, the job is cancelled, or any decision is recorded.
-- Link pages show only that subject's data and files bound to it. File access via a link is checked against the link's quote or completion.
+- 256-bit tokens; only the SHA-256 is stored. A link is scoped to **one job and one contractor**. Only the newest link of each kind works.
+- **Quote links** expire at the end of the quote deadline day (or after 14 days) and close when the job stops collecting quotes (award, switch to in-house, cancel) or the manager stops waiting for that contractor. A closed link still shows a read-only "closed" page, never other contractors' prices.
+- **Completion links** (90 days) work only while the job is assigned to that contractor and are single use; a new one is issued for rework or reopening.
+- Link pages show only that job's fault details, location, the site's fault photos and (after appointment) the PO and approved value. File reads via a link are checked against that job and kind.
+- Quotes or completions submitted via a link are recorded as "<contractor> (contractor, via secure link)" with time and IP. **Possession of the link is the credential**; the page says the link is personal to the contractor.
+
+## Site report links and QR codes (`/r/<siteToken>`)
+
+- Each site has a random public token used in its QR codes. When reporting without an account is **off** (default), the page only sends people to sign in. When on, anyone with the link can submit a fault for that site and nothing else: they cannot see any job, and the job is marked as a public report for a manager to screen.
+- Abuse controls: rate limits per IP (10/hour) and per site (200/day); name and phone required; uploads go through the same scanning as everywhere else. "Replace link" rotates the token so printed codes stop working.
 - `Referrer-Policy: no-referrer` site-wide so tokens do not leak to other sites. Email bodies containing links are cleared from the outbox once sent.
-- The decision records the typed name, the recipient email the link was sent to, a timestamp, and the IP. **Possession of the link is the credential.** Anyone the customer forwards it to can decide. This is stated on the page. For higher assurance, use the portal (signed-in) channel.
 
 ## Signatures
 
@@ -86,7 +92,7 @@ Drawn signatures (PNG) are stored as evidence of acknowledgement, with name, tim
 - Next.js server actions check the `Origin` header (CSRF). Session cookies are SameSite=Lax. Logout is POST-only.
 - Headers (`next.config.ts`): Content-Security-Policy (`default-src 'self'`; scripts, requests, images, fonts, workers and manifest from this site only; `frame-ancestors 'none'`; `form-action 'self'`; `object-src 'none'`), `X-Frame-Options: DENY`, nosniff, `Referrer-Policy: no-referrer`, HSTS, `Permissions-Policy`. Inline scripts are allowed because Next.js needs them without nonces (roadmap: nonce-based CSP).
 - The service worker caches only public versioned assets, never pages, API responses or files, so nothing leaks between users on a shared device.
-- React escapes output. No `dangerouslySetInnerHTML`. Prisma parameterises SQL. The only raw SQL is tagged-template (parameterised).
+- React escapes output. The only `dangerouslySetInnerHTML` is the QR label sheet, which inserts SVG generated by the `qrcode` library from our own URL (no user input reaches it). Prisma parameterises SQL. The only raw SQL is tagged-template (parameterised).
 - Errors: only `AppError` messages reach users. Unexpected errors are logged on the server and shown as a generic message.
 
 ## Secrets
@@ -98,9 +104,9 @@ See AUDITS.md (five audits plus the e2e findings) and POPIA.md.
 
 ## POPIA considerations (not a compliance statement)
 
-Implemented safeguards: tenant isolation, role-based access, least-privilege customer views, audited operator access, no silent support access, private files, password hashing, and an audit trail.
+Implemented safeguards: tenant isolation, role-based access, least-privilege views for fault reporters and contractors, audited operator access, no silent support access, private files, password hashing, and an audit trail.
 Still to be done before handling real personal information: a privacy notice and terms; an information officer and processes; a data-retention schedule and deletion/anonymisation tooling; data-subject access and export tooling (beyond printable job reports); an operator agreement for hosting and email providers; a breach-notification procedure; stripping EXIF location from photos; backups encryption and region decisions.
 
 ## Security tests that exist
 
-See TESTING.md: cross-tenant reads, writes and references; role boundaries; customer boundaries; draft quote visibility; forged, expired, revoked, reused and tampered links; concurrent duplicate decisions; unsafe uploads; attachment read permissions; invitation reuse and expiry; access revocation; last-owner protection; support access gating; subscription lock; audit-trail immutability.
+See TESTING.md: cross-tenant reads, writes and references; role and site boundaries; approval limits; contractor link scope; forged, expired, revoked, reused and tampered links; concurrent duplicate decisions; unsafe uploads; attachment read permissions; invitation reuse and expiry; access revocation; last-owner protection; support access gating; subscription lock; audit-trail immutability.

@@ -208,7 +208,7 @@ export async function contractorQuoteAction(_: ActionState, fd: FormData) {
       scope: str(fd, "scope"), priceExclVatCents: parseRandToCents(str(fd, "price") || "0"),
       leadTimeDays: optInt(str(fd, "leadTimeDays")), validUntil: optDate(str(fd, "validUntil")),
     }, await filesOf(fd, "files"));
-    return { ok: `Thank you. Quote ${r.number}${r.version > 1 ? ` (version ${r.version})` : ""} has been submitted.`, data: { sent: "1" } };
+    return { ok: `Thank you. Quote ${r.number}${r.version > 1 ? ` (version ${r.version})` : ""} has been submitted.` };
   });
 }
 
@@ -216,6 +216,6 @@ export async function contractorCompletionAction(_: ActionState, fd: FormData) {
   return run(async () => {
     await rateLimit(`contractor:ip:${await clientIp()}`, 40, 60 * 60_000);
     await portal.submitCompletionViaLink(str(fd, "token"), { workPerformed: str(fd, "workPerformed"), observations: str(fd, "observations") }, await filesOf(fd, "files"));
-    return { ok: "Thank you. Your completion has been submitted. The site will check the work.", data: { sent: "1" } };
+    return { ok: "Thank you. Your completion has been submitted. The site will check the work." };
   });
 }

@@ -74,3 +74,16 @@ Result after fixes: **0 axe violations on all 19 pages at both sizes.**
 | E.3 | A form submitted before scripts loaded fell back to **GET with fields (incl. passwords) in the URL** | **High** | Native POST target kept on every form; submit buttons disabled until ready; e2e 15 asserts `method="post"` |
 | E.4 | After setting a new password, the page re-rendered as "link expired" instead of continuing | Medium | Freshly signed-in user is sent to the dashboard |
 | E.5 | Success messages could appear twice (inline then after reload) | Low | Shown once, after the reload |
+
+## Internal site model: review pass (2026-11-17)
+
+After FixRelay was changed to an internal site maintenance system, the new screens were reviewed by screenshot (desktop and phone) and every browser journey was rewritten. Earlier findings that mention customers refer to the previous, contractor-facing version.
+
+| # | Finding | Sev. | Fix | Evidence |
+|---|---|---|---|---|
+| I.1 | A manager holding a quote received by email could not record it without first sending link requests | Medium | "Capture a quote received by email" also available from "Assessed" (moves the job to "Getting quotes", no link sent) | `workflow.test.ts`, e2e feature 9 |
+| I.2 | The contractor's page did not show the work they were asked to quote for (only the email did) | Medium | Scope stored on the link and shown at the top of the contractor page | e2e journey 2, `workflow.test.ts` |
+| I.3 | After submitting a quote or completion the contractor stayed on a filled form (risk of duplicate submissions) | Medium | Page reloads to show the submitted quote / "completion received" | e2e journey 2 |
+| I.4 | The QR sheet inserts generated SVG with `dangerouslySetInnerHTML` | Low (reviewed) | SVG comes only from the `qrcode` library and our own URL; documented in SECURITY.md | — |
+| I.5 | Public QR reports could be abused for spam | Medium | Off by default; IP and per-site rate limits; manager screening queue; link rotation | e2e journey 3, `workflow.test.ts` |
+| I.6 | Money wrapped in the quote comparison; bare "· 0" counts on location chips | Low | No-wrap amounts; "· N jobs" only when there are jobs | screenshots |

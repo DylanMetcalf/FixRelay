@@ -22,7 +22,14 @@ export default async function ContractorPage({ params }: { params: Promise<{ tok
         <h1 className="text-xl font-extrabold">{v.job.title}</h1>
         <p className="muted">{v.job.reference} · {v.job.site}{v.job.location && ` · ${v.job.location}`}</p>
         <div className="mt-2 flex flex-wrap gap-2"><PriorityBadge priority={v.job.priority} emergency={v.job.emergency} />{isQuote && v.job.quoteDeadline && <Pill tone="amber">Quote by {fmtDate(v.job.quoteDeadline)}</Pill>}</div>
-        <p className="mt-3 whitespace-pre-line text-sm">{v.job.description}</p>
+        {v.job.scope && (
+          <div className="mt-3 rounded-md border-l-4 border-signal bg-amber-50 p-3" data-testid="rfq-scope">
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Work to quote for</p>
+            <p className="whitespace-pre-line text-sm">{v.job.scope}</p>
+          </div>
+        )}
+        <p className="mt-3 text-xs font-bold uppercase tracking-wide text-gray-600">Fault reported</p>
+        <p className="whitespace-pre-line text-sm">{v.job.description}</p>
         <dl className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <div><dt className="text-xs font-bold uppercase text-gray-600">Address</dt><dd>{v.job.address || "—"}</dd></div>
           {v.job.asset && <div><dt className="text-xs font-bold uppercase text-gray-600">Equipment</dt><dd>{v.job.asset}</dd></div>}

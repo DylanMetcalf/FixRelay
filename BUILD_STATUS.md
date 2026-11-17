@@ -2,26 +2,27 @@
 
 Last updated: 2026-11-17. Legend: ✅ implemented and tested · 🟡 implemented, partly tested or with known limits · ❌ not started
 
-## Final acceptance criteria
+## Internal site maintenance model (2026-11-17)
 
-| # | Criterion | Status | Evidence |
+FixRelay was changed from a tool for maintenance *contractors serving customers* into an **internal maintenance system for a company's own sites**. Defaults chosen (the plan's recommendations): several sites per subscriber; spending limits by amount with optional PO numbers; three quotes above a limit the company sets (or a written reason); the reporter confirms the fix and the manager closes; reporting without an account behind a setting (off by default); this replaces the contractor-facing version.
+
+| # | Criterion (internal model) | Status | Evidence |
 |---|---|---|---|
-| 1 | Company can create an account and complete onboarding | ✅ | e2e journey and feature 1/4; checklist computed from real records |
-| 2 | Company data is securely separated | ✅ | integration isolation suite; e2e rival company; composite FKs |
-| 3 | Users can be invited and assigned roles | ✅ | e2e journey, 9, 10; integration |
-| 4 | A client and site can be created | ✅ | e2e |
-| 5 | A request can be logged with evidence | ✅ | e2e (photos, GPS stripped) |
-| 6 | An assessment can be recorded | ✅ | e2e |
-| 7 | A valid quotation can be produced and reviewed | ✅ | e2e (VAT totals), unit money tests |
-| 8 | Authorised customers can approve or reject | ✅ | e2e link and portal; integration concurrency and forgery |
-| 9 | An approved job can be assigned | ✅ | e2e |
-| 10 | Technician records work and evidence | ✅ | e2e |
-| 11 | Completion can be submitted for verification | ✅ | e2e |
-| 12 | Authorised customer can approve completed work | ✅ | e2e (link + signature), integration |
-| 13 | Job can be closed or reopened appropriately | ✅ | e2e plus integration |
-| 14 | Complete audit history | ✅ | e2e timeline/report; DB trigger |
-| 15 | Main workflow passes meaningful automated tests | ✅ | 68 integration/unit + 18 e2e, all green |
-| 16 | Installed, configured and deployed using the documentation | ✅ | Fresh clone from the docs verified, and **deployed live from `render.demo.yaml`: https://fixrelay-demo.onrender.com** (2026-11-17). The live smoke test passed (landing, PWA, headers, sign-up, `__Host-` cookie, demo workspace) and the live confirmation email was **delivered via Resend**. The Dockerfile and docker-compose are still not built (no Docker in the sandbox) |
+| 1 | Company can create an account and complete onboarding | ✅ | e2e journey 1, features 1/4; checklist computed from real records |
+| 2 | Company data is securely separated | ✅ | integration isolation suite; e2e journey 4; composite FKs |
+| 3 | Users can be invited with roles and site limits | ✅ | e2e journeys 1–2, feature 10; integration (site-limited member) |
+| 4 | Sites, locations and equipment can be created; QR codes printed | ✅ | e2e journeys 1, 3 |
+| 5 | Someone on site can report a fault with evidence (app or QR, optionally without an account) | ✅ | e2e journeys 1, 3; feature 8 (GPS stripped) |
+| 6 | An assessment can be recorded | ✅ | e2e journey 1 (technician on a phone) |
+| 7 | The job can be fixed in-house | ✅ | e2e journey 1 |
+| 8 | Contractors can quote by secure link, quotes can be captured and compared | ✅ | e2e journey 2, feature 9; integration |
+| 9 | Spend is approved by the right person for the amount, with PO and three-quote rules | ✅ | e2e journey 2, feature 9; integration (limits, approver limits, concurrency) |
+| 10 | Technician or contractor records work and evidence | ✅ | e2e journeys 1–2 |
+| 11 | The reporter confirms it is fixed (or a manager with a reason / signature) | ✅ | e2e journeys 1–2; integration |
+| 12 | Job can be closed or reopened appropriately | ✅ | e2e journey 1; integration (contractor rework link) |
+| 13 | Complete audit history | ✅ | e2e timeline/report; DB trigger |
+| 14 | Main workflow passes meaningful automated tests | ✅ | 66 integration/unit + 19 e2e, all green |
+| 15 | Installed, configured and deployed using the documentation | ✅ | Live demo https://fixrelay-demo.onrender.com redeployed from this branch via `render.demo.yaml` (migrations run on start) |
 
 ## Previously open gaps (this round)
 
@@ -40,14 +41,15 @@ Last updated: 2026-11-17. Legend: ✅ implemented and tested · 🟡 implemented
 | Area | Status | Notes |
 |---|---|---|
 | Auth, sessions, reset, verification | ✅ | MFA ❌ (roadmap) |
-| Multi-tenancy, roles, customer scoping | ✅ | |
-| Customers/sites/locations/assets | ✅ | |
-| Requests → assessment → quote → approval → assignment → execution → completion → closure | ✅ | |
+| Multi-tenancy, roles, site scoping, approval limits | ✅ | |
+| Sites/locations/equipment, QR codes, public reporting | ✅ | QR scanning with a real phone camera not tested |
+| Contractor directory, secure quote/completion links | ✅ | No contractor accounts (by design) |
+| Fault → assessment → in-house or contractor quotes → approval → work → confirmed fixed → closure | ✅ | |
 | Audit trail, job report | ✅ | PDF via browser print |
 | Notifications (in-app + email outbox + worker) | ✅ | In-process worker option |
-| Dashboard and reports (incl. response time, win rate, rework, CSV) | ✅ | |
+| Dashboard and insights (spend by site/equipment, in-house vs contractor, contractor performance, approval turnaround, CSV) | ✅ | |
 | Subscriptions, operator console, support access | ✅ / 🟡 | No payment provider (by design) |
-| Data export (company, customer) and retention | ✅ | Automated anonymisation ❌ |
+| Data export (company) and retention | ✅ | Automated anonymisation ❌ |
 | Branding, landing page, PWA | ✅ / 🟡 | Not tested on physical phones; no offline data entry |
 | Accessibility | ✅ | 0 axe WCAG 2.1 AA violations (19 pages × 2 sizes) |
 
@@ -57,3 +59,6 @@ Last updated: 2026-11-17. Legend: ✅ implemented and tested · 🟡 implemented
 3. CSP allows inline scripts (needed by Next.js without nonces).
 4. Timezone display fixed to Africa/Johannesburg.
 5. Antivirus only runs when `CLAMAV_HOST`/`CLAMAV_SOCKET` is configured.
+6. Quotes are a single price per contractor (with a document attached), not itemised lines; there is no purchase-order document generation (only the PO number).
+7. Public QR reporting relies on rate limits and manager screening against spam; there is no CAPTCHA.
+8. The earlier contractor-facing features (customer records, customer review links, customer portal) were removed in this version.

@@ -73,7 +73,7 @@ describe("contractor route: quotes → approval → contractor fixes it", () => 
     expect((await prisma.job.findUniqueOrThrow({ where: { id: job.id } }))).toMatchObject({ status: "QUOTING", route: "CONTRACTOR" });
     // CoolTech (VAT registered) quotes online with a document; Sparks online; Handy Andy (no VAT) by email, captured.
     const tokA = await linkFromEmail(t.contractors[0].email);
-    expect((await portal.getContractorLinkView(tokA))).toMatchObject({ state: "open", purpose: "QUOTE", job: { title: "Compressor tripping" } });
+    expect((await portal.getContractorLinkView(tokA))).toMatchObject({ state: "open", purpose: "QUOTE", job: { title: "Compressor tripping", scope: "Replace capacitor" } });
     await portal.submitQuoteViaLink(tokA, { scope: "Capacitor + test", priceExclVatCents: 400000, leadTimeDays: 1 }, [{ filename: "quote.pdf", bytes: Buffer.from("%PDF-1.4 quote") }]);
     await portal.submitQuoteViaLink(await linkFromEmail(t.contractors[1].email), { scope: "Capacitor", priceExclVatCents: 380000 }, []);
     await quotes.recordQuote(t.manager, job.id, t.contractors[2].id, { scope: "Capacitor", priceExclVatCents: 420000 });
@@ -102,6 +102,15 @@ describe("contractor route: quotes → approval → contractor fixes it", () => 
     expect(ev).toMatch(/Quote requested from CoolTech/);
     expect(ev).toMatch(/approved by .*R 4 200\.00.*PO PO-77/);
     expect(ev).toMatch(/Completion submitted by Handy Andy/);
+  });
+
+  it("a quote already received by email can be captured straight from the assessed stage (no link sent)", async () => {
+    const t = await tenant();
+    const job = await assessedJob(t);
+    await quotes.recordQuote(t.manager, job.id, t.contractors[2].id, { scope: "Capacitor", priceExclVatCents: 150000 });
+    expect(await prisma.job.findUniqueOrThrow({ where: { id: job.id } })).toMatchObject({ status: "QUOTING", route: "CONTRACTOR" });
+    expect(await prisma.contractorLink.count({ where: { jobId: job.id } })).toBe(0);
+    await expect(quotes.recordQuote(t.tech, job.id, t.contractors[2].id, { scope: "x", priceExclVatCents: 1 })).rejects.toThrow();
   });
 
   it("enforces spending authority: above the manager's limit it goes to an approver with enough authority", async () => {

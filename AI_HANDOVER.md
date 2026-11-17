@@ -4,7 +4,7 @@ For future AI coding assistants (and humans). Read this first, then BUILD_STATUS
 
 ## What this is
 
-FixRelay is a multi-tenant maintenance job management SaaS (Next.js 15 + PostgreSQL + Prisma). Its one workflow is request → assessment → quote → customer approval → assignment → work → completion evidence → customer verification → closure. Commercial niche: South African industrial and commercial maintenance contractors serving multiple client sites. Currency ZAR; VAT is optional per company.
+FixRelay is a multi-tenant **internal site maintenance** SaaS (Next.js 15 + PostgreSQL + Prisma). Its one workflow is: someone on site reports a fault (app or QR code) → assessment → **in-house** (technician) **or contractor** (secure-link quotes → compare → approval by amount, PO) → work with evidence → the reporter confirms it is fixed → closed. Until 2026-11-17 it was a tool for contractors serving customers; that model (Client, ApprovalLink, /q and /v pages, customer portal) was removed. See WORKFLOWS.md.
 
 ## Project map
 
@@ -21,7 +21,7 @@ src/server/scan.ts              upload safety: ClamAV, PDF active content, image
 src/server/email.ts             email transports (console | smtp | resend) + branded HTML template
 src/server/jobs-runner.ts       background loop (outbox, overdue, retention) for worker or WORKER_IN_PROCESS
 src/server/services/account.ts  password reset, email verification, requireVerifiedEmail
-src/server/services/export.ts   company / customer data export (POPIA)
+src/server/services/export.ts   company data export (POPIA)
 src/server/services/*.ts        ALL business logic (see ARCHITECTURE.md table)
 src/worker.ts                   standalone worker (uses jobs-runner)
 src/instrumentation.ts          starts the loop in-process when WORKER_IN_PROCESS=true
@@ -31,7 +31,8 @@ src/app/_lib/action.ts          run() wrapper for server actions → ActionState
 src/app/actions/*.ts            server actions: parse FormData → call ONE service → return
 src/app/(app)/**                signed-in pages (layout = shell + nav + banners)
 src/app/(auth)/**               login, register, invite
-src/app/q|v/[token]             public customer review pages (quote / completion)
+src/app/c/[token]               contractor portal (quote / completion by secure link)
+src/app/r/[token]               site fault-report page behind QR codes (public reporting when enabled)
 src/app/api/**                  files (private), public link files, manifest, health, logout
 src/components/                 ui.tsx (server-safe primitives), form.tsx (Form/Submit/Flash), client*.tsx
 tests/unit, tests/integration   Vitest; integration uses the real fixrelay_test DB
@@ -71,11 +72,12 @@ Also: do not add `loading.tsx` to the `(app)` group.
 ## Business rules quick reference
 
 See WORKFLOWS.md for the full list. The ones most easily broken:
-- A job requiring customer sign-off can close only from VERIFIED, with a **non-INTERNAL** approval of the **latest** completion.
-- Completion needs an AFTER photo or TEST_DOCUMENT, and no open variation quote.
-- Approved quotes are immutable (also enforced by the DB). Revisions are new rows (same number, version + 1).
-- Direct authorisation without a quote: manager plus reason; from NEW only if emergency.
-- Customer-side users (`ctx.clientId`) are hard-scoped to one client and never get staff roles. `getJob` strips internal data for them.
+- With `reporterConfirmation` on, a job closes only from VERIFIED; a manager may confirm instead of the reporter only with a reason (INTERNAL decision) or the reporter's signature (IN_PERSON).
+- In-house completion needs an AFTER photo or TEST_DOCUMENT; contractor completion via link needs at least one photo and is single use.
+- Submitted quotes are immutable (DB trigger, incl. contractor and lead time). A contractor's new quote is a new version; the previous SUBMITTED one becomes SUPERSEDED.
+- Approving a quote: caller's `approvalLimit`, validity, the multi-quote rule (or exception reason) and the PO rule are checked in `approvals.approveQuote`; everything else (reject others, revoke links, appoint, emails) happens in the same transaction.
+- In-house routing (`routeInHouse`): manager; from NEW only if emergency; withdraws open quotes and tells the contractors.
+- `ctx.siteIds` (empty = all) limits members to sites via `jobScope`/`siteFilter`. Requesters see only their own reports; `getJob` strips assessments, quotes, prices, work notes and internal photos for non-staff. Contractors are never users: they only reach `/c/<token>`.
 - The platform operator sees tenant data only with a live `SupportAccessGrant`, read-only, and audited.
 - Subscription lock = read-only, never data loss.
 
@@ -106,7 +108,7 @@ Closed the production gaps (reset/verification, email transports, shared storage
 3. Nonce-based CSP; automated "anonymise person" tool; post-cancellation deletion schedule.
 4. Billing adapter (Paystack/PayFast) implementing `BillingProvider` and calling `setSubscription`.
 5. Error tracking (Sentry); add WebKit (Safari) to the Playwright projects; test installs on real iPhone/Android.
-7. Product: quote reminders, response-time SLA tracking, technician day view, customer "awaiting approval" home.
+7. Product: quote-deadline reminders to contractors, contractor ratings, planned/preventive maintenance schedules, technician day view, PO document generation.
 
 ## Known issues
 

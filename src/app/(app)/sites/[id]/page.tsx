@@ -29,7 +29,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
         <div className="space-y-5 lg:col-span-2">
           <Card title="Locations">
             {s.locations.length === 0 ? <p className="muted">No locations yet. Add areas such as “Cold Room 2” or “Main Kitchen” so faults can be pinpointed.</p> : (
-              <div className="flex flex-wrap gap-2">{s.locations.map((l) => <Pill key={l.id}>{l.name} · {l._count.jobs}</Pill>)}</div>
+              <div className="flex flex-wrap gap-2">{s.locations.map((l) => <Pill key={l.id}>{l.name}{l._count.jobs ? ` · ${l._count.jobs} job${l._count.jobs === 1 ? "" : "s"}` : ""}</Pill>)}</div>
             )}
             {manage && (
               <Form action={a.createLocationAction} hidden={{ siteId: s.id }} className="mt-3 flex flex-wrap items-end gap-2">

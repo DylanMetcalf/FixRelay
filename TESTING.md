@@ -4,9 +4,9 @@
 
 | Layer | Tool | What it covers | Where |
 |---|---|---|---|
-| Unit | Vitest | Money parsing and rounding, VAT, the state machine, next-action, rate limiter | `tests/unit/` |
-| Integration | Vitest + **real PostgreSQL** (`fixrelay_test`) | Services called directly: full workflow, alternatives, concurrency, security, notifications, subscriptions | `tests/integration/` |
-| End-to-end | Playwright (Chromium) against a **production build** | The real UI in desktop and phone viewports, across several browser contexts (owner, technician, customer, rival company) | `e2e/` |
+| Unit | Vitest | Money parsing and rounding, VAT, the state machine, next-action per route, client IP parsing | `tests/unit/` |
+| Integration | Vitest + **real PostgreSQL** (`fixrelay_test`) | Services called directly: in-house and contractor routes, approvals by limit, three-quote and PO rules, contractor links, public reporting, concurrency, security, notifications, subscriptions | `tests/integration/` |
+| End-to-end | Playwright (Chromium) against a **production build** | The real UI in desktop and phone viewports, across several browser contexts (owner, manager, approver, technician, fault reporter, two contractors without accounts, an anonymous QR reporter, a rival company) | `e2e/` |
 
 Integration tests do not mock the database. Each test creates its own tenant(s) with unique names, so tests are independent and the shared test DB also exercises isolation. `tests/global-setup.ts` runs `prisma migrate deploy` (non-destructive) and refuses any database whose name does not contain `test`.
 
@@ -24,15 +24,21 @@ npm run build && npm run test:e2e # starts `next start -p 3100` against the test
 npm run typecheck
 ```
 
-## Results (last run: 2026-11-17, Linux, Node 22, PostgreSQL 16.15, Chromium from Playwright 1.63, ClamAV 1.5.4)
+## Results (last run: 2026-11-17, after the switch to the internal site model; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
 
 - `npm run typecheck`: **pass**
-- `npm test` (with `CLAMAV_TEST_PORT=3310`): **68 / 68 passed**, 6 files, run twice in a row
-- `npm run test:e2e`: **18 / 18 passed** (3 journey tests plus 15 feature tests), run twice in a row, about 70s
+- `npm test` (with `CLAMAV_TEST_PORT=3310`): **66 / 66 passed**, 6 files
+- `npm run test:e2e`: **19 / 19 passed** (4 journey tests plus 15 feature tests), about 100s
 - `npm run build`: **pass**
-- Fresh-clone install from README/DEPLOYMENT (empty database → migrate → seed → build → start with in-process worker → sign up → confirmation email delivered): **pass**
-- **Live deployment** (https://fixrelay-demo.onrender.com): smoke test passed (landing, manifest, service worker, CSP/HSTS, sign-up, `__Host-` cookie, demo workspace). The live sign-up confirmation email was **delivered** (Resend status), and a direct Resend transport test was also delivered
-- axe-core WCAG 2.1 AA: **0 violations** on 19 pages at desktop and phone sizes (also enforced by e2e test 14)
+- `prisma migrate diff` (migrations vs schema): **no drift**
+- axe-core WCAG 2.1 AA: **0 violations** on the main screens at desktop and phone sizes (e2e test 14)
+- Live demo: see BUILD_STATUS.md for the latest deployment check
+
+### What the browser journeys cover (e2e/journey.spec.ts)
+1. **In-house**: register → confirm email → add a site with locations → invite a technician and a fault reporter (phone) → the reporter reports a fault with a photo → the manager sends it for assessment → the technician assesses on a phone (no prices shown) → "Fix it in-house" → assign → start, log time → finishing without an after-photo is refused → the reporter answers "Is it fixed?" from their dashboard → the manager cannot close before that → close → full history, printable report, Insights count → reopen with a reason.
+2. **Contractor + approvals**: the owner sets approval rules (manager R 5 000, PO required, 2 quotes above R 10 000) → invites a manager and a finance approver → adds a VAT-registered and a non-VAT contractor → the manager logs and assesses a fault → requests quotes from both → each contractor opens their emailed link on their own device (the requested scope is shown) and quotes (VAT only on the registered one) → side-by-side comparison, cheapest marked → R 6 900 is over the manager's limit → "Send for approval" → the approver sees it under "Needs your approval" and approves with a PO → the other contractor's link shows "closed" and they get a "not selected" email → the winner gets an appointment link, submits completion with a photo (single use) → the operator signs on the manager's device → close → contractor performance on Insights.
+3. **QR reporting without an account**: off by default (the QR link asks for sign-in) → switched on → QR label sheet (site + each location) → an anonymous phone scans a location code: location pre-filled → report sent, reference shown → "Public reports to screen" on the dashboard → the reporter's details on the job → "Replace link" makes the old QR codes stop working.
+4. **Permissions and tenancy**: technicians are refused settings, quotes, insights, contractors and the platform console; a fault reporter gets 404 on someone else's job and doesn't see it in lists; signed-out visitors are sent to sign in and files are not served; bogus and closed contractor links explain themselves; a second company gets 404 on the first company's jobs, files, reports and sites.
 
 ### Real services used in tests
 | Capability | Tested against |
@@ -47,16 +53,16 @@ npm run typecheck
 To run the ClamAV test locally: install `clamav-daemon`, start `clamd` on 127.0.0.1:3310 with real signatures (or the EICAR test signature), then `CLAMAV_TEST_PORT=3310 npm test`. Without it, that one test is skipped and reported as skipped.
 
 ### Playwright feature tests (e2e/features.spec.ts)
-1 landing page → sign-up, signed-in users skip it, legal pages · 2 PWA manifest, icons, shortcuts, screenshots, active service worker · 3 offline page; nothing tenant-specific cached; first visit does not reload · 4 email confirmation gate and unlock · 5 forgot password (no enumeration, single use, input kept on error, old password rejected) · 6 bogus/expired links explained · 7 show/hide password · 8 photo GPS stripped and PDF scripts refused through the UI · 9 customer rep "Needs your decision" → portal approval · 10 technician on a phone: bottom nav, alert badge, opening the job clears it · 11 report metrics with definitions; CSV formula-injection safe · 12 company data export (no secrets; others refused; audited) · 13 rate limiting · 14 axe WCAG 2.1 AA on main screens (desktop and phone) · 15 security headers, `__Host-` cookie, minimal health, session rotation, forms never GET
+1 landing page → sign-up, signed-in users skip it, legal pages · 2 PWA manifest, icons, shortcuts, screenshots, active service worker · 3 offline page; nothing tenant-specific cached; first visit does not reload · 4 email confirmation gate and unlock · 5 forgot password (no enumeration, single use, input kept on error, old password rejected) · 6 bogus/expired links explained · 7 show/hide password · 8 photo GPS stripped and PDF scripts refused through the UI · 9 three-quote rule: approving with fewer quotes above the threshold needs a written reason, which is kept in the history (quote captured from an email) · 10 technician on a phone: bottom nav, alert badge, opening the job clears it · 11 report metrics with definitions; CSV formula-injection safe · 12 company data export (no secrets; others refused; audited) · 13 rate limiting · 14 axe WCAG 2.1 AA on main screens (desktop and phone) · 15 security headers, `__Host-` cookie, minimal health, session rotation, forms never GET
 
 ## Known gaps in testing (honest list)
 
 - No load or performance tests. Reports aggregate in application code (capped at 5,000 rows per query).
-- Email has not been sent through a live provider account (SMTP verified against a real SMTP server, Resend against a stand-in).
 - PWA installability was verified by manifest, icon and service-worker checks in Chromium, not by installing on a physical iOS/Android device. **Offline data entry is not supported**: the service worker shows an offline page.
 - Only Chromium was used for e2e (no Safari/WebKit or Firefox runs).
 - The Dockerfile and docker-compose were not built (no Docker in the sandbox).
-- Not every page has an e2e test (asset pages, platform console UI, settings for priority rules and support grants are covered by service tests only).
+- Not every page has an e2e test (equipment pages, contractor edit page, platform console UI, priority rules and support grants are covered by service tests only).
+- Printed QR labels were checked on screen; scanning a printed label with a real phone camera was not tested.
 
 ## Failures found and fixed during development (for future reference)
 
@@ -73,3 +79,10 @@ To run the ClamAV test locally: install `clamav-daemon`, start `clamd` on 127.0.
 9. A form submitted before scripts loaded could fall back to **GET with the password in the URL** → forms always have a native POST target, and buttons are disabled until ready.
 10. On desktop only the job reference was clickable, not the title → title linked.
 11. Accessibility: header button name mismatch, an invalid definition list, low-contrast text → fixed (0 violations).
+
+### Found while rewriting the browser tests for the internal site model, all fixed
+12. A quote already received by email could only be captured after sending link requests → "Capture a quote received by email" now also works straight from "Assessed".
+13. The contractor's link page did not show the work the manager asked them to quote for (it was only in the email) → stored on the link and shown at the top of the page.
+14. After a contractor submitted a quote or completion the page kept the filled form with a small message, inviting duplicate submissions → the page reloads and shows their submitted quote / "completion received".
+15. Money values in the quote comparison wrapped onto two lines → no wrapping.
+16. Location chips showed a bare job count ("Cold Room 2 · 0") → the count is shown only when there are jobs ("· 2 jobs").

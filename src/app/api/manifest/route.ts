@@ -26,7 +26,7 @@ export async function GET() {
         { src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
       ],
       shortcuts: [
-        { name: "New request", short_name: "New", url: "/requests/new", icons: [{ src: "/icon-192.png", sizes: "192x192" }] },
+        { name: "Report a fault", short_name: "Report", url: "/requests/new", icons: [{ src: "/icon-192.png", sizes: "192x192" }] },
         { name: "My jobs", url: "/my-jobs", icons: [{ src: "/icon-192.png", sizes: "192x192" }] },
         { name: "Dashboard", url: "/dashboard", icons: [{ src: "/icon-192.png", sizes: "192x192" }] },
       ],

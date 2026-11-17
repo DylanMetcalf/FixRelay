@@ -1,103 +1,93 @@
 # Workflows
 
-Source of truth: `src/server/workflow.ts` (`TRANSITIONS`). Enforcement: `jobs.ts → move()` (guarded update) plus per-action permission checks.
+Source of truth: `src/server/workflow.ts` (`TRANSITIONS`, `nextAction`). Enforcement: `jobs.ts → move()` (a guarded `UPDATE … WHERE status = <status read>`) plus a permission check on every action.
 
-## Job lifecycle
+FixRelay is an **internal** maintenance system for a company with one or more sites. Someone on site reports a fault; the maintenance team either fixes it **in-house** or gets **contractor quotes**; the job is tracked until the person who reported it confirms it is fixed.
+
+## The two routes
 
 ```
-NEW ──► ASSESSING ──► ASSESSED ──► QUOTING ──► AWAITING_APPROVAL ──► APPROVED ──► ASSIGNED ──► IN_PROGRESS ──► AWAITING_VERIFICATION ──► VERIFIED ──► CLOSED
- │                       │            ▲               │ (rejected /            ▲          │  ▲           │  ▲                 │ (rejected)                  │
- │ (emergency, direct    │ (no quote  └───────────────┘  revised)              │          ▼  │           ▼  │                 └──► IN_PROGRESS           │ reopen
- │  authorisation)       │  needed)                                             │        ON_HOLD ◄──────────┘                                               ▼
- └───────────────────────┴───────────────────────────────────────────────────► APPROVED                                                             ASSIGNED
-Any open state except AWAITING_VERIFICATION / VERIFIED ──► CANCELLED (terminal)
+                         ┌── IN-HOUSE ──► APPROVED ──► ASSIGNED (technician) ──► IN_PROGRESS ──┐
+NEW ──► ASSESSING ──► ASSESSED                                                                  ├──► AWAITING_VERIFICATION ──► VERIFIED ──► CLOSED
+                         └── CONTRACTOR ──► QUOTING ──► (AWAITING_APPROVAL) ──► ASSIGNED (contractor) ──┘        │ not fixed              │ reopen
+                                               ▲               │ not approved                                     ▼                        ▼
+                                               └───────────────┘                                              IN_PROGRESS               ASSIGNED
+Any open state except AWAITING_VERIFICATION / VERIFIED ──► CANCELLED (terminal).   ASSIGNED / IN_PROGRESS ⇄ ON_HOLD.
 ```
 
 | From | Allowed to |
 |---|---|
-| NEW | ASSESSING, APPROVED (emergency only), CANCELLED |
+| NEW | ASSESSING, APPROVED (emergency in-house), CANCELLED (incl. rejecting a public report) |
 | ASSESSING | ASSESSED, CANCELLED |
-| ASSESSED | QUOTING, APPROVED, CANCELLED |
-| QUOTING | AWAITING_APPROVAL, APPROVED, CANCELLED |
-| AWAITING_APPROVAL | APPROVED, QUOTING, CANCELLED |
+| ASSESSED | QUOTING (request or capture a quote), APPROVED (in-house), CANCELLED |
+| QUOTING | AWAITING_APPROVAL (over the chooser's limit), APPROVED (switch to in-house), CANCELLED. Approving a quote goes QUOTING → APPROVED → ASSIGNED in one transaction |
+| AWAITING_APPROVAL | APPROVED (→ ASSIGNED to the contractor), QUOTING (not approved), CANCELLED |
 | APPROVED | ASSIGNED, CANCELLED |
-| ASSIGNED | IN_PROGRESS, ON_HOLD, CANCELLED |
+| ASSIGNED | IN_PROGRESS, ON_HOLD, AWAITING_VERIFICATION (contractor completion), CANCELLED |
 | IN_PROGRESS | AWAITING_VERIFICATION, ON_HOLD, CANCELLED |
-| ON_HOLD | ASSIGNED, IN_PROGRESS (returns to the state it came from), CANCELLED |
-| AWAITING_VERIFICATION | VERIFIED, CLOSED (only when sign-off is not required), IN_PROGRESS (rejected) |
+| ON_HOLD | ASSIGNED, IN_PROGRESS (back to where it was), CANCELLED |
+| AWAITING_VERIFICATION | VERIFIED, CLOSED (only when reporter confirmation is off), IN_PROGRESS (not fixed) |
 | VERIFIED | CLOSED |
 | CLOSED | ASSIGNED (reopen) |
-| CANCELLED | — |
+
+`Job.route` is `UNDECIDED` until the manager chooses, then `IN_HOUSE` or `CONTRACTOR` (a CHECK constraint ties `contractorId` to the contractor route).
 
 ## Business rules
 
-**Logging**
-- Anyone with `job.create` (staff, client representative, requester) can log a request. Customer-side users can only log requests for their own client.
-- The site, location and asset must belong to the chosen customer (and tenant).
-- `dueAt` = reported + the priority's completion hours. Assignment with a planned end date overrides it.
-- Priority never authorises anything. It is only urgency (the form states this).
-- New requests notify all managers. A request without a responsible manager is counted as "unowned" on the dashboard; the first manager to act becomes `ownerId`.
+**Reporting a fault**
+- Any member with `job.create` reports from the app (`/requests/new`): site → location → equipment pickers that narrow as you choose. Members limited to certain sites only see those sites.
+- **QR codes**: every site has a secret `publicToken`. `/sites/:id/qr` prints one label for the site, each location and each piece of equipment (`/r/<token>?l=<location>&a=<asset>`). Scanning it as a signed-in member opens the normal form pre-filled; otherwise:
+- **Reporting without an account** (off by default; Settings → "Anyone with a site link or QR code can report"): name and phone are required, email optional (they get the reference number). The job is created with `source = PUBLIC_LINK`, no requester and reporter confirmation **off** (the manager checks the work instead). Public reports show on the dashboard as "Public reports to screen"; a manager accepts or rejects them. Rate limited per IP (10/hour) and per site (200/day). "Replace link" on the site rotates the token and kills every printed QR code.
+- `dueAt` = reported + the priority's completion hours. Priority is urgency only, never authority.
 
-**Assessment**
-- A manager sends the request for assessment (optionally naming an assessor) or assesses it directly.
-- Technicians can only assess jobs they are assigned to.
-- The assessment records whether a quote is required. That is advisory: the manager then prepares a quote or authorises directly.
+**Assessment**: a manager sends it to a technician (or the unassigned queue) or assesses it directly. The assessment says whether the in-house team can fix it or a contractor is needed. That is advice: the manager decides the route.
 
-**Authorising without a quote (explicit rule)**
-- Manager only, with a **mandatory reason** that is stored on the job and in the audit trail.
-- Allowed from ASSESSED or QUOTING (any open draft quote is withdrawn), or from NEW **only for emergency requests**.
+**In-house route**: "Fix it in-house" (optional note) → APPROVED → assign a lead technician (+ helpers, planned dates, instructions) → start → updates with time and materials → "Work finished": what was done plus **at least one after-photo or test document**.
 
-**Quotations**
-- ORIGINAL quote: started from ASSESSED (the job moves to QUOTING). VARIATION quote: for additional work while a job is ASSIGNED, IN_PROGRESS or ON_HOLD (the job status does not change).
-- Only DRAFT quotes are editable. Submitting needs at least one line, a scope, and a validity date not in the past. Totals are recomputed on the server.
-- Revision creates version n+1 as a new DRAFT copy. A SUBMITTED predecessor becomes SUPERSEDED and its links are revoked. A REJECTED one stays REJECTED. APPROVED quotes can never be revised or changed.
-- A quote cannot be approved after its validity date (end of that day). Review links never outlive the quote's validity.
-- Rejection requires a comment. A rejected original quote returns the job to QUOTING.
+**Contractor route**
+- **Request quotes**: choose contractors from the directory, describe the work, optional deadline. Each contractor gets an email with a personal **secure link** (`/c/<token>`, 256-bit, only the SHA-256 stored, expires at the end of the deadline day or after 14 days). The link page shows the work to quote for, the fault, the location and the site's photos. It needs a confirmed email address on the requester's account.
+- **Capture a quote received by email/phone**: from ASSESSED or QUOTING, no link is sent.
+- **Quotes**: one price excl. VAT; 15% VAT is added only if the contractor is VAT registered; integer cents. A new quote from the same contractor supersedes their previous one (all versions are kept and frozen by a trigger).
+- **Compare**: quotes sorted by total, cheapest marked; who has not responded yet; the company rules and your own limit are shown.
+- **Spending authority** (Settings → Approval rules): Owner unlimited; Approver up to the approver limit (empty = unlimited); Maintenance manager up to the manager limit. Choosing a quote within your limit approves it; above it, it is **sent for approval** to everyone (for that site) whose limit covers it and they see it under "Needs your approval".
+- **Several quotes rule**: above the threshold you need `minQuotes` quotes, or a written reason (stored on the job and in the history).
+- **PO number**: optional, or required by the rules.
+- **On approval** (one transaction): the decision is recorded; other quotes are rejected and their links closed (contractors see a read-only "closed" page and get a "not selected" email); the job becomes ASSIGNED to the contractor with the approved value and PO; the contractor gets an **appointment email** with a completion link (90 days).
+- **Contractor completion**: through the completion link, what was done plus **at least one photo**; single use. A manager can also record it for them (photos received by email), or resend the link.
+- Switching to in-house while quoting withdraws all open quotes and tells the contractors.
 
-**Customer decisions (quotes and completed work)**
+**Confirming it is fixed**
+- If `reporterConfirmation` is on (company default, can be changed per job), the person who reported it answers **"Is it fixed?"** (dashboard card "Is it fixed? Please confirm"). A manager can confirm instead, but must give a reason, or capture the reporter's **signature on the technician's device**.
+- "Not fixed" (comment required) sends the job back to IN_PROGRESS; for contractor jobs the contractor automatically gets a fresh link to put it right.
+- If confirmation is off, the manager checks the work and closes in one step.
 
-| Channel | Who | Recorded as |
+**Close / reopen / cancel**: close from VERIFIED (or directly when confirmation is off). Reopen needs a reason → ASSIGNED; contractor jobs get a new completion link. Cancel needs a reason and is not allowed once work is awaiting confirmation.
+
+## Who decides what
+
+| Decision | Channel | Recorded as |
 |---|---|---|
-| Review link | Anyone holding the link (no account); must type their name | `LINK`, link id, recipient email, IP |
-| Portal | Signed-in CLIENT member of that customer | `PORTAL`, user id, IP |
-| In person | Staff device; the customer's name and drawn signature are mandatory | `IN_PERSON`, recorded by staff id |
-| Internal | Manager records a decision received another way (PO, phone); a comment explaining how is mandatory | `INTERNAL`, recorded by staff id. Allowed for quotes only, not for completion sign-off |
+| Spend approval | Signed-in Owner / Approver / Manager within their limit | `PORTAL`, user, amount, PO, exception reason |
+| Not approved | Approver | comment required, job back to QUOTING |
+| Fixed / not fixed | The reporter (signed in) | `PORTAL` |
+| Fixed / not fixed | Reporter's name + drawn signature on a staff device | `IN_PERSON`, recorded by staff |
+| Fixed / not fixed | Manager instead of the reporter | `INTERNAL`, reason required |
 
-Exactly one decision per quote version or completion version (DB unique, plus guarded updates).
-
-**Execution**
-- Only an ASSIGNED job can be started (by an assigned technician or a manager).
-- Updates are timestamped activity, which supports multiple visits. "Additional work" and "clarification" updates notify managers.
-- Hold requires a reason. Resume returns to the previous state.
-
-**Completion**
-- Requires IN_PROGRESS, a description of the work performed, **at least one AFTER photo or TEST_DOCUMENT** not already bound to an earlier completion, and **no variation quote still in DRAFT/SUBMITTED**.
-- Evidence attachments are bound to that completion version (`completionId`).
-- Customer-side rejection sends the job back to IN_PROGRESS, and a new completion version is needed.
-
-**Closure**
-- If `customerSignoffRequired` (company default, overridable per job until work is submitted; changes are audited), the job can only close from VERIFIED, which needs a non-INTERNAL customer approval of the **latest** completion.
-- If not required, a manager can "verify and close" from AWAITING_VERIFICATION; this records an INTERNAL decision.
-
-**Reopen**: manager only, reason required. It goes to ASSIGNED, clears the completed/closed dates and increments `reopenCount`.
-
-**Cancel**: manager only, reason required. It is not allowed once work is awaiting verification or verified. Open quotes are withdrawn and their links revoked.
+Decisions are append-only (trigger) and unique per quote / completion version.
 
 ## Notifications
 
-| Event | Who is notified |
+| Event | Who |
 |---|---|
-| Request created | Managers (except the creator) |
+| Fault reported | Managers; public reports also send the reporter an acknowledgement email if given |
 | Sent for assessment | Named assessor |
-| Assessed | Managers |
-| Quote submitted | Client representatives of that customer (in-app plus email) |
-| Quote approved / rejected | Managers |
+| Assessed / quote received | Managers |
+| Sent for approval | Approvers whose limit covers the amount (and who cover that site) |
+| Approved / not approved | Managers; contractor appointment email; "not selected" emails |
 | Assigned | Lead and additional technicians |
-| Additional work / clarification | Managers |
-| Put on hold | Managers |
-| Completion submitted | Managers plus client representatives (if sign-off is required) |
-| Completion approved / rejected | Managers, lead technician, submitter |
-| Overdue (worker) | Managers plus lead technician, once per job per day |
-| Closed / cancelled / reopened | Requester and technicians (reopened: also managers) |
+| Clarification / more work needed / on hold | Managers |
+| Work finished | The reporter ("Is it fixed?") or managers when confirmation is off |
+| Not fixed | Managers, technician or contractor (with a new link) |
+| Overdue (worker) | Managers and the lead technician, once per job per day |
 
-Each notification has a `dedupeKey` of the form event + user, so it is never sent twice. Review-link and invitation emails are queued in the outbox, and message bodies are cleared after sending (they contain secrets).
+Every notification has a `dedupeKey`. Emails go through the outbox (retries with backoff); bodies containing links are cleared after sending. Addresses on reserved domains (`example.com`, `*.test`, `*.example`, …) are never sent.

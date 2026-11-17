@@ -44,6 +44,21 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
       </Form>
     </D>
   );
+  const captureQuote = () => (
+      <D key="capture" label="Capture a quote received by email">
+        <Form action={a.recordQuoteAction} hidden={h}>
+          <Select label="Contractor" name="contractorId" required options={[{ value: "", label: "Choose…" }, ...contractors]} />
+          <TextArea label="What the quote covers" name="scope" required rows={2} />
+          <Field label="Price excl. VAT (R) – VAT is added if the contractor is VAT registered" name="price" required inputMode="decimal" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Can start within (days)" name="leadTimeDays" inputMode="numeric" />
+            <Field label="Valid until" name="validUntil" type="date" />
+          </div>
+          <Field label="Quote document" name="files"><input id="q-files" name="files" type="file" multiple accept={FILES} className="input" /></Field>
+          <Submit>Save quote</Submit>
+        </Form>
+      </D>
+  );
   const requestQuotes = (label: string, primary = false) => (
     <D key="rfq" label={label} primary={primary}>
       {contractors.length === 0 ? <p className="text-sm">Add contractors to your <a className="link" href="/contractors">contractor directory</a> first.</p> : (
@@ -72,25 +87,10 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
     if (job.emergency) blocks.push(inHouse(), requestQuotes("Emergency: get quotes now"));
   }
   if (st === "ASSESSING" && can(ctx, "job.assess") && (manage || job.assigned)) blocks.push(<D key="assess" label="Record assessment" primary>{assessmentForm}</D>);
-  if (manage && st === "ASSESSED") blocks.push(inHouse(true), requestQuotes("Get contractor quotes", true));
+  if (manage && st === "ASSESSED") blocks.push(inHouse(true), requestQuotes("Get contractor quotes", true), captureQuote());
   if (manage && st === "QUOTING") {
     blocks.push(requestQuotes("Ask more contractors"));
-    blocks.push(
-      <D key="capture" label="Capture a quote received by email">
-        <Form action={a.recordQuoteAction} hidden={h}>
-          <Select label="Contractor" name="contractorId" required options={[{ value: "", label: "Choose…" }, ...contractors]} />
-          <TextArea label="What the quote covers" name="scope" required rows={2} />
-          <Field label="Price excl. VAT (R) – VAT is added if the contractor is VAT registered" name="price" required inputMode="decimal" />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Can start within (days)" name="leadTimeDays" inputMode="numeric" />
-            <Field label="Valid until" name="validUntil" type="date" />
-          </div>
-          <Field label="Quote document" name="files"><input id="q-files" name="files" type="file" multiple accept={FILES} className="input" /></Field>
-          <Submit>Save quote</Submit>
-        </Form>
-      </D>,
-      inHouse(),
-    );
+    blocks.push(captureQuote(), inHouse());
   }
   if (manage && st === "APPROVED" && !contractorJob) {
     blocks.push(

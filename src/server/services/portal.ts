@@ -40,6 +40,7 @@ export async function getContractorLinkView(token: string) {
     job: {
       reference: job.reference, title: job.title, description: job.description, priority: job.priority, emergency: job.emergency,
       site: job.site.name, address: job.site.address, location: job.location?.name ?? null, asset: job.asset ? `${job.asset.reference} – ${job.asset.name}` : null,
+      scope: link.purpose === "QUOTE" ? link.scope : null,
       quoteDeadline: job.quoteDeadline, poNumber: link.purpose === "COMPLETION" ? job.poNumber : null,
       approvedCostCents: link.purpose === "COMPLETION" ? job.approvedCostCents : null,
     },

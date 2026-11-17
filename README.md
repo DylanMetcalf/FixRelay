@@ -1,32 +1,32 @@
 # FixRelay
 
-**From fault reported to job completed. Every request, quote, approval and repair in one place.**
+**From fault reported to job completed. Every fault, quote, approval and repair across your sites in one place.**
 
 **Live demo:** https://fixrelay-demo.onrender.com (free tier: the first load after idle takes about a minute).
 
-FixRelay is a multi-tenant SaaS for independent industrial and commercial maintenance contractors. It manages one workflow end to end:
+FixRelay is a multi-tenant SaaS **maintenance system for your own sites** (plants, warehouses, offices, schools, hospitality). It runs one workflow end to end:
 
-> Fault reported → Assessment → Quotation → Customer approval → Assignment → Work in progress → Completion with evidence → Customer verification → Closure (and reopening)
+> Someone on site reports a fault (app or QR code) → Assessment → **In-house** (assign a technician) **or contractor** (secure-link quotes → compare → approval by amount, PO) → Work with photo evidence → The reporter confirms it is fixed → Closed (and reopening)
 
 It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) for what is intentionally out of scope.
 
 ## Features (implemented and tested)
 
-- **Accounts**: email confirmation, secure password reset, show/hide passwords, and session hardening.
-- **Company sign-up and onboarding**: trial subscription, a checklist computed from real records, branding (name, logo, colour), VAT settings, response times per priority, and an optional, clearly separated **demo workspace**.
-- **Team and roles**: Owner, Manager/Dispatcher, Technician, Client representative, Requester. Invitations are single-use and expire. Removing access takes effect immediately.
-- **Customers → Sites → Locations → Assets**, with a maintenance history per asset.
-- **Maintenance requests**: reference numbers, priority, emergency flag, category, photos/PDFs, due dates from priority rules.
-- **Assessment**: findings, cause, recommended work, materials, labour estimate, and whether a quote is needed.
-- **Quotations**: labour, material and other lines; exact integer-cent maths; optional VAT; drafts; frozen once submitted; revisions keep every earlier version.
-- **Customer decisions without an account**: secure, expiring, single-use review links for quotes and completed work, plus a customer portal, in-person signature capture, and staff-recorded decisions (clearly labelled).
-- **Assignment**: lead technician, extra technicians, external contractor, planned dates, instructions.
-- **Execution on mobile**: start, progress notes with labour and materials, photos, clarification and additional-work flags, hold/resume, variation quotes.
-- **Completion and sign-off**: before/after photos and test documents are required as evidence; customer verification is required before closing (can be waived per job, with an audit entry); reopening needs a reason.
+- **Accounts**: email confirmation, secure password reset, show/hide passwords, session hardening.
+- **Company sign-up and onboarding**: trial subscription, a checklist computed from real records, branding (name, logo, colour), response times per priority, and an optional, clearly separated **demo workspace** with sample sites, contractors and jobs.
+- **Team and roles**: Owner, Maintenance manager, Approver (site/finance), Technician, and "Reports faults only" (free). Any member can be limited to certain sites. Invitations are single-use and expire.
+- **Sites → Locations → Equipment**, with repair history and spend per machine.
+- **Fault reporting**: from the app on a phone, or by scanning a **QR code** printed per site, location or machine (pre-fills where). Optional **reporting without an account** (name + phone), screened by a manager. Photos, priority, emergency flag, due dates from priority rules.
+- **Assessment**: findings, cause, work needed, materials, time, and whether a contractor is needed.
+- **In-house route**: assign a lead technician and helpers, planned dates, instructions; time and materials logged.
+- **Contractor route**: contractor directory (VAT registered or not); **quote requests by secure link** (no contractor account) or capture a quote received by email; side-by-side comparison with the cheapest marked; revised quotes keep every version.
+- **Spend approval**: limits per role (manager / approver / owner), "send for approval" to whoever can approve the amount, three-quote rule above a threshold (or a recorded reason), optional or required **PO numbers**.
+- **Contractor appointment and completion**: appointment email with a completion link; the contractor submits what was done with photos; "not selected" emails to the others.
+- **Confirmed fixed**: the person who reported it answers "Is it fixed?" (or signs on the technician's phone); "not fixed" sends it back, and contractors get a fresh link. Reopening needs a reason.
 - **Audit trail**: append-only and enforced by a database trigger, shown on every job and in a printable **job report** (print → PDF).
-- **Notifications**: in-app alerts plus an email outbox with deduplication, retries with backoff, and failure tracking. A background worker sends emails and overdue alerts.
-- **Dashboard and reports**: live counts per stage, filters, and metrics with written definitions.
-- **Subscriptions**: plans with entitlements stored in data, trial → grace → read-only. Data is never deleted.
+- **Notifications**: in-app alerts plus an email outbox with deduplication, retries with backoff, failure tracking. A background worker sends emails and overdue alerts.
+- **Dashboard and insights**: live counts per stage, "Needs your approval", public reports to screen; spend by site and equipment, in-house vs contractor, contractor performance (response time, win rate, time to fix, reopened), approval turnaround, all with written definitions; CSV export.
+- **Subscriptions**: plans with entitlements stored in data (staff seats, sites, jobs), trial → grace → read-only. Data is never deleted.
 - **Platform operator console**: no access to tenant data without a time-limited grant from the tenant; any access is audited and read-only.
 - **Installable app (PWA)**: FixRelay icon set, shortcuts, screenshots, an install button with iPhone instructions, an update prompt, and a branded offline page. It does **not** support offline data entry.
 - **Landing page** for prospects, plus privacy and terms templates.
@@ -74,7 +74,7 @@ npm run worker    # separate terminal: emails (printed to the console by default
 | `npm run worker` | Background worker (email outbox, overdue scan, session cleanup) |
 | `npm run typecheck` | TypeScript strict check |
 | `npm test` | Unit and integration tests (Vitest, against the real test database) |
-| `npm run build && npm run test:e2e` | Browser end-to-end tests (18, Playwright, production build on port 3100) |
+| `npm run build && npm run test:e2e` | Browser end-to-end tests (19, Playwright, production build on port 3100) |
 | `npm run db:migrate` | Apply migrations (production-safe) |
 | `npm run db:migrate:dev` | Create a new migration in development |
 | `npm run db:seed` | Plans and the platform operator account (idempotent) |

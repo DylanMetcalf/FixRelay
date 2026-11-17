@@ -21,7 +21,7 @@ export function JobFilterBar({ base, f, sites, techs, view }: { base: string; f:
         <option value="">Any site</option>{sites.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
       </select>
       <select name="route" defaultValue={f.route ?? ""} aria-label="Fixed by" className={sel}>
-        <option value="">In-house or contractor</option><option value="IN_HOUSE">In-house</option><option value="CONTRACTOR">Contractor</option>
+        <option value="">Any fixer</option><option value="IN_HOUSE">In-house</option><option value="CONTRACTOR">Contractor</option>
       </select>
       <select name="technicianId" defaultValue={f.technicianId ?? ""} aria-label="Technician" className={sel}>
         <option value="">Any technician</option>{techs.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}

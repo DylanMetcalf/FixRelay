@@ -34,11 +34,11 @@ export async function QuotesCard({ ctx, jobId }: { ctx: Ctx; jobId: string }) {
                   <span className="block text-xs text-gray-600">{q.number}{q.version > 1 ? ` v${q.version}` : ""} · {q.viaLink ? "submitted online" : "captured by staff"} · {fmtDateTime(q.submittedAt)}</span>
                   {q.files.map((f) => <a key={f.id} href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="mr-2 text-xs underline">📄 {f.filename}</a>)}
                 </td>
-                <td className="text-right tabular-nums">{formatZar(q.subtotalCents)}</td>
-                <td className="text-right font-bold tabular-nums">{formatZar(q.totalCents)}</td>
-                <td className="px-2">{q.leadTimeDays != null ? `${q.leadTimeDays} d` : "—"}</td>
+                <td className="whitespace-nowrap pl-2 text-right tabular-nums">{formatZar(q.subtotalCents)}</td>
+                <td className="whitespace-nowrap pl-2 text-right font-bold tabular-nums">{formatZar(q.totalCents)}</td>
+                <td className="whitespace-nowrap px-2">{q.leadTimeDays != null ? `${q.leadTimeDays} d` : "—"}</td>
                 <td>{fmtDate(q.validUntil)}</td>
-                <td><QuotePill status={q.status} /></td>
+                <td className="whitespace-nowrap"><QuotePill status={q.status} /></td>
               </tr>
             ))}
           </tbody>

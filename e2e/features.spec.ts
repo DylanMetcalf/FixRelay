@@ -1,23 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import sharp from "sharp";
-import { alertText, card, company, db, f, gotoReady, lastEmail, logRequest, newPage, openPanel, PASSWORD, pathFrom, register, shareLink, uid, verifyEmail } from "./helpers";
+import { acceptInvite, addContractor, alertText, card, company, db, f, gotoReady, invite, lastEmail, logRequest, newPage, openPanel, PASSWORD, pathFrom, register, status, uid, verifyEmail } from "./helpers";
 
 test.afterAll(async () => { await db.$disconnect(); });
-
-async function prepareQuote(p: Page, jobUrl: string, price = "1500") {
-  await gotoReady(p, jobUrl);
-  const a = await openPanel(p, "Assess it myself now");
-  await a.locator('[name="findings"]').fill("Spring broken.");
-  await a.getByRole("button", { name: "Submit assessment" }).click();
-  await p.getByRole("button", { name: "Prepare quotation" }).click();
-  await expect(p).toHaveURL(/quotes\//);
-  await f(p, "scope").fill("Replace the spring.");
-  await p.getByTestId("quote-line").first().getByLabel("Description").fill("Spring");
-  await p.getByTestId("quote-line").first().getByLabel("Unit price in rand").fill(price);
-  await p.getByRole("button", { name: "Save and submit for approval" }).click();
-  await expect(p.getByTestId("quote-total")).toBeVisible();
-}
 
 test("1 · landing page explains the product and leads to sign-up; signed-in users skip it", async ({ browser }) => {
   const p = await newPage(browser);
@@ -75,16 +61,16 @@ test("4 · email confirmation is required before inviting people, and the emaile
   await register(p, { email, company: `Verify ${uid()}` });
   await expect(p.getByText("Please confirm your email address.")).toBeVisible();
   await gotoReady(p, "/settings");
-  const invite = card(p, "Invite a team member");
-  await invite.locator('[name="email"]').fill(`t-${uid()}@e2e.example`);
-  await invite.getByRole("button", { name: "Send invitation" }).click();
-  await expect(alertText(invite)).toContainText("confirm your email");
+  const inv = card(p, "Invite someone");
+  await inv.locator('[name="email"]').fill(`t-${uid()}@e2e.example`);
+  await inv.getByRole("button", { name: "Send invitation" }).click();
+  await expect(alertText(inv)).toContainText("confirm your email");
   await p.getByRole("button", { name: "Resend link" }).click();
   await expect(p.getByText(/We sent a new confirmation link/)).toBeVisible();
   await verifyEmail(p, email);
   await gotoReady(p, "/settings");
   await expect(p.getByText("Please confirm your email address.")).toHaveCount(0);
-  const again = card(p, "Invite a team member");
+  const again = card(p, "Invite someone");
   await again.locator('[name="email"]').fill(`t-${uid()}@e2e.example`);
   await again.getByRole("button", { name: "Send invitation" }).click();
   await expect(again.getByTestId("share-link")).toBeVisible();
@@ -156,7 +142,7 @@ test("8 · uploads: photo location data is removed and PDFs with scripts are ref
   const gpsPhoto = await sharp({ create: { width: 1200, height: 900, channels: 3, background: "#7c8a99" } })
     .jpeg().withMetadata({ exif: { IFD0: { Make: "PhoneCo" }, IFD3: { GPSLatitudeRef: "S", GPSLatitude: "26/1 12/1 0/1" } } }).toBuffer();
   expect((await sharp(gpsPhoto).metadata()).exif).toBeDefined();
-  const panel = await openPanel(p, "Add photos to the request");
+  const panel = await openPanel(p, "Add photos to the report");
   await panel.locator('input[type="file"]').setInputFiles({ name: "valve.jpg", mimeType: "image/jpeg", buffer: gpsPhoto });
   await panel.getByRole("button", { name: "Upload" }).click();
   await expect(p.getByText("Uploaded.")).toBeVisible();
@@ -167,60 +153,42 @@ test("8 · uploads: photo location data is removed and PDFs with scripts are ref
   expect(stored.toString("latin1")).not.toContain("PhoneCo");
 
   await gotoReady(p, jobUrl);
-  const again = await openPanel(p, "Add photos to the request");
+  const again = await openPanel(p, "Add photos to the report");
   await again.locator('input[type="file"]').setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7\n1 0 obj << /OpenAction << /S /JavaScript /JS (app.alert(1)) >> >> endobj\n%%EOF") });
   await again.getByRole("button", { name: "Upload" }).click();
   await expect(alertText(again)).toContainText("active content");
 });
 
-test("9 · a customer representative sees what needs their decision and approves in the portal", async ({ browser }) => {
-  const { p, customerUrl } = await company(browser);
-  await gotoReady(p, customerUrl);
-  const repEmail = `rep-${uid()}@client.example`;
-  const portal = card(p, "Customer portal users");
-  await portal.locator('[name="email"]').fill(repEmail);
-  await portal.locator('[name="name"]').fill("Rita Rep");
-  await portal.getByRole("button", { name: "Invite" }).click();
-  const invitePath = await shareLink(portal);
-  const jobUrl = await logRequest(p, "Roller door stuck");
-  await prepareQuote(p, jobUrl, "2500");
-
-  const rep = await newPage(browser, { mobile: true });
-  await gotoReady(rep, invitePath);
-  await f(rep, "password").fill(PASSWORD);
-  await rep.getByRole("button", { name: "Accept invitation" }).click();
-  await expect(rep).toHaveURL(/dashboard/);
-  const needs = rep.getByTestId("needs-decision");
-  await expect(needs).toContainText("Roller door stuck");
-  await needs.getByRole("link", { name: "Review quote" }).click();
-  await rep.getByRole("link", { name: "Review and decide on quotation" }).click();
-  await expect(rep.getByTestId("quote-total")).toHaveText("R 2 500.00");
-  const decide = card(rep, "Your decision");
-  await decide.locator('[name="outcome"]').selectOption("APPROVED");
-  await decide.getByRole("button", { name: "Record my decision" }).click();
-  await expect(rep.getByText("Thank you. Your decision has been recorded.")).toBeVisible();
-  await gotoReady(rep, "/dashboard");
-  await expect(rep.getByTestId("nothing-to-decide")).toBeVisible();
+test("9 · three-quote rule: above the threshold, approving with too few quotes needs a written reason that is kept", async ({ browser }) => {
+  const { p } = await company(browser);
+  await addContractor(p, "LiftRight Forklifts", `lift-${uid()}@contractor.example`);
+  const jobUrl = await logRequest(p, "Forklift hydraulic leak");
+  const a = await openPanel(p, "Assess it myself now");
+  await a.locator('[name="findings"]').fill("Main lift cylinder seal leaking.");
+  await a.locator('[name="quoteRequired"]').selectOption("yes");
+  await a.getByRole("button", { name: "Submit assessment" }).click();
+  const cap = await openPanel(p, "Capture a quote received by email");
+  await cap.locator('[name="contractorId"]').selectOption({ label: "LiftRight Forklifts – Refrigeration" });
+  await cap.locator('[name="scope"]').fill("Reseal main lift cylinder.");
+  await cap.locator('[name="price"]').fill("18 500");
+  await cap.getByRole("button", { name: "Save quote" }).click();
+  await expect(status(p)).toHaveText("Getting quotes");
+  await expect(p.getByTestId("quote-rules")).toContainText("3 quotes needed above R 10 000.00");
+  const choose = p.getByTestId("choose-LiftRight Forklifts");
+  await choose.locator("summary").click();
+  await expect(choose.locator('[name="exceptionReason"]')).toHaveAttribute("required", "");
+  await choose.locator('[name="exceptionReason"]').fill("Only authorised dealer for this forklift model.");
+  await choose.getByRole("button", { name: "Approve and appoint contractor" }).click();
+  await expect(status(p)).toHaveText("Assigned");
   await gotoReady(p, jobUrl);
-  await expect(p.getByTestId("timeline")).toContainText("approved by Rita Rep (customer portal)");
+  await expect(p.getByTestId("timeline")).toContainText("Only authorised dealer");
 });
 
 test("10 · technician on a phone: bottom navigation, alerts, and opening the job clears its alert", async ({ browser }) => {
   const { p } = await company(browser);
-  await gotoReady(p, "/settings");
-  const techEmail = `tech-${uid()}@e2e.example`;
-  const invite = card(p, "Invite a team member");
-  await invite.locator('[name="email"]').fill(techEmail);
-  await invite.locator('[name="name"]').fill("Tumi Tech");
-  await invite.getByRole("button", { name: "Send invitation" }).click();
-  const invitePath = await shareLink(invite);
-  const tech = await newPage(browser, { mobile: true });
-  await gotoReady(tech, invitePath);
-  await f(tech, "password").fill(PASSWORD);
-  await tech.getByRole("button", { name: "Accept invitation" }).click();
-  await expect(tech).toHaveURL(/dashboard/);
+    const tech = await acceptInvite(browser, await invite(p, `tech-${uid()}@e2e.example`, "Tumi Tech", ["TECHNICIAN"]), true);
   const nav = tech.getByRole("navigation", { name: "Mobile" });
-  await expect(nav.getByRole("link")).toHaveText([/My jobs/, /New request/, /Alerts/, /Profile/]);
+  await expect(nav.getByRole("link")).toHaveText([/My jobs/, /Report fault/, /Alerts/, /Profile/]);
 
   const jobUrl = await logRequest(p, "Generator will not start");
   const send = await openPanel(p, "Send for assessment");
@@ -241,13 +209,13 @@ test("11 · reports show defined metrics and the CSV export neutralises spreadsh
   const { p } = await company(browser);
   await logRequest(p, '=HYPERLINK("http://evil.example","click")');
   await gotoReady(p, "/reports");
-  for (const label of ["Jobs opened", "Responded on time", "Quote win rate", "Reopened jobs", "Overdue jobs"]) await expect(p.getByText(label, { exact: true })).toBeVisible();
+  for (const label of ["Faults reported", "Responded on time", "Contractor spend", "In-house vs contractor", "Reopened jobs", "Overdue jobs"]) await expect(p.getByText(label, { exact: true })).toBeVisible();
   await expect(p.getByText(/first response \(first move out of “New”\)/)).toBeVisible();
   const href = await p.getByRole("link", { name: "Download jobs (CSV)" }).getAttribute("href");
   const res = await p.request.get(href!);
   expect(res.headers()["content-type"]).toContain("text/csv");
   const csv = await res.text();
-  expect(csv).toContain('"Reference","Title","Customer"');
+  expect(csv).toContain('"Reference","Title","Site"');
   expect(csv).toContain(`"'=HYPERLINK(""http://evil.example"",""click"")"`);
   expect(csv).not.toMatch(/(^|,)"=HYPERLINK/m);
 });
@@ -260,7 +228,7 @@ test("12 · owners can export all company data; other roles and visitors cannot"
   expect(res.headers()["content-disposition"]).toContain("fixrelay-company-export");
   const body = await res.text();
   const data = JSON.parse(body);
-  expect(data.format).toBe("fixrelay-export/1");
+  expect(data.format).toBe("fixrelay-export/2");
   expect(data.jobs.map((j: { title: string }) => j.title)).toContain("Export me");
   expect(body).not.toMatch(/passwordHash|tokenHash/);
   await gotoReady(p, "/settings");
@@ -288,7 +256,7 @@ test("13 · rate limiting: repeated reset requests for one address are slowed do
   await expect(alertText(p)).toContainText("Too many attempts");
 });
 
-test("14 · accessibility: no WCAG 2.1 AA violations on the main screens (desktop and phone)", async ({ browser }) => {
+test("14 · accessibility: no WCAG 2.1 AA violations on the main screens, and nothing scrolls sideways on a phone", async ({ browser }) => {
   const { p } = await company(browser);
   const jobUrl = await logRequest(p, "Accessibility check job");
   const check = async (page: Page, url: string) => {
@@ -296,9 +264,16 @@ test("14 · accessibility: no WCAG 2.1 AA violations on the main screens (deskto
     const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
     expect(r.violations.map((v) => `${url}: ${v.id}`)).toEqual([]);
   };
-  for (const u of ["/dashboard", jobUrl, "/requests/new", "/reports", "/settings"]) await check(p, u);
+  for (const u of ["/dashboard", jobUrl, "/requests/new", "/reports", "/settings", "/sites", "/contractors"]) await check(p, u);
   const m = await newPage(browser, { mobile: true });
   for (const u of ["/", "/login", "/register", "/forgot-password"]) await check(m, u);
+  // On a phone nothing may scroll sideways (long action labels, tables), signed in or not.
+  const phone = await newPage(browser, { mobile: true, storageState: await p.context().storageState() });
+  for (const u of [jobUrl, "/dashboard", "/requests/new", "/sites", "/settings", "/contractors", "/reports", "/"]) {
+    await gotoReady(phone, u);
+    // Mobile browsers zoom out to fit wide content, so compare with the device width, not the (grown) layout width.
+    expect(await phone.evaluate(() => document.documentElement.scrollWidth - screen.width), u).toBeLessThanOrEqual(0);
+  }
 });
 
 test("15 · security: strict headers, hardened session cookie, minimal public health check", async ({ browser }) => {

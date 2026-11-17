@@ -112,6 +112,8 @@ export async function recordQuote(ctx: Ctx, jobId: string, contractorId: string,
   requirePerm(ctx, "quote.manage");
   return prisma.$transaction(async (tx) => {
     const job = await loadJob(tx, ctx, jobId);
+    // A quote already received by email/phone can start the quoting stage directly (no link is sent).
+    if (job.status === "ASSESSED") { await move(tx, ctx.orgId, job, "QUOTING", { route: "CONTRACTOR", ownerId: job.ownerId ?? ctx.userId }); job.status = "QUOTING"; }
     return insertContractorQuote(tx, actorOf(ctx), job, contractorId, input, false, ctx.userId);
   });
 }
