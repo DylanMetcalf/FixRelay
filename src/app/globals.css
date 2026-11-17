@@ -1,13 +1,24 @@
 @import "tailwindcss";
 
+/* FixRelay brand palette (see BRAND.md). Tenant colour overrides --brand at runtime. */
+@theme {
+  --color-navy: #0b1f3a;     /* Relay Navy: app chrome, dark surfaces */
+  --color-navy-2: #132b4d;   /* hover on navy */
+  --color-navy-3: #24426e;   /* borders on navy */
+  --color-signal: #f5a524;   /* Signal Amber: highlights, active state, "done" */
+  --color-relay: #1e5aa8;    /* Relay Blue: default action colour */
+  --color-sky-dot: #5b8def;  /* "reported" dot in the mark */
+  --color-mist: #f3f5f8;     /* page background */
+}
+
 /* --brand / --brand-fg are set per tenant on <body> (see app/(app)/layout.tsx). */
 :root {
-  --brand: #0f4c81;
+  --brand: #1e5aa8;
   --brand-fg: #ffffff;
   --ink: #111827;
 }
 html { -webkit-text-size-adjust: 100%; }
-body { color: var(--ink); background: #f3f4f6; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { color: var(--ink); background: var(--color-mist); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 :focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
 
 @layer components {

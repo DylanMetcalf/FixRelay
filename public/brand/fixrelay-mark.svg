@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FixRelay">
+  <rect width="512" height="512" rx="112" fill="#0B1F3A"/>
+  <path d="M160 352V214a64 64 0 0 1 64-64h86" fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M160 258h92" fill="none" stroke="#FFFFFF" stroke-width="44" stroke-linecap="round"/>
+  <circle cx="160" cy="370" r="30" fill="#5B8DEF"/>
+  <circle cx="368" cy="150" r="58" fill="#F5A524"/>
+  <path d="M342 151l18 18 34-36" fill="none" stroke="#0B1F3A" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

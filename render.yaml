@@ -1,0 +1,37 @@
+# One-click deployment on Render (render.com): Blueprint → New → connect this repository.
+# Uses one web service with the background worker running in-process (WORKER_IN_PROCESS=true) and a Postgres
+# database. Files are stored in Postgres (STORAGE_DRIVER=db), so no extra storage service is needed to start.
+# Set the "sync: false" values in the Render dashboard. Antivirus: add a ClamAV private service and set CLAMAV_HOST.
+services:
+  - type: web
+    name: fixrelay
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npx prisma migrate deploy && npx next start -p $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase: { name: fixrelay-db, property: connectionString }
+      - key: STORAGE_DRIVER
+        value: db
+      - key: WORKER_IN_PROCESS
+        value: "true"
+      - key: APP_URL
+        sync: false
+      - key: EMAIL_TRANSPORT
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+databases:
+  - name: fixrelay-db
+    plan: basic-256mb
+    region: frankfurt
+    postgresVersion: "16"

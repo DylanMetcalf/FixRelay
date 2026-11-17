@@ -147,7 +147,7 @@ model Organisation {
   name                    String
   slug                    String   @unique
   isDemo                  Boolean  @default(false)
-  brandColour             String   @default("#0f4c81")
+  brandColour             String   @default("#1e5aa8")
   logoAttachmentId        String?  @db.Uuid
   address                 String   @default("")
   phone                   String   @default("")

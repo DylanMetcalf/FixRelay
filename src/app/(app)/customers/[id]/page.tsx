@@ -22,6 +22,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
     <>
       <PageHeader title={c.name} subtitle={<>{c.contactName}{c.email && ` · ${c.email}`}{c.phone && ` · ${c.phone}`}</>}>
         <Link href="/requests/new" className="btn btn-primary">+ New request</Link>
+        {manage && <a href={`/api/export?client=${c.id}`} className="btn btn-secondary" download title="For a POPIA access request from this customer">Export customer data</a>}
       </PageHeader>
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">

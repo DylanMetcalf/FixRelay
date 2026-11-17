@@ -9,4 +9,4 @@ export function readableOn(hex: string): "#ffffff" | "#111827" {
   const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return L > 0.4 ? "#111827" : "#ffffff";
 }
-export const safeColour = (hex: string | undefined | null) => (hex && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#0f4c81");
+export const safeColour = (hex: string | undefined | null) => (hex && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#1e5aa8");

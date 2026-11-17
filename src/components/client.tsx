@@ -4,10 +4,51 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 export function ServiceWorker() {
+  const [update, setUpdate] = useState<ServiceWorker | null>(null);
   useEffect(() => {
-    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") navigator.serviceWorker.register("/sw.js").catch(() => {});
+    if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") return;
+    navigator.serviceWorker.register("/sw.js").then((reg) => {
+      const watch = (w: ServiceWorker | null) => w?.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) setUpdate(w); });
+      watch(reg.installing);
+      reg.addEventListener("updatefound", () => watch(reg.installing));
+    }).catch(() => {});
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; window.location.reload(); } });
   }, []);
-  return null;
+  if (!update) return null;
+  return (
+    <div role="status" className="no-print fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg bg-navy px-4 py-3 text-sm text-white shadow-lg md:bottom-6">
+      <span>A new version of FixRelay is ready.</span>
+      <button className="btn btn-sm bg-signal text-navy" onClick={() => update.postMessage("skipWaiting")}>Update</button>
+    </div>
+  );
+}
+
+type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+
+/** "Install app" button: uses the browser prompt where available, and shows iPhone instructions otherwise. */
+export function InstallButton({ className = "btn bg-signal text-navy" }: { className?: string }) {
+  const [evt, setEvt] = useState<InstallEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [help, setHelp] = useState(false);
+  useEffect(() => {
+    setInstalled(window.matchMedia("(display-mode: standalone)").matches);
+    const on = (e: Event) => { e.preventDefault(); setEvt(e as InstallEvent); };
+    window.addEventListener("beforeinstallprompt", on);
+    window.addEventListener("appinstalled", () => setInstalled(true));
+    return () => window.removeEventListener("beforeinstallprompt", on);
+  }, []);
+  if (installed) return <p className="text-sm font-semibold">✓ FixRelay is installed on this device.</p>;
+  return (
+    <div>
+      <button type="button" className={className} onClick={async () => { if (evt) { await evt.prompt(); setEvt(null); } else setHelp((h) => !h); }}>Install FixRelay app</button>
+      {help && (
+        <p className="mt-2 text-sm" role="note">
+          <strong>iPhone / iPad:</strong> open this page in Safari, tap Share, then <em>Add to Home Screen</em>. <strong>Android:</strong> open the browser menu (⋮) and tap <em>Install app</em>. <strong>Desktop:</strong> use the install icon in the address bar.
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function NavLink({ href, children, className = "", activeClass }: { href: string; children: React.ReactNode; className?: string; activeClass: string }) {

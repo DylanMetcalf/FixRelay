@@ -27,7 +27,7 @@ export function ReviewShell({ org, token, children }: { org: Org; token: string;
 
 export function ReviewMessage({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-slate-900 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-navy p-4">
       <div className="card max-w-md text-center"><h1 className="text-xl font-extrabold">{title}</h1><p className="muted mt-2">{children}</p></div>
     </main>
   );

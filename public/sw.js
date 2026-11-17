@@ -1,15 +1,34 @@
-// FixRelay service worker. Deliberately minimal:
-//  - makes the app installable and shows a friendly page when the device is offline;
-//  - caches NOTHING that belongs to a tenant (no pages, no API responses, no attachments), so there is
-//    no cross-tenant or cross-user cache to isolate. Offline data entry is NOT supported (see BUILD_STATUS.md).
-const CACHE = "fixrelay-shell-v1";
+// FixRelay service worker.
+//  - Caches only PUBLIC, versioned static files (app code under /_next/static, icons, brand assets) for speed.
+//  - NEVER caches pages, API responses, attachments or anything tenant-specific, so there is nothing to leak
+//    between users or companies on a shared device.
+//  - Navigations go to the network; if the device is offline, a branded offline page is shown.
+//  - Offline data entry is NOT supported (see BUILD_STATUS.md).
+const VERSION = "fixrelay-v2";
+const SHELL = ["/offline.html", "/icon-192.png", "/icon.svg", "/apple-touch-icon.png"];
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/offline.html", "/icon-192.png"])).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)));
 });
 self.addEventListener("activate", (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
+self.addEventListener("message", (e) => { if (e.data === "skipWaiting") self.skipWaiting(); });
+const isStatic = (url) => url.origin === self.location.origin && (url.pathname.startsWith("/_next/static/") || /^\/(icon|apple-touch|favicon|brand\/)/.test(url.pathname));
 self.addEventListener("fetch", (e) => {
-  if (e.request.mode !== "navigate") return;
-  e.respondWith(fetch(e.request).catch(() => caches.match("/offline.html")));
+  const req = e.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (req.mode === "navigate") {
+    e.respondWith(fetch(req).catch(() => caches.match("/offline.html")));
+    return;
+  }
+  if (isStatic(url)) {
+    e.respondWith(caches.open(VERSION).then(async (c) => {
+      const hit = await c.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok) c.put(req, res.clone());
+      return res;
+    }));
+  }
 });

@@ -1,0 +1,35 @@
+# Local or single-server deployment: Postgres + ClamAV + web + worker.
+#   cp .env.example .env   (edit APP_URL, EMAIL_*, passwords)
+#   docker compose up -d --build
+services:
+  db:
+    image: postgres:16
+    environment: { POSTGRES_USER: fixrelay, POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}, POSTGRES_DB: fixrelay }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U fixrelay"], interval: 5s, retries: 20 }
+    restart: unless-stopped
+  clamav:
+    image: clamav/clamav:stable   # downloads virus signatures itself (freshclam) on start
+    restart: unless-stopped
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://fixrelay:${POSTGRES_PASSWORD:-change-me}@db:5432/fixrelay
+      STORAGE_DRIVER: db
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+    ports: ["3000:3000"]
+    depends_on: { db: { condition: service_healthy }, clamav: { condition: service_started } }
+    restart: unless-stopped
+  worker:
+    build: .
+    command: ["npm", "run", "worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://fixrelay:${POSTGRES_PASSWORD:-change-me}@db:5432/fixrelay
+      STORAGE_DRIVER: db
+    depends_on: { web: { condition: service_healthy } }
+    restart: unless-stopped
+volumes:
+  pgdata:

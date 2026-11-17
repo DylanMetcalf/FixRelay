@@ -130,6 +130,13 @@ export default async function Settings() {
           </Card>
         )}
 
+        {owner && (
+          <Card title="Your data">
+            <p className="muted mb-3">Download every record of your company (jobs, quotes, decisions, history and a list of files) as a JSON file. This works even if your subscription has lapsed. Each download is recorded in your history.</p>
+            <a href="/api/export" className="btn btn-secondary" download>Export all company data</a>
+          </Card>
+        )}
+
         {owner && !org.isDemo && (
           <Card title="Support access">
             <p className="muted mb-3">FixRelay staff cannot see your data. If you need help, you can grant read-only access for a limited time. Every visit is recorded in your history.</p>
