@@ -8,6 +8,7 @@
  *  - each change writes an audit event in the same transaction.
  */
 import { addSignature } from "./signatures";
+import { addContractorFiles } from "./attachments";
 import type { JobStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/db";
@@ -121,7 +122,8 @@ export type PublicReportInput = z.input<typeof publicSchema>;
  * has switched public reporting on. The report is marked as unverified for the maintenance team to screen;
  * the reporter cannot see anything else in the system.
  */
-export async function createPublicReport(siteToken: string, input: PublicReportInput, signature?: string | null, ip?: string | null) {
+export async function createPublicReport(siteToken: string, input: PublicReportInput, signature?: string | null, ip?: string | null, photos: { filename: string; bytes: Buffer }[] = []) {
+  if (photos.length > 3) throw invalid("Add up to 3 photos.");
   const d = parse(publicSchema, input);
   const site = await prisma.site.findUnique({ where: { publicToken: siteToken } });
   const org = site ? await prisma.organisation.findUnique({ where: { id: site.orgId }, include: { subscription: { include: { plan: true } } } }) : null;
@@ -133,6 +135,7 @@ export async function createPublicReport(siteToken: string, input: PublicReportI
     });
     const actor = { orgId: site.orgId, userId: null, label: `${d.reporterName} (public report link)` };
     await addSignature(tx, { orgId: site.orgId, jobId: job.id, step: "REPORTED", name: d.reporterName, userId: null, dataUrl: signature, ip, required: org.requireSignatures });
+    if (photos.length) await addContractorFiles(tx, { orgId: site.orgId, jobId: job.id, kind: "REQUEST", files: photos, actor, imagesOnly: true });
     await logEvent(tx, actor, job.id, "job.created", `Fault reported through the public link: ${job.title}`, { source: "PUBLIC_LINK" });
     await notify(tx, {
       orgId: site.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, site.orgId),

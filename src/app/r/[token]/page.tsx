@@ -1,12 +1,8 @@
 import { redirect } from "next/navigation";
-import { SignLine } from "@/components/requisition-fields";
-import { Step, Stepper } from "@/components/stepper";
-import { publicReportAction } from "@/app/actions/jobs";
 import { getSession } from "@/app/_lib/session";
-import { RequestPlaceFields } from "@/components/client-forms";
-import { Form, Submit } from "@/components/form";
 import { PublicMessage, PublicShell } from "@/components/public-shell";
-import { Card, Field, TextArea } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { QuickReport } from "@/components/quick-report";
 import { prisma } from "@/lib/db";
 
 export const metadata = { title: "Report a fault", robots: { index: false, follow: false } };
@@ -37,35 +33,17 @@ export default async function SiteReport({ params, searchParams }: { params: Pro
   const asset = site.assets.find((a) => a.id === assetId);
   return (
     <PublicShell org={org}>
-      <Card>
-        <p className="text-xs font-bold uppercase tracking-wide text-gray-600">Report a fault · {site.name}</p>
-        <h1 className="text-xl font-extrabold">{asset ? `Problem with ${asset.reference} – ${asset.name}?` : "What needs fixing?"}</h1>
-        <p className="muted mt-1">Tell the maintenance team what is wrong. It takes a minute. If anyone is in danger, make the area safe and call your supervisor first.</p>
-      </Card>
-      <Card>
-        <Form action={publicReportAction} hidden={{ siteToken: token }}>
-          <Stepper>
-            <Step title="What is wrong?">
-              <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Light not working in the passage" />
-              <TextArea label="Describe it" name="description" required rows={3} placeholder="Where exactly, since when, is it getting worse?" />
-            </Step>
-            <Step title="Where is it?">
-              {(locationId || assetId) && <p className="rounded-md bg-blue-50 p-3 text-sm font-semibold text-blue-950">Filled in from the QR code. Change it if it is wrong.</p>}
-              <RequestPlaceFields sites={[{ id: site.id, name: site.name, locations: site.locations, assets: site.assets }]} initial={{ siteId: site.id, locationId, assetId }} />
-            </Step>
-            <Step title="Your details">
-              <Field label="Your name" name="reporterName" required autoComplete="name" />
-              <Field label="Phone number" name="reporterPhone" required type="tel" autoComplete="tel" />
-              <Field label="Email (optional)" name="reporterEmail" type="email" autoComplete="email" hint="We will email you the reference number." />
-              <p className="text-xs text-gray-600">Your name and number are only used by the maintenance team to follow up on this report.</p>
-            </Step>
-            <Step title="Check and sign" review>
-              <SignLine label="Submitted by – your signature" required={org.requireSignatures} />
-              <Submit className="btn btn-primary w-full">Send report</Submit>
-            </Step>
-          </Stepper>
-        </Form>
-      </Card>
+      <div className="mx-auto max-w-md space-y-4">
+        <div className="px-1">
+          <p className="text-sm font-bold uppercase tracking-wide text-gray-600">{site.name}</p>
+          <h1 className="text-3xl font-extrabold">Report a problem</h1>
+          <p className="mt-2 rounded-xl bg-amber-50 p-3 text-base text-amber-950">If someone is hurt or in danger, call your supervisor first.</p>
+        </div>
+        <Card>
+          <QuickReport token={token} siteName={site.name} locations={site.locations} initialLocationId={locationId}
+            asset={asset ? { id: asset.id, label: `${asset.reference} – ${asset.name}` } : null} requireSignatures={org.requireSignatures} />
+        </Card>
+      </div>
     </PublicShell>
   );
 }

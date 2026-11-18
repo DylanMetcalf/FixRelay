@@ -19,21 +19,23 @@ export default async function NewRequest({ searchParams }: { searchParams: Promi
   if (sites.length === 0)
     return <Empty title="Add a site first">A fault report needs to know where the problem is. {can(ctx, "sites.manage") ? <Link className="link" href="/sites">Add your first site</Link> : "Ask your maintenance manager to set up your site."}</Empty>;
   const fromQr = !!(sp.location || sp.asset);
+  const simple = !can(ctx, "job.manage");
   return (
     <>
       <PageHeader title="Report a fault" subtitle="Tell the maintenance team what is wrong and where. Add a photo if you can." />
       <Card className="max-w-2xl">
-        <Form action={createJobAction} className="space-y-4">
+        {/* People who only report faults get the large, simple version; maintenance staff keep the full form. */}
+        <Form action={createJobAction} className={`space-y-4${simple ? " easy" : ""}`}>
           <Stepper>
             <Step title="What is wrong?">
               <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Cold room door not sealing" />
               <TextArea label="Describe it" name="description" required rows={4} placeholder="What happened, when did it start, is anything unsafe?" />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Select label="Type of problem" name="category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />
+                {!simple && <Select label="Type of problem" name="category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />}
                 <Select label="How urgent?" name="priority" defaultValue="NORMAL" options={[{ value: "LOW", label: "Low – when convenient" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High – affecting work" }, { value: "CRITICAL", label: "Critical – stopped / unsafe" }]} />
               </div>
               <Check name="emergency" label="This is an emergency (needs immediate attention)" />
-              <Check name="isProject" label="This is a project (planned work, not a breakdown)" />
+              {!simple && <Check name="isProject" label="This is a project (planned work, not a breakdown)" />}
               <p className="text-xs text-gray-600">Urgency tells the team how quickly to respond. It does not replace your site&apos;s safety procedures: if there is danger, make the area safe and call your supervisor.</p>
             </Step>
             <Step title="Where is it?">

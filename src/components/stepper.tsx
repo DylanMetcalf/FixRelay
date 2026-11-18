@@ -35,6 +35,7 @@ function summarise(section: HTMLElement): Row[] {
     if (done.has(name)) continue;
     if (el instanceof HTMLInputElement && el.type === "hidden") {
       if (el.dataset.signature !== undefined && el.value) rows.push({ label: el.dataset.label ?? "Signature", value: "Signed", image: el.value });
+      else if (el.dataset.summaryLabel) rows.push({ label: el.dataset.summaryLabel, value: el.dataset.summaryValue ?? el.value });
       continue;
     }
     if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {

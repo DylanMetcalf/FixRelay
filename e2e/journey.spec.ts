@@ -339,19 +339,19 @@ test("QR reporting without an account: off by default; when on, the scanned loca
   const loc = await db.location.findFirstOrThrow({ where: { name: "Packing Hall", site: { publicToken: link.slice(3) } } });
 
   await gotoReady(anon, `${link}?l=${loc.id}`);
-  await expect(anon.getByRole("heading", { name: "What needs fixing?" })).toBeVisible();
-  await f(anon, "title").fill("Conveyor guard loose");
-  await f(anon, "description").fill("Guard rattles when the belt runs.");
+  await expect(anon.getByRole("heading", { name: "Report a problem" })).toBeVisible();
+  await anon.getByText("Unsafe", { exact: true }).click();
+  await f(anon, "description").fill("Conveyor guard loose – rattles when the belt runs.");
   await next(anon);
-  await expect(f(anon, "locationId")).toHaveValue(loc.id); // pre-filled from the QR code
-  await next(anon);
+  await expect(anon.getByTestId("place-confirm")).toContainText("Packing Hall"); // filled in from the QR code
+  await next(anon); await next(anon); // photo is optional
   await f(anon, "reporterName").fill("Vusi Visitor");
   await f(anon, "reporterPhone").fill("082 555 0101");
   await next(anon);
   await expect(anon.getByTestId("review")).toContainText("Packing Hall");
   await sign(anon); // signatures are required in this company (set in the first journey)
   await anon.getByRole("button", { name: "Send report" }).click();
-  await expect(anon.getByText(/Your report 126\d\d has been sent/)).toBeVisible();
+  await expect(anon.getByTestId("report-number")).toHaveText(/^126\d\d$/);
 
   await gotoReady(page, "/dashboard");
   await expect(page.locator("a.card", { hasText: "Public reports to screen" })).toContainText("1");

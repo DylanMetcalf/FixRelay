@@ -17,7 +17,12 @@
   --brand-fg: #ffffff;
   --ink: #111827;
 }
-html { -webkit-text-size-adjust: 100%; }
+/* A steady screen on phones: text doesn't inflate when the phone turns, double-tap doesn't zoom, nothing slides sideways. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
+body { overflow-x: clip; }
+/* iPhones zoom in when a field under 16px is tapped; keep every field at 16px or more on small screens.
+   (Pinch-zoom stays available on purpose: people who need bigger text must be able to zoom.) */
+@media (max-width: 640px) { input, select, textarea { font-size: 16px !important; } }
 body { color: var(--ink); background: var(--color-mist); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 :focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
 
@@ -40,6 +45,15 @@ body { color: var(--ink); background: var(--color-mist); font-family: ui-sans-se
   .muted { @apply text-sm text-gray-600; }
   details.action > summary { @apply inline-flex min-h-11 w-full cursor-pointer list-none items-center justify-center text-center rounded-md border border-gray-400 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 sm:w-auto; }
   details.action { @apply w-full max-w-full sm:w-auto; }
+  /* "Easy" forms (QR reporting for anyone on site): bigger text, bigger targets, calm spacing. */
+  .easy { font-size: 18px; }
+  .easy .label { font-size: 18px; margin-bottom: 6px; }
+  .easy .input { min-height: 56px; font-size: 18px; border-radius: 12px; }
+  .easy textarea.input { min-height: 140px; }
+  .easy .btn { min-height: 56px; font-size: 18px; border-radius: 12px; padding-left: 24px; padding-right: 24px; }
+  .easy section[data-step] { gap: 20px; }
+  .choice { @apply flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border-2 border-gray-300 bg-white px-4 py-3 text-lg font-semibold text-gray-900 has-[:checked]:border-[var(--brand)] has-[:checked]:bg-blue-50 has-[:focus-visible]:outline has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-amber-500; }
+  .choice input { @apply h-6 w-6 shrink-0 accent-[var(--brand)]; }
   /* Grid items default to min-width:auto and grow to fit wide content (tables) instead of letting it scroll. */
   .grid > * { min-width: 0; }
   details.action > summary::-webkit-details-marker { display: none; }

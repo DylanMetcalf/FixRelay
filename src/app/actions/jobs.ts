@@ -31,7 +31,7 @@ export async function createJobAction(_: ActionState, fd: FormData) {
     const ctx = await requireCtx();
     const job = await jobs.createJob(ctx, {
       title: str(fd, "title"), description: str(fd, "description"), siteId: str(fd, "siteId"),
-      locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), category: str(fd, "category") as "General",
+      locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), category: (str(fd, "category") || "General") as "General",
       priority: str(fd, "priority") as "NORMAL", emergency: bool(fd, "emergency"), isProject: bool(fd, "isProject"),
     }, sig(fd));
     await attach(ctx, fd, job.id, "REQUEST");
@@ -46,10 +46,14 @@ export async function publicReportAction(_: ActionState, fd: FormData) {
     const token = str(fd, "siteToken");
     await rateLimit(`public-report:ip:${ip}`, 10, 60 * 60_000);
     await rateLimit(`public-report:site:${token}`, 200, 24 * 60 * 60_000);
+    // The simple QR form asks "what kind of problem?" (optional tap) and a description; the title is made from them.
+    const kind = str(fd, "kind").trim().slice(0, 40);
+    const description = str(fd, "description").trim();
+    const title = str(fd, "title").trim() || [kind, description.split(/\s+/).slice(0, 10).join(" ")].filter(Boolean).join(": ").slice(0, 160);
     const r = await jobs.createPublicReport(token, {
-      title: str(fd, "title"), description: str(fd, "description"), locationId: str(fd, "locationId"), assetId: str(fd, "assetId"),
+      title, description, locationId: str(fd, "locationId"), assetId: str(fd, "assetId"),
       reporterName: str(fd, "reporterName"), reporterPhone: str(fd, "reporterPhone"), reporterEmail: str(fd, "reporterEmail"),
-    }, sig(fd), ip);
+    }, sig(fd), ip, await filesOf(fd, "photos"));
     return { ok: `Thank you. Your report ${r.reference} has been sent to the maintenance team.`, data: { sent: "1", reference: r.reference } };
   });
 }

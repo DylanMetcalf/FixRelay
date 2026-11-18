@@ -258,19 +258,18 @@ test("R13 · no-account QR report: the details step is checked, the review shows
   const link = new URL(await p.getByTestId("site-report-link").inputValue()).pathname;
   const anon = await newPage(browser, { mobile: true });
   await gotoReady(anon, link);
-  await f(anon, "title").fill("Broken window in canteen");
-  await f(anon, "description").fill("Glass on the floor.");
-  await next(anon); await next(anon);
+  await f(anon, "description").fill("Broken window in canteen, glass on the floor.");
+  await next(anon); await next(anon); await next(anon);
   await f(anon, "reporterName").fill("Grace Visitor");
   await next(anon);
-  await expect(anon.getByTestId("step-label")).toContainText("Step 3 of 4"); // phone number is required
+  await expect(anon.getByTestId("step-label")).toContainText("Step 4 of 5"); // phone number is required
   await f(anon, "reporterPhone").fill("082 123 4567");
   await next(anon);
   await expect(anon.getByTestId("review")).toContainText("Grace Visitor");
   await expect(anon.getByTestId("review")).toContainText("082 123 4567");
   await anon.getByRole("button", { name: "Send report" }).click();
-  await expect(anon.getByText(/Thank you\. Your report/)).toBeVisible();
-  const job = await db.job.findFirstOrThrow({ where: { title: "Broken window in canteen", orgId: await orgOf(email) } });
+  await expect(anon.getByTestId("report-done")).toContainText("Thank you!");
+  const job = await db.job.findFirstOrThrow({ where: { title: { startsWith: "Broken window in canteen" }, orgId: await orgOf(email) } });
   await gotoReady(p, `/jobs/${job.id}/report`);
   await expect(p.getByTestId("submitted-by")).toContainText("Grace Visitor (082 123 4567) – via QR / site link");
 });
@@ -319,4 +318,70 @@ test("R15 · technician on a phone: the guided completion form fits the screen a
   expect(await phone.evaluate(() => document.documentElement.scrollWidth - screen.width)).toBeLessThanOrEqual(0);
   await done.getByRole("button", { name: "Submit for confirmation" }).click();
   await expect(status(phone)).toHaveText("Awaiting confirmation");
+});
+
+test("R16 · anyone with a phone: the QR report is simple, big and steady – no zoom-in on tap, nothing slides sideways, clear thank-you", async ({ browser }) => {
+  const { p, sitePath, email } = await company(browser);
+  await gotoReady(p, "/settings");
+  await f(p, "publicReportingEnabled").check();
+  await p.getByRole("button", { name: "Save company settings" }).click();
+  await expect(p.getByText("Company settings saved.")).toBeVisible();
+  await gotoReady(p, sitePath);
+  const link = new URL(await p.getByTestId("site-report-link").inputValue()).pathname;
+  const loc = await db.location.findFirstOrThrow({ where: { name: "Cold Room 2", orgId: await orgOf(email) } });
+  const { devices } = await import("@playwright/test");
+  const phone = await (await browser.newContext({ ...devices["iPhone 13"], extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 250)}` } })).newPage();
+  await gotoReady(phone, `${link}?l=${loc.id}`);
+
+  // The page never blocks pinch-zoom (people with poor eyesight need it), but nothing makes it zoom on its own.
+  const vp = await phone.locator('meta[name="viewport"]').getAttribute("content");
+  expect(vp).not.toMatch(/user-scalable\s*=\s*(no|0)|maximum-scale\s*=\s*1(\.0)?\b/);
+  const steady = async (label: string) => {
+    expect(await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${label}: sideways scroll`).toBeLessThanOrEqual(0);
+    const small = await phone.evaluate(() => [...document.querySelectorAll<HTMLElement>("input:not([type=hidden]):not([type=radio]):not([type=file]), select, textarea")]
+      .filter((e) => e.offsetParent !== null && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => e.getAttribute("name")));
+    expect(small, `${label}: fields under 16px make iPhones zoom in`).toEqual([]);
+    const tiny = await phone.evaluate(() => [...document.querySelectorAll<HTMLElement>("button, .choice, .btn")]
+      .filter((e) => e.offsetParent !== null && !e.classList.contains("link") && e.getBoundingClientRect().height < 44).map((e) => e.textContent?.trim()));
+    expect(tiny, `${label}: tap targets under 44px`).toEqual([]);
+    const a11y = await new AxeBuilder({ page: phone }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(a11y.violations.map((v) => v.id), `${label}: accessibility`).toEqual([]);
+  };
+
+  await expect(phone.getByRole("heading", { name: "Report a problem" })).toBeVisible();
+  await expect(phone.getByText("If someone is hurt or in danger, call your supervisor first.")).toBeVisible();
+  await steady("what's wrong");
+  await next(phone);
+  await expect(phone.getByTestId("step-label")).toContainText("Step 1 of 5"); // a description is needed
+  await phone.getByText("Leaking", { exact: true }).click();
+  await f(phone, "description").fill("Water dripping from the ceiling by the door");
+  await next(phone);
+  await expect(phone.getByTestId("place-confirm")).toContainText("Cold Room 2"); // from the QR code, no dropdown to work out
+  await steady("where");
+  await next(phone);
+  await steady("photo");
+  await phone.locator('input[name="photos"]').setInputFiles(PHOTO);
+  await expect(phone.getByText("1 photo added – tap to change")).toBeVisible();
+  await next(phone);
+  await steady("details");
+  await f(phone, "reporterName").fill("Grace Visitor");
+  await f(phone, "reporterPhone").fill("072 555 0101");
+  await next(phone);
+  const review = phone.getByTestId("review");
+  for (const t of ["Leaking", "Water dripping", "Cold Room 2", "icon-192.png", "Grace Visitor"]) await expect(review).toContainText(t);
+  await steady("check and send");
+  await phone.getByRole("button", { name: "Send report" }).click();
+  await expect(phone.getByTestId("report-done")).toContainText("Thank you!");
+  await expect(phone.getByTestId("report-number")).toHaveText(/^REQ-\d{5}$/);
+  await steady("thank you");
+
+  // What maintenance receives: a clear title, the place, and the photo.
+  const ref = await phone.getByTestId("report-number").textContent();
+  const job = await db.job.findFirstOrThrow({ where: { reference: ref!, orgId: await orgOf(email) }, include: { attachments: true } });
+  expect(job.title).toBe("Leaking: Water dripping from the ceiling by the door");
+  expect(job.locationId).toBe(loc.id);
+  expect(job.attachments.filter((a) => a.kind === "REQUEST" && a.mimeType.startsWith("image/"))).toHaveLength(1);
+  await phone.getByRole("button", { name: "Report another problem" }).click();
+  await expect(phone.getByTestId("step-label")).toContainText("Step 1 of 5");
+  await expect(f(phone, "description")).toHaveValue("");
 });

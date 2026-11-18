@@ -132,11 +132,11 @@ export async function readAttachmentViaLink(token: string, id: string) {
 }
 
 /** Store files uploaded by a contractor through their link (same safety pipeline as staff uploads). */
-export async function addContractorFiles(tx: Tx, a: { orgId: string; jobId: string; quoteId?: string; completionId?: string; kind: AttachmentKind; files: { filename: string; bytes: Buffer }[]; actor: { orgId: string; userId: string | null; label: string } }) {
+export async function addContractorFiles(tx: Tx, a: { orgId: string; jobId: string; quoteId?: string; completionId?: string; kind: AttachmentKind; files: { filename: string; bytes: Buffer }[]; actor: { orgId: string; userId: string | null; label: string }; imagesOnly?: boolean }) {
   if (a.files.length > 10) throw invalid("Upload up to 10 files at a time.");
   if ((await tx.attachment.count({ where: { jobId: a.jobId } })) + a.files.length > MAX_PER_JOB) throw conflict("This job has reached the attachment limit.");
   for (const f of a.files) {
-    const att = await store(tx, { orgId: a.orgId, jobId: a.jobId, quoteId: a.quoteId ?? null, completionId: a.completionId ?? null, kind: a.kind, filename: f.filename, bytes: f.bytes, uploadedById: null, imagesOnly: a.kind === "AFTER" });
+    const att = await store(tx, { orgId: a.orgId, jobId: a.jobId, quoteId: a.quoteId ?? null, completionId: a.completionId ?? null, kind: a.kind, filename: f.filename, bytes: f.bytes, uploadedById: null, imagesOnly: a.kind === "AFTER" || !!a.imagesOnly });
     await logEvent(tx, a.actor, a.jobId, "attachment.added", `File added: ${att.filename} (${a.kind.toLowerCase().replace("_", " ")})`, { attachmentId: att.id });
   }
 }
