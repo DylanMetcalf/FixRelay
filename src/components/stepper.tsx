@@ -23,7 +23,7 @@ type Summary = { title: string; index: number; rows: Row[] }[];
 const fieldLabel = (el: HTMLElement): string => {
   const id = el.getAttribute("id");
   const byFor = id ? el.closest("form")?.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
-  const text = (byFor?.textContent ?? el.closest("label")?.textContent ?? el.closest("fieldset")?.querySelector("legend")?.textContent ?? el.getAttribute("aria-label") ?? "").replace(/\s*\*\s*/g, " ").replace(/\(optional\)/, "").trim();
+  const text = (byFor?.textContent ?? el.closest("label")?.textContent ?? el.closest("fieldset")?.querySelector("legend")?.textContent ?? el.getAttribute("aria-label") ?? "").replace(/\s*\*\s*/g, " ").replace(/\(.*?\)/g, "").trim();
   return text;
 };
 
@@ -42,7 +42,7 @@ function summarise(section: HTMLElement): Row[] {
       const group = Array.from(section.querySelectorAll<HTMLInputElement>(`input[name="${CSS.escape(name)}"]`));
       done.add(name);
       if (group.length === 1 && el.type === "checkbox") { if (el.checked) rows.push({ label: fieldLabel(el), value: "Yes" }); continue; }
-      const legend = el.closest("fieldset")?.querySelector("legend")?.textContent?.replace(/\s*\*.*$/, "").replace(/\(tick.*\)/, "").trim() ?? name;
+      const legend = el.closest("fieldset")?.querySelector("legend")?.textContent?.replace(/\s*\*.*$/, "").replace(/\(.*?\)/g, "").trim() ?? name;
       const picked = group.filter((g) => g.checked).map((g) => g.closest("label")?.textContent?.trim() ?? g.value);
       if (picked.length) rows.push({ label: legend, value: picked.join(", ") });
       continue;
