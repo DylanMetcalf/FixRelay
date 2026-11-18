@@ -39,6 +39,16 @@ export async function saveApprovalRulesAction(_: ActionState, fd: FormData) {
   });
 }
 
+export async function saveRequisitionAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const next = str(fd, "nextNumber").trim();
+    await orgs.setRequisitionSettings(await requireCtx(), {
+      referencePrefix: str(fd, "referencePrefix"), nextNumber: next ? Number.parseInt(next, 10) : null, requireSignatures: bool(fd, "requireSignatures"),
+    });
+    return { ok: "Requisition settings saved." };
+  });
+}
+
 export async function savePrioritiesAction(_: ActionState, fd: FormData) {
   return run(async () => {
     await orgs.setPriorityRules(await requireCtx(), (["LOW", "NORMAL", "HIGH", "CRITICAL"] as const).map((p) => ({
@@ -85,7 +95,11 @@ export async function rotateSiteLinkAction(_: ActionState, fd: FormData) {
 }
 
 export async function createLocationAction(_: ActionState, fd: FormData) {
-  return run(async () => { await sites.createLocation(await requireCtx(), { siteId: str(fd, "siteId"), name: str(fd, "name") }); return { ok: "Location added." }; });
+  return run(async () => { await sites.createLocation(await requireCtx(), { siteId: str(fd, "siteId"), name: str(fd, "name"), foodArea: bool(fd, "foodArea") }); return { ok: "Location added." }; });
+}
+
+export async function foodAreaAction(_: ActionState, fd: FormData) {
+  return run(async () => { const on = str(fd, "foodArea") === "true"; await sites.setFoodArea(await requireCtx(), str(fd, "id"), on); return { ok: on ? "Marked as a food-handling area." : "No longer a food-handling area." }; });
 }
 
 const contractorInput = (fd: FormData) => ({

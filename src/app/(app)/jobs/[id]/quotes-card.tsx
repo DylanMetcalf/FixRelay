@@ -1,3 +1,4 @@
+import { SignLine } from "@/components/requisition-fields";
 import * as a from "@/app/actions/jobs";
 import { Form, Submit } from "@/components/form";
 import Link from "@/components/link";
@@ -7,7 +8,7 @@ import { approvalLimit, can, type Ctx } from "@/server/permissions";
 import { compareQuotes } from "@/server/services/quotes";
 
 /** Side-by-side contractor quotes with decision buttons that respect the viewer's spending authority. */
-export async function QuotesCard({ ctx, jobId }: { ctx: Ctx; jobId: string }) {
+export async function QuotesCard({ ctx, jobId, sigRequired }: { ctx: Ctx; jobId: string; sigRequired: boolean }) {
   const { job, quotes, waitingFor, rules } = await compareQuotes(ctx, jobId);
   if (!quotes.length && !waitingFor.length) return null;
   const limit = approvalLimit(ctx, rules);
@@ -69,6 +70,7 @@ export async function QuotesCard({ ctx, jobId }: { ctx: Ctx; jobId: string }) {
                   {within && !rules.poRequired && <Field label="Purchase order (PO) number (optional)" name="poNumber" />}
                   {needsReason && <TextArea label={`Only ${count} of ${rules.minQuotes} required quotes – why go ahead?`} name="exceptionReason" required rows={2} placeholder="e.g. specialist supplier, emergency, no other contractor available" />}
                   <TextArea label="Comment (optional)" name="comment" rows={2} />
+                  {within && <SignLine label="Quote signed off by – your signature" required={sigRequired} />}
                   <Submit>{within ? "Approve and appoint contractor" : "Send for approval"}</Submit>
                 </Form>
               </details>
@@ -87,6 +89,7 @@ export async function QuotesCard({ ctx, jobId }: { ctx: Ctx; jobId: string }) {
               <p className="text-sm font-bold">Approve {q.contractor!.name} – {formatZar(q.totalCents)}</p>
               <Field label={`PO number${rules.poRequired ? "" : " (optional)"}`} name="poNumber" required={rules.poRequired} />
               <TextArea label="Comment (optional)" name="comment" rows={2} />
+              <SignLine label="Quote signed off by – your signature" required={sigRequired} />
               <Submit>Approve</Submit>
             </Form>
             <Form action={a.rejectRecommendationAction} hidden={{ jobId }}>

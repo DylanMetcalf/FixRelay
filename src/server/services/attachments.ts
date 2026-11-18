@@ -93,7 +93,7 @@ export async function setOrgLogo(ctx: Ctx, input: { filename: string; bytes: Buf
 }
 
 /** Stores a drawn signature (PNG data URL from the sign-off pad). Used inside decision transactions. */
-export async function storeSignature(tx: Tx, a: { orgId: string; jobId: string; completionId: string; dataUrl: string }) {
+export async function storeSignature(tx: Tx, a: { orgId: string; jobId: string; completionId: string | null; dataUrl: string }) {
   const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(a.dataUrl);
   if (!m) throw invalid("The signature could not be read. Please sign again.");
   const bytes = Buffer.from(m[1]!, "base64");

@@ -148,7 +148,7 @@ describe("contractor links", () => {
     expect((await portal.getContractorLinkView(tb))!.myQuotes).toEqual([]);
     expect((await readAttachmentViaLink(ta, aDoc.id)).mimeType).toBe("application/pdf");
     // A quote link cannot be used to submit completion; after the award it is read-only.
-    await expect(portal.submitCompletionViaLink(ta, { workPerformed: "pretend done" }, [{ filename: "a.png", bytes: PNG }])).rejects.toEqual(NF);
+    await expect(portal.submitCompletionViaLink(ta, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "pretend done" }, [{ filename: "a.png", bytes: PNG }])).rejects.toEqual(NF);
     const q = await prisma.quote.findFirstOrThrow({ where: { jobId: job.id, status: "SUBMITTED" } });
     await approvals.approveQuote(t.manager, q.id, {});
     await expect(portal.submitQuoteViaLink(tb, { scope: "late quote", priceExclVatCents: 1 }, [])).rejects.toEqual(NF);
@@ -156,7 +156,7 @@ describe("contractor links", () => {
     // Expired completion link.
     const done = await linkFromEmail(t.contractors[0].email);
     await prisma.contractorLink.updateMany({ where: { jobId: job.id, purpose: "COMPLETION" }, data: { expiresAt: new Date(Date.now() - 1000) } });
-    await expect(portal.submitCompletionViaLink(done, { workPerformed: "finished it" }, [{ filename: "a.png", bytes: PNG }])).rejects.toThrow(/expired/);
+    await expect(portal.submitCompletionViaLink(done, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "finished it" }, [{ filename: "a.png", bytes: PNG }])).rejects.toThrow(/expired/);
   });
 
   it("a contractor that was not appointed cannot submit completion even with a valid-looking link", async () => {
@@ -167,7 +167,7 @@ describe("contractor links", () => {
       const { issueCompletionLink } = await import("@/server/services/contractor-links");
       return issueCompletionLink(tx, t.manager, { ...(await tx.job.findUniqueOrThrow({ where: { id: job.id } })), contractorId: loser.id });
     });
-    await expect(portal.submitCompletionViaLink(new URL(fake!.url).pathname.split("/").pop()!, { workPerformed: "not mine to do" }, [{ filename: "a.png", bytes: PNG }])).rejects.toThrow(/not waiting for your completion/);
+    await expect(portal.submitCompletionViaLink(new URL(fake!.url).pathname.split("/").pop()!, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "not mine to do" }, [{ filename: "a.png", bytes: PNG }])).rejects.toThrow(/not waiting for your completion/);
   });
 });
 

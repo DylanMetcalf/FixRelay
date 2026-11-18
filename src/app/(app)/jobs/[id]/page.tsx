@@ -20,7 +20,7 @@ const KIND_LABEL: Record<string, string> = { REQUEST: "Reported with the fault",
 const VIA = { LINK: "secure link", PORTAL: "confirmed in the app", IN_PERSON: "signed on site", INTERNAL: "checked by the maintenance manager" } as const;
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
-  const { ctx } = await requireSession();
+  const { ctx, org } = await requireSession();
   const job = await getJob(ctx, (await params).id).catch((e) => { if (e instanceof AppError) notFound(); throw e; });
   if (!ctx.support) await markJobRead(ctx, job.id);
   const staff = can(ctx, "sites.view") || ctx.support;
@@ -39,12 +39,12 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   return (
     <>
       <PageHeader title={job.title} subtitle={<><strong>{job.reference}</strong> · {job.site.name}{job.location && ` · ${job.location.name}`}</>}>
-        <Link href={`/jobs/${job.id}/report`} className="btn btn-secondary">Job report</Link>
+        <Link href={`/jobs/${job.id}/report`} className="btn btn-secondary">Requisition form</Link>
       </PageHeader>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <StatusBadge status={job.status} /><PriorityBadge priority={job.priority} emergency={job.emergency} />
-        {job.route !== "UNDECIDED" && <Pill tone="blue">{ROUTE_LABEL[job.route]}</Pill>}
+        {job.route !== "UNDECIDED" && <Pill tone="blue">{ROUTE_LABEL[job.route]}</Pill>}{job.isProject && <Pill tone="amber">Project</Pill>}
         {isOverdue(job) && <Pill tone="red">Overdue since {fmtDate(job.dueAt)}</Pill>}
         {job.reopenCount > 0 && <Pill tone="amber">Reopened ×{job.reopenCount}</Pill>}
         {job.source === "PUBLIC_LINK" && <Pill tone="amber">Reported without an account</Pill>}
@@ -60,10 +60,10 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <ActionsPanel job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))}
+          <ActionsPanel sigRequired={!!org?.requireSignatures} job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))}
             contractors={contractors.map((c) => ({ value: c.id, label: `${c.name}${c.trade ? ` – ${c.trade}` : ""}` }))} suggestedScope={assessment?.recommendedWork || job.description} />
 
-          {can(ctx, "quote.view") && <QuotesCard ctx={ctx} jobId={job.id} />}
+          {can(ctx, "quote.view") && <QuotesCard ctx={ctx} jobId={job.id} sigRequired={!!org?.requireSignatures} />}
 
           <Card title="Fault details">
             <p className="whitespace-pre-line text-sm">{job.description}</p>

@@ -1,6 +1,7 @@
 import { createJobAction } from "@/app/actions/jobs";
 import { requirePage } from "@/app/_lib/session";
 import { RequestPlaceFields } from "@/components/client-forms";
+import { SignLine } from "@/components/requisition-fields";
 import { Form, Submit } from "@/components/form";
 import Link from "@/components/link";
 import { Card, Check, Empty, Field, PageHeader, Select, TextArea } from "@/components/ui";
@@ -11,7 +12,7 @@ import { requestFormOptions } from "@/server/services/sites";
 export const metadata = { title: "Report a fault" };
 
 export default async function NewRequest({ searchParams }: { searchParams: Promise<{ site?: string; location?: string; asset?: string }> }) {
-  const { ctx } = await requirePage("job.create");
+  const { ctx, org } = await requirePage("job.create");
   const sp = await searchParams;
   const sites = await requestFormOptions(ctx);
   if (sites.length === 0)
@@ -31,10 +32,12 @@ export default async function NewRequest({ searchParams }: { searchParams: Promi
             <Select label="How urgent?" name="priority" defaultValue="NORMAL" options={[{ value: "LOW", label: "Low – when convenient" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High – affecting work" }, { value: "CRITICAL", label: "Critical – stopped / unsafe" }]} />
           </div>
           <Check name="emergency" label="This is an emergency (needs immediate attention)" />
+          <Check name="isProject" label="This is a project (planned work, not a breakdown)" />
           <p className="text-xs text-gray-600">Urgency tells the team how quickly to respond. It does not replace your site&apos;s safety procedures: if there is danger, make the area safe and call your supervisor.</p>
           <Field label="Photos or documents" name="files" hint="JPEG, PNG, WebP or PDF, up to 10 MB each. Location data is removed from photos.">
             <input id="files" name="files" type="file" multiple accept="image/*,application/pdf" capture="environment" className="input" />
           </Field>
+          <SignLine label="Submitted by – your signature" required={!!org?.requireSignatures} />
           <Submit className="btn btn-primary w-full sm:w-auto">Send report</Submit>
         </Form>
       </Card>

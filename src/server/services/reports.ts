@@ -4,6 +4,7 @@
  * value (incl. VAT) of contractor jobs; in-house labour and materials are reported separately from work updates.
  * v1 aggregates in application code over the filtered rows (capped); move to SQL aggregates for very large sites.
  */
+import { ROOT_CAUSE_LABEL } from "../workflow";
 import { prisma } from "@/lib/db";
 import { requirePerm, siteFilter, type Ctx } from "../permissions";
 import { OPEN_STATUSES } from "../workflow";
@@ -24,6 +25,7 @@ export const METRIC_DEFINITIONS = {
   contractorPerformance: "Per contractor, for quote requests sent and jobs closed in the period: requests, quotes returned, quotes won, average hours to respond, average days from appointment to completion, jobs reopened, spend.",
   workload: "Open in-house jobs per responsible technician, as of now.",
   byLocation: "Faults reported in the period, grouped by site and location.",
+  rootCauses: "Root causes ticked on the requisition for jobs closed in the period (a job can have several). Projects are excluded.",
   reopened: "Jobs reopened in the period after being closed (a rework indicator), and that number as a share of jobs closed in the period.",
   inHouseCosts: "For in-house jobs closed in the period: labour hours and material cost recorded in work updates.",
 } as const;
@@ -43,7 +45,8 @@ export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: st
       select: { reportedAt: true, assignedAt: true, completedAt: true, respondedAt: true, priority: true, site: { select: { name: true } }, location: { select: { name: true } } } }),
     prisma.job.findMany({ where: { ...base, status: "CLOSED", closedAt: period }, take: 5000,
       select: { id: true, reference: true, title: true, route: true, approvedCostCents: true, contractorId: true, assignedAt: true, completedAt: true, reopenCount: true,
-        site: { select: { name: true } }, asset: { select: { id: true, name: true, reference: true } }, updates: { select: { labourMinutes: true, materialCostCents: true } } } }),
+        site: { select: { name: true } }, asset: { select: { id: true, name: true, reference: true } }, updates: { select: { labourMinutes: true, materialCostCents: true } },
+        isProject: true, completions: { orderBy: { version: "desc" }, take: 1, select: { rootCauses: true } } } }),
     prisma.job.findMany({ where: { ...base, status: "AWAITING_APPROVAL" }, select: { recommendedQuoteId: true } }),
     prisma.quote.findMany({ where: { orgId: ctx.orgId, job: base, status: "APPROVED", decidedAt: period }, select: { submittedAt: true, decidedAt: true }, take: 5000 }),
     prisma.job.count({ where: { ...base, status: { in: OPEN_STATUSES }, dueAt: { lt: now } } }),
@@ -63,6 +66,8 @@ export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: st
   const contractorJobs = closed.filter((j) => j.route === "CONTRACTOR");
   const inHouseJobs = closed.filter((j) => j.route !== "CONTRACTOR");
   const spendBySite = new Map<string, number>(); const spendByAsset = new Map<string, number>(); const byLocation = new Map<string, number>();
+  const rootCauses = new Map<string, number>();
+  for (const j of closed) if (!j.isProject) for (const c of j.completions[0]?.rootCauses ?? []) inc(rootCauses, ROOT_CAUSE_LABEL[c]);
   for (const j of contractorJobs) { inc(spendBySite, j.site.name, j.approvedCostCents ?? 0); if (j.asset) inc(spendByAsset, `${j.asset.reference} – ${j.asset.name}`, j.approvedCostCents ?? 0); }
   for (const j of opened) inc(byLocation, `${j.site.name}${j.location ? ` — ${j.location.name}` : ""}`);
 
@@ -105,6 +110,7 @@ export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: st
     contractorPerformance: performance,
     workload: open.map((o) => ({ name: techs.find((t) => t.id === o.leadTechnicianId)?.name ?? "Unknown", openJobs: o._count })).sort((a, b) => b.openJobs - a.openJobs),
     byLocation: sorted(byLocation).map((x) => ({ label: x.label, count: x.value })),
+    rootCauses: sorted(rootCauses).map((x) => ({ label: x.label, count: x.value })),
     reopened: { count: reopenedCount, pct: closed.length ? Math.round((reopenedCount / closed.length) * 100) : null },
     inHouseCosts: inHouseJobs.map((j) => ({
       id: j.id, reference: j.reference, title: j.title,

@@ -81,7 +81,7 @@ export function ShareLink({ link, label }: { link: string; label: string }) {
 }
 
 /** Drawn signature → PNG data URL in a hidden input. Recorded as acknowledgement evidence only. */
-export function SignaturePad({ name = "signature" }: { name?: string }) {
+export function SignaturePad({ name = "signature", label = "Signature", required = false, hint = "Sign above with your finger. This records your acknowledgement." }: { name?: string; label?: string; required?: boolean; hint?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [value, setValue] = useState("");
   const drawing = useRef(false);
@@ -105,12 +105,12 @@ export function SignaturePad({ name = "signature" }: { name?: string }) {
   const clear = () => { const c = canvas.current!; c.getContext("2d")!.clearRect(0, 0, c.width, c.height); setValue(""); };
   return (
     <div>
-      <span className="label">Signature</span>
+      <span className="label">{label}{required ? <span className="text-red-700"> *</span> : <span className="font-normal text-gray-600"> (optional)</span>}</span>
       <canvas ref={canvas} width={600} height={180} data-testid="signature-pad" aria-label="Signature area: sign with your finger or mouse"
         className="w-full touch-none rounded-md border-2 border-dashed border-gray-400 bg-white" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerLeave={end} />
       <input type="hidden" name={name} value={value} />
       <div className="mt-1 flex items-center justify-between">
-        <p className="text-xs text-gray-600">Sign above with your finger. This records your acknowledgement.</p>
+        <p className="text-xs text-gray-600">{hint} The date and time are added automatically.</p>
         <button type="button" className="btn btn-secondary btn-sm" onClick={clear}>Clear</button>
       </div>
     </div>

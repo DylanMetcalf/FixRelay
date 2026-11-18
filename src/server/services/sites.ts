@@ -89,11 +89,19 @@ export async function requestFormOptions(ctx: Ctx) {
   });
 }
 
-export async function createLocation(ctx: Ctx, input: { siteId: string; name: string }) {
+export async function createLocation(ctx: Ctx, input: { siteId: string; name: string; foodArea?: boolean }) {
   requirePerm(ctx, "sites.manage");
-  const d = parse(z.object({ siteId: z.string().uuid(), name }), input);
+  const d = parse(z.object({ siteId: z.string().uuid(), name, foodArea: z.boolean().default(false) }), input);
   if (!(await findSite(ctx, d.siteId))) throw notFound("Site not found.");
   return prisma.location.create({ data: { ...d, orgId: ctx.orgId } });
+}
+
+/** Mark a location as a food-handling area (completion then asks the tools/clean-area question). */
+export async function setFoodArea(ctx: Ctx, locationId: string, foodArea: boolean) {
+  requirePerm(ctx, "sites.manage");
+  const loc = await prisma.location.findFirst({ where: { id: locationId, orgId: ctx.orgId } });
+  if (!loc || !(await findSite(ctx, loc.siteId))) throw notFound("Location not found.");
+  return prisma.location.update({ where: { id: loc.id }, data: { foodArea } });
 }
 
 const assetSchema = z.object({

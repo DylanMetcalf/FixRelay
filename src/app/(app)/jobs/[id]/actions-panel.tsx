@@ -1,5 +1,5 @@
 import * as a from "@/app/actions/jobs";
-import { SignaturePad } from "@/components/client";
+import { RootCauseFields, SignLine } from "@/components/requisition-fields";
 import { LinkForm } from "@/components/client-forms";
 import { ActionButton, Form, Submit } from "@/components/form";
 import { Card, Check, Field, Select, TextArea } from "@/components/ui";
@@ -10,7 +10,7 @@ type Opt = { value: string; label: string };
 const FILES = "image/*,application/pdf";
 
 /** Everything the signed-in person can do to this job right now. Buttons mirror server permissions; the server re-checks. */
-export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { job: JobView; ctx: Ctx; team: Opt[]; contractors: Opt[]; suggestedScope: string }) {
+export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigRequired }: { job: JobView; ctx: Ctx; team: Opt[]; contractors: Opt[]; suggestedScope: string; sigRequired: boolean }) {
   const h = { jobId: job.id };
   const manage = can(ctx, "job.manage");
   const contractorJob = job.route === "CONTRACTOR";
@@ -23,7 +23,9 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
     <details className="action" open={primary}><summary>{label}</summary>{children}</details>
   );
 
-  const assessmentForm = (
+  const foodArea = !!job.location?.foodArea;
+  const received = <SignLine label="Submitted to – received by maintenance (your signature)" required={sigRequired} />;
+  const assessmentForm = (fromNew: boolean) => (
     <Form action={a.assessmentAction} hidden={h}>
       <TextArea label="What did you find?" name="findings" required />
       <TextArea label="Likely cause" name="suspectedCause" rows={2} />
@@ -33,6 +35,7 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
       <Select label="Who should fix it?" name="quoteRequired" required options={[{ value: "no", label: "Our in-house team can fix it" }, { value: "yes", label: "Needs an external contractor (get quotes)" }]} />
       <Check name="externalHelpRequired" label="A specialist is needed" />
       <Field label="Photos" name="files"><input id="files" name="files" type="file" multiple accept={FILES} capture="environment" className="input" /></Field>
+      {fromNew && received}
       <Submit>Submit assessment</Submit>
     </Form>
   );
@@ -79,14 +82,15 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
       <D key="req" label={job.source === "PUBLIC_LINK" ? "Accept and send for assessment" : "Send for assessment"} primary>
         <Form action={a.requestAssessmentAction} hidden={h}>
           <Select label="Who should assess it?" name="assessorId" options={[{ value: "", label: "No one yet (unassigned queue)" }, ...team]} />
+          {received}
           <Submit>Send for assessment</Submit>
         </Form>
       </D>,
-      <D key="assess" label="Assess it myself now">{assessmentForm}</D>,
+      <D key="assess" label="Assess it myself now">{assessmentForm(true)}</D>,
     );
     if (job.emergency) blocks.push(inHouse(), requestQuotes("Emergency: get quotes now"));
   }
-  if (st === "ASSESSING" && can(ctx, "job.assess") && (manage || job.assigned)) blocks.push(<D key="assess" label="Record assessment" primary>{assessmentForm}</D>);
+  if (st === "ASSESSING" && can(ctx, "job.assess") && (manage || job.assigned)) blocks.push(<D key="assess" label="Record assessment" primary>{assessmentForm(false)}</D>);
   if (manage && st === "ASSESSED") blocks.push(inHouse(true), requestQuotes("Get contractor quotes", true), captureQuote());
   if (manage && st === "QUOTING") {
     blocks.push(requestQuotes("Ask more contractors"));
@@ -147,6 +151,8 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
           <Field label="Before photos" name="before"><input id="before" name="before" type="file" multiple accept="image/*" className="input" /></Field>
           <Field label="After photos" name="after" hint="At least one after-photo or test document is required."><input id="after" name="after" type="file" multiple accept="image/*" capture="environment" className="input" /></Field>
           <Field label="Test documents" name="tests"><input id="tests" name="tests" type="file" multiple accept={FILES} className="input" /></Field>
+          <RootCauseFields foodArea={foodArea} />
+          <SignLine label="Work completed by – your signature" required={sigRequired} />
           <Submit>Submit for confirmation</Submit>
         </Form>
       </D>,
@@ -163,6 +169,8 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
           <TextArea label="What the contractor did" name="workPerformed" required />
           <Field label="After photos / job card" name="after" hint="At least one after-photo or test document is required."><input id="c-after" name="after" type="file" multiple accept="image/*" className="input" /></Field>
           <Field label="Documents" name="tests"><input id="c-tests" name="tests" type="file" multiple accept={FILES} className="input" /></Field>
+          <RootCauseFields foodArea={foodArea} />
+          <SignLine label="Your signature (recording for the contractor)" required={sigRequired} />
           <Submit>Submit for confirmation</Submit>
         </Form>
       </D>,
@@ -179,6 +187,8 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
         <Form action={a.confirmFixedAction} hidden={h}>
           <Select label="Your answer" name="outcome" required options={[{ value: "APPROVED", label: "Yes – it is fixed" }, { value: "REJECTED", label: "No – it is still not right" }]} />
           <TextArea label="Comments" name="comment" rows={2} hint="If it is not fixed, say what is still wrong." />
+          <p className="text-sm font-semibold">I hereby confirm that the above reported problem has been resolved (or not, as answered above).</p>
+          <SignLine label="Confirmed by originator – your signature" required={sigRequired} />
           <Submit>Send my answer</Submit>
         </Form>
       </D>,
@@ -199,14 +209,30 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope }: { 
           <Field label="Their full name" name="name" required autoComplete="off" defaultValue={job.requesterId ? "" : (job.reporterName ?? "")} />
           <Select label="Is it fixed?" name="outcome" required options={[{ value: "APPROVED", label: "Yes – it is fixed" }, { value: "REJECTED", label: "No – it is still not right" }]} />
           <TextArea label="Comments" name="comment" rows={2} hint="Required if not fixed." />
-          <SignaturePad />
+          <SignLine label="Confirmed by originator – their signature" required />
           <Submit>Record sign-off</Submit>
         </Form>
       </D>,
     );
-    if (manage && !job.reporterConfirmation) blocks.push(<ActionButton key="close-direct" action={a.closeAction} hidden={h} className="btn btn-secondary">Confirm and close</ActionButton>);
+    if (manage && !job.reporterConfirmation) blocks.push(
+      <D key="close-direct" label="Confirm fixed, sign off and close">
+        <Form action={a.closeAction} hidden={h}>
+          <TextArea label="Comment (optional)" name="comment" rows={2} placeholder="e.g. checked on site" />
+          <SignLine label="Confirmed by manager – your signature" required={sigRequired} />
+          <Submit>Sign off and close</Submit>
+        </Form>
+      </D>,
+    );
   }
-  if (manage && st === "VERIFIED") blocks.push(<ActionButton key="close" action={a.closeAction} hidden={h}>Close job</ActionButton>);
+  if (manage && st === "VERIFIED") blocks.push(
+    <D key="close" label="Sign off and close" primary>
+      <Form action={a.closeAction} hidden={h}>
+        <p className="text-sm text-gray-700">The fault has been confirmed fixed. Your sign-off closes the requisition and files it in the history.</p>
+        <SignLine label="Confirmed by manager – your signature" required={sigRequired} />
+        <Submit>Sign off and close</Submit>
+      </Form>
+    </D>,
+  );
   if (manage && st === "CLOSED") blocks.push(
     <D key="reopen" label="Reopen job"><Form action={a.reopenAction} hidden={h}><TextArea label="Why is it being reopened?" name="reason" required rows={2} /><Submit>Reopen job</Submit></Form></D>,
   );

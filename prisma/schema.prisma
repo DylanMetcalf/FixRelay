@@ -173,6 +173,8 @@ model Organisation {
   reporterConfirmation       Boolean  @default(true) // the person who reported a fault confirms it is fixed
   publicReportingEnabled     Boolean  @default(false) // anyone with a site link / QR code can report without an account
   jobSeq                     Int      @default(0)
+  referencePrefix            String   @default("REQ-") // requisition number prefix ("" = plain numbers like 12600)
+  requireSignatures          Boolean  @default(false) // drawn signatures required on the requisition (reported, received, completed, originator, manager, approval)
   quoteSeq                   Int      @default(0)
   createdAt                  DateTime @default(now())
 
@@ -243,10 +245,12 @@ model Site {
 }
 
 model Location {
-  id     String @id @default(uuid()) @db.Uuid
-  orgId  String @db.Uuid
-  siteId String @db.Uuid
-  name   String
+  id       String  @id @default(uuid()) @db.Uuid
+  orgId    String  @db.Uuid
+  siteId   String  @db.Uuid
+  name     String
+  /// Food-handling area: completion asks "tools out = tools in, area clean and tidy".
+  foodArea Boolean @default(false)
 
   site   Site    @relation(fields: [orgId, siteId], references: [orgId, id])
   assets Asset[]
@@ -288,6 +292,7 @@ model Job {
   category             String     @default("General")
   priority             Priority   @default(NORMAL)
   emergency            Boolean    @default(false)
+  isProject            Boolean    @default(false) // planned project work rather than a breakdown ("Projects" box on the requisition)
   status               JobStatus  @default(NEW)
   heldFromStatus       JobStatus?
   holdReason           String?
@@ -337,6 +342,7 @@ model Job {
   completions     Completion[]
   attachments     Attachment[]
   contractorLinks ContractorLink[]
+  signatures      JobSignature[]
   events          ActivityEvent[]
 
   @@unique([orgId, id])
@@ -429,17 +435,20 @@ model QuoteLine {
 }
 
 model Completion {
-  id            String           @id @default(uuid()) @db.Uuid
-  orgId         String           @db.Uuid
-  jobId         String           @db.Uuid
-  version       Int
-  status        CompletionStatus @default(SUBMITTED)
-  workPerformed String
-  observations  String           @default("")
-  completedAt   DateTime
-  submittedById String?          @db.Uuid // null when the contractor submitted through their link
-  contractorId  String?          @db.Uuid
-  createdAt     DateTime         @default(now())
+  id             String           @id @default(uuid()) @db.Uuid
+  orgId          String           @db.Uuid
+  jobId          String           @db.Uuid
+  version        Int
+  status         CompletionStatus @default(SUBMITTED)
+  workPerformed  String
+  observations   String           @default("")
+  completedAt    DateTime
+  submittedById  String?          @db.Uuid // null when the contractor submitted through their link
+  contractorId   String?          @db.Uuid
+  rootCauses     RootCause[]
+  rootCauseNotes String           @default("")
+  toolsAndAreaOk Boolean? // food areas only: tools out = tools in, area clean and tidy
+  createdAt      DateTime         @default(now())
 
   job      Job       @relation(fields: [orgId, jobId], references: [orgId, id])
   decision Decision?
@@ -681,4 +690,44 @@ model StoredFile {
   key       String   @id
   bytes     Bytes
   createdAt DateTime @default(now())
+}
+
+enum RootCause {
+  MAINTENANCE
+  AGE_OF_MACHINE
+  OPERATOR
+  HUMAN_ERROR
+  WEAR_AND_TEAR
+  BREAKDOWN
+  CHANGE_OVER
+  OTHER
+}
+
+/// The signature lines of the maintenance work requisition.
+enum SignatureStep {
+  REPORTED // Submitted by
+  RECEIVED // Submitted to (maintenance)
+  APPROVAL // Quote / spend signed off
+  COMPLETED // Work completed by
+  ORIGINATOR // Confirmed by originator
+  MANAGER // Confirmed by manager
+}
+
+/// A drawn signature on one line of the requisition. Date and time are recorded automatically. Append-only.
+model JobSignature {
+  id           String        @id @default(uuid()) @db.Uuid
+  orgId        String        @db.Uuid
+  jobId        String        @db.Uuid
+  step         SignatureStep
+  name         String
+  userId       String?       @db.Uuid // null for public reporters and contractors
+  attachmentId String        @db.Uuid // the PNG (Attachment kind SIGNATURE)
+  quoteId      String?       @db.Uuid
+  completionId String?       @db.Uuid
+  ip           String?
+  signedAt     DateTime      @default(now())
+
+  job Job @relation(fields: [orgId, jobId], references: [orgId, id])
+
+  @@index([orgId, jobId])
 }

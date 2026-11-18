@@ -134,8 +134,10 @@ export async function shareLink(scope: Locator) {
   return new URL(await scope.getByTestId("share-link").locator("input").inputValue()).pathname;
 }
 
-export async function sign(p: Page) {
-  const pad = p.getByTestId("signature-pad");
+/** Draw a signature on the (visible) signature pad inside `scope` – a form, panel or the whole page. */
+export async function sign(scope: Page | Locator) {
+  const pad = scope.getByTestId("signature-pad").filter({ visible: true }).first();
+  await pad.scrollIntoViewIfNeeded();
   const box = (await pad.boundingBox())!;
   await pad.dispatchEvent("pointerdown", { clientX: box.x + 20, clientY: box.y + 30, pointerId: 1 });
   await pad.dispatchEvent("pointermove", { clientX: box.x + 120, clientY: box.y + 60, pointerId: 1 });

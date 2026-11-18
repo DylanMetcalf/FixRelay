@@ -264,7 +264,7 @@ test("14 · accessibility: no WCAG 2.1 AA violations on the main screens, and no
     const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
     expect(r.violations.map((v) => `${url}: ${v.id}`)).toEqual([]);
   };
-  for (const u of ["/dashboard", jobUrl, "/requests/new", "/reports", "/settings", "/sites", "/contractors"]) await check(p, u);
+  for (const u of ["/dashboard", jobUrl, `${jobUrl}/report`, "/requests/new", "/reports", "/settings", "/sites", "/contractors"]) await check(p, u);
   const m = await newPage(browser, { mobile: true });
   for (const u of ["/", "/login", "/register", "/forgot-password"]) await check(m, u);
   // On a phone nothing may scroll sideways (long action labels, tables), signed in or not.

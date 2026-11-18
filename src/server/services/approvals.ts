@@ -8,6 +8,7 @@
  *  - Approving = accepting the quote: the contractor is appointed (job → ASSIGNED), receives a completion link,
  *    and the other contractors are told they were not selected. One decision per quote (DB unique), guarded updates.
  */
+import { addSignature } from "./signatures";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/db";
 import { conflict, forbidden, invalid, isUniqueViolation, notFound } from "@/lib/errors";
@@ -64,7 +65,7 @@ export const limitOf = (ctx: Ctx, rules: ApprovalRules) => approvalLimit(ctx, ru
  * Accept a quote within the caller's authority. Works from QUOTING (manager/approver choosing directly) or
  * AWAITING_APPROVAL (approving the recommended quote). Appoints the contractor.
  */
-export async function approveQuote(ctx: Ctx, quoteId: string, input: ApproveInput) {
+export async function approveQuote(ctx: Ctx, quoteId: string, input: ApproveInput, signature?: string | null) {
   requirePerm(ctx, "spend.approve");
   const d = parse(input);
   return dup(() => prisma.$transaction(async (tx) => {
@@ -82,9 +83,10 @@ export async function approveQuote(ctx: Ctx, quoteId: string, input: ApproveInpu
     const now = new Date();
     const r = await tx.quote.updateMany({ where: { id: q.id, status: "SUBMITTED" }, data: { status: "APPROVED", decidedAt: now } });
     if (r.count !== 1) throw conflict("This quote was just decided by someone else.");
+    const sig = await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "APPROVAL", name: ctx.userName, userId: ctx.userId, dataUrl: signature, quoteId: q.id });
     await tx.decision.create({
       data: { orgId: ctx.orgId, jobId: job.id, quoteId: q.id, outcome: "APPROVED", via: "PORTAL", deciderUserId: ctx.userId, deciderName: ctx.userName,
-        deciderEmail: ctx.userEmail, comment: d.comment },
+        deciderEmail: ctx.userEmail, comment: d.comment, signatureAttachmentId: sig?.attachmentId ?? null },
     });
     // Everyone else was not selected.
     const others = await tx.quote.findMany({ where: { jobId: job.id, status: "SUBMITTED", id: { not: q.id } }, include: { contractor: true } });

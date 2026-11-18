@@ -14,7 +14,7 @@ const userFields = { id: true, name: true, email: true, createdAt: true } as con
 export async function exportCompany(ctx: Ctx) {
   if (!can(ctx, "org.manage") && !(ctx.roles.includes("OWNER") && ctx.locked)) throw forbidden();
   const where = { orgId: ctx.orgId };
-  const [org, members, sites, locations, assets, contractors, jobs, assessments, quotes, updates, completions, decisions, links, attachments, events] = await Promise.all([
+  const [org, members, sites, locations, assets, contractors, jobs, assessments, quotes, updates, completions, decisions, links, attachments, events, signatures] = await Promise.all([
     prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, include: { subscription: { include: { plan: true } }, priorities: true } }),
     prisma.membership.findMany({ where, include: { user: { select: userFields } } }),
     prisma.site.findMany({ where, omit: { publicToken: true } }), prisma.location.findMany({ where }), prisma.asset.findMany({ where }),
@@ -25,11 +25,12 @@ export async function exportCompany(ctx: Ctx) {
     prisma.contractorLink.findMany({ where, omit: { tokenHash: true } }),
     prisma.attachment.findMany({ where, select: { id: true, kind: true, filename: true, mimeType: true, sizeBytes: true, createdAt: true, jobId: true, quoteId: true, completionId: true } }),
     prisma.activityEvent.findMany({ where, orderBy: { createdAt: "asc" } }),
+    prisma.jobSignature.findMany({ where, orderBy: { signedAt: "asc" } }),
   ]);
   await prisma.$transaction((tx) => logEvent(tx, actorOf(ctx), null, "data.exported", "Full company data export downloaded"));
   return {
     format: "fixrelay-export/2", exportedAt: new Date().toISOString(), exportedBy: ctx.userEmail,
     organisation: org, members, sites, locations, assets, contractors, jobs, assessments, quotes, workUpdates: updates,
-    completions, decisions, contractorLinks: links, files: attachments.map((a) => ({ ...a, download: `/api/files/${a.id}` })), auditTrail: events,
+    completions, decisions, requisitionSignatures: signatures, contractorLinks: links, files: attachments.map((a) => ({ ...a, download: `/api/files/${a.id}` })), auditTrail: events,
   };
 }

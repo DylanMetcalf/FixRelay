@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SignLine } from "@/components/requisition-fields";
 import { publicReportAction } from "@/app/actions/jobs";
 import { getSession } from "@/app/_lib/session";
 import { RequestPlaceFields } from "@/components/client-forms";
@@ -50,6 +51,7 @@ export default async function SiteReport({ params, searchParams }: { params: Pro
             <Field label="Phone number" name="reporterPhone" required type="tel" autoComplete="tel" />
           </div>
           <Field label="Email (optional)" name="reporterEmail" type="email" autoComplete="email" hint="We will email you the reference number." />
+          <SignLine label="Submitted by – your signature" required={org.requireSignatures} />
           <p className="text-xs text-gray-600">Your name and number are only used by the maintenance team to follow up on this report.</p>
           <Submit className="btn btn-primary w-full">Send report</Submit>
         </Form>

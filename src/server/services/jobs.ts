@@ -7,6 +7,7 @@
  *  - status only changes via `move`, a guarded UPDATE that fails if the job changed concurrently;
  *  - each change writes an audit event in the same transaction.
  */
+import { addSignature } from "./signatures";
 import type { JobStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/db";
@@ -29,6 +30,7 @@ const optDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce
 const reason = z.string().trim().min(3, "Please give a reason.").max(1000);
 const priority = z.enum(["LOW", "NORMAL", "HIGH", "CRITICAL"]);
 export const CATEGORIES = ["General", "Electrical", "Mechanical", "Plumbing", "HVAC", "Building", "Safety", "Other"] as const;
+export const ROOT_CAUSES = ["MAINTENANCE", "AGE_OF_MACHINE", "OPERATOR", "HUMAN_ERROR", "WEAR_AND_TEAR", "BREAKDOWN", "CHANGE_OVER", "OTHER"] as const;
 
 /** Guarded status change: succeeds only if the job is still in the status we read. */
 export async function move(tx: Tx, orgId: string, job: { id: string; status: JobStatus }, to: JobStatus, data: Prisma.JobUncheckedUpdateManyInput = {}) {
@@ -67,6 +69,7 @@ const createSchema = z.object({
   category: z.enum(CATEGORIES).default("General"),
   priority: priority.default("NORMAL"),
   emergency: z.boolean().default(false),
+  isProject: z.boolean().default(false),
 });
 
 async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>, extra: Partial<Prisma.JobUncheckedCreateInput>) {
@@ -81,7 +84,7 @@ async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>
   const now = new Date();
   return tx.job.create({
     data: {
-      ...d, orgId, reference: `REQ-${String(org.jobSeq).padStart(5, "0")}`, reportedAt: now,
+      ...d, orgId, reference: `${org.referencePrefix}${String(org.jobSeq).padStart(5, "0")}`, reportedAt: now,
       reporterConfirmation: org.reporterConfirmation, dueAt: rule ? new Date(now.getTime() + rule.completionHours * 3_600_000) : null,
       ...extra,
     },
@@ -89,13 +92,14 @@ async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>
 }
 
 /** Log a fault from inside the app (any member, for a site they belong to). */
-export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>) {
+export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>, signature?: string | null) {
   requirePerm(ctx, "job.create");
   const d = parse(createSchema, input);
   const site = await findSite(ctx, d.siteId);
   if (!site || site.archived) throw invalid("Choose one of your sites.");
   return prisma.$transaction(async (tx) => {
     const job = await insertJob(tx, ctx.orgId, d, { requesterId: ctx.userId, source: "APP" });
+    await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "REPORTED", name: ctx.userName, userId: ctx.userId, dataUrl: signature });
     await logEvent(tx, actorOf(ctx), job.id, "job.created", `Fault reported: ${job.title}`, { priority: d.priority, emergency: d.emergency });
     await notify(tx, {
       orgId: ctx.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, ctx.orgId), exceptUserId: ctx.userId,
@@ -105,7 +109,7 @@ export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>) {
   });
 }
 
-const publicSchema = createSchema.omit({ siteId: true, emergency: true, category: true, priority: true }).extend({
+const publicSchema = createSchema.omit({ siteId: true, emergency: true, category: true, priority: true, isProject: true }).extend({
   reporterName: z.string().trim().min(2, "Enter your name.").max(120),
   reporterPhone: z.string().trim().min(6, "Enter a phone number so the maintenance team can reach you.").max(40),
   reporterEmail: z.union([z.literal(""), z.string().trim().toLowerCase().email("Enter a valid email address, or leave it empty.")]).default(""),
@@ -117,17 +121,18 @@ export type PublicReportInput = z.input<typeof publicSchema>;
  * has switched public reporting on. The report is marked as unverified for the maintenance team to screen;
  * the reporter cannot see anything else in the system.
  */
-export async function createPublicReport(siteToken: string, input: PublicReportInput) {
+export async function createPublicReport(siteToken: string, input: PublicReportInput, signature?: string | null, ip?: string | null) {
   const d = parse(publicSchema, input);
   const site = await prisma.site.findUnique({ where: { publicToken: siteToken } });
   const org = site ? await prisma.organisation.findUnique({ where: { id: site.orgId }, include: { subscription: { include: { plan: true } } } }) : null;
   if (!site || site.archived || !org?.publicReportingEnabled) throw notFound("This report link is not active. Please contact the site's maintenance team.");
   return prisma.$transaction(async (tx) => {
-    const job = await insertJob(tx, site.orgId, { ...d, siteId: site.id, category: "General", priority: "NORMAL", emergency: false }, {
+    const job = await insertJob(tx, site.orgId, { ...d, siteId: site.id, category: "General", priority: "NORMAL", emergency: false, isProject: false }, {
       requesterId: null, source: "PUBLIC_LINK", reporterConfirmation: false,
       reporterName: d.reporterName, reporterPhone: d.reporterPhone, reporterEmail: d.reporterEmail || null,
     });
     const actor = { orgId: site.orgId, userId: null, label: `${d.reporterName} (public report link)` };
+    await addSignature(tx, { orgId: site.orgId, jobId: job.id, step: "REPORTED", name: d.reporterName, userId: null, dataUrl: signature, ip, required: org.requireSignatures });
     await logEvent(tx, actor, job.id, "job.created", `Fault reported through the public link: ${job.title}`, { source: "PUBLIC_LINK" });
     await notify(tx, {
       orgId: site.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, site.orgId),
@@ -157,7 +162,7 @@ export async function getJob(ctx: Ctx, id: string) {
       site: { select: { id: true, name: true, address: true } },
       contractor: { select: { id: true, name: true, email: true, phone: true, contactName: true } },
       contractorLinks: { where: { revokedAt: null }, select: { id: true, purpose: true, contractorId: true, expiresAt: true, usedAt: true, createdAt: true }, orderBy: { createdAt: "desc" } },
-      location: { select: { name: true } },
+      location: { select: { name: true, foodArea: true } },
       asset: { select: { id: true, name: true, reference: true } },
       technicians: true,
       assessments: { orderBy: { createdAt: "desc" } },
@@ -165,11 +170,12 @@ export async function getJob(ctx: Ctx, id: string) {
       updates: { orderBy: { createdAt: "desc" } },
       completions: { include: { decision: true }, orderBy: { version: "desc" } },
       attachments: { orderBy: { createdAt: "asc" } },
+      signatures: { orderBy: { signedAt: "asc" } },
       events: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!job) throw notFound("Job not found.");
-  if (!seePrices) { job.quotes = []; job.approvedCostCents = null; job.contractorLinks = []; }
+  if (!seePrices) { job.quotes = []; job.approvedCostCents = null; job.contractorLinks = []; job.signatures = job.signatures.filter((x) => x.step !== "APPROVAL"); }
   if (!staff) {
     // Requesters see progress, not internal working notes, prices or contractor details.
     job.reporterPhone = null;
@@ -290,13 +296,14 @@ async function assertStaffMembers(tx: Tx, orgId: string, userIds: string[]) {
 }
 
 /** NEW → ASSESSING, optionally naming who must assess. The caller becomes the responsible manager. */
-export async function requestAssessment(ctx: Ctx, jobId: string, input: { assessorId?: string | null }) {
+export async function requestAssessment(ctx: Ctx, jobId: string, input: { assessorId?: string | null }, signature?: string | null) {
   requirePerm(ctx, "job.manage");
   const assessorId = parse(optId, input.assessorId);
   return prisma.$transaction(async (tx) => {
     const job = await loadJob(tx, ctx, jobId);
     if (assessorId) await assertStaffMembers(tx, ctx.orgId, [assessorId]);
     await move(tx, ctx.orgId, job, "ASSESSING", { ownerId: job.ownerId ?? ctx.userId, leadTechnicianId: assessorId });
+    await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "RECEIVED", name: ctx.userName, userId: ctx.userId, dataUrl: signature });
     await logEvent(tx, actorOf(ctx), job.id, "job.assessment_requested", "Sent for assessment", { assessorId });
     await notify(tx, {
       orgId: ctx.orgId, jobId: job.id, type: "job.assessment_requested", userIds: [assessorId], exceptUserId: ctx.userId,
@@ -316,7 +323,7 @@ const assessmentSchema = z.object({
 });
 
 /** Record an assessment → ASSESSED. A manager may assess a NEW request directly. */
-export async function submitAssessment(ctx: Ctx, jobId: string, input: z.input<typeof assessmentSchema>) {
+export async function submitAssessment(ctx: Ctx, jobId: string, input: z.input<typeof assessmentSchema>, signature?: string | null) {
   requirePerm(ctx, "job.assess");
   const d = parse(assessmentSchema, input);
   return prisma.$transaction(async (tx) => {
@@ -324,6 +331,7 @@ export async function submitAssessment(ctx: Ctx, jobId: string, input: z.input<t
     requireOnJob(ctx, job);
     if (job.status === "NEW" && isManager(ctx)) {
       await move(tx, ctx.orgId, job, "ASSESSING", { ownerId: job.ownerId ?? ctx.userId });
+      await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "RECEIVED", name: ctx.userName, userId: ctx.userId, dataUrl: signature });
       job = { ...job, status: "ASSESSING" };
     }
     await move(tx, ctx.orgId, job, "ASSESSED");
@@ -508,13 +516,26 @@ const completionSchema = z.object({
   workPerformed: z.string().trim().min(5, "Describe the work performed.").max(5000),
   observations: z.string().trim().max(5000).default(""),
   completedAt: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.coerce.date().optional()),
+  rootCauses: z.array(z.enum(ROOT_CAUSES)).min(1, "Tick at least one root cause."),
+  rootCauseNotes: z.string().trim().max(2000).default(""),
+  // Food-handling areas only: "Tools out = tools in and area is clean and tidy" (Y/N).
+  toolsAndAreaOk: z.boolean().nullable().default(null),
 });
+export type CompletionInput = z.input<typeof completionSchema>;
+export const completionDetails = completionSchema.pick({ rootCauses: true, rootCauseNotes: true, toolsAndAreaOk: true });
+
+/** Food-area check: the tools/clean question must be answered for locations marked as food-handling areas. */
+export async function assertToolsCheck(tx: Tx, orgId: string, locationId: string | null, answer: boolean | null) {
+  if (!locationId || answer !== null) return;
+  const loc = await tx.location.findFirst({ where: { id: locationId, orgId }, select: { foodArea: true } });
+  if (loc?.foodArea) throw invalid("This is a food-handling area: answer \"Tools out = tools in and area is clean and tidy\".");
+}
 
 /**
  * IN_PROGRESS → AWAITING_VERIFICATION. Requires evidence (an "after" photo or a test document) and
  * no variation quote still awaiting the customer. Evidence is bound to this completion version.
  */
-export async function submitCompletion(ctx: Ctx, jobId: string, input: z.input<typeof completionSchema>) {
+export async function submitCompletion(ctx: Ctx, jobId: string, input: z.input<typeof completionSchema>, signature?: string | null) {
   requirePerm(ctx, "job.work");
   const d = parse(completionSchema, input);
   const completedAt = d.completedAt ?? new Date();
@@ -531,12 +552,14 @@ export async function submitCompletion(ctx: Ctx, jobId: string, input: z.input<t
       where: { orgId: ctx.orgId, jobId: job.id, completionId: null, kind: { in: ["BEFORE", "AFTER", "TEST_DOCUMENT"] } }, select: { id: true, kind: true },
     });
     if (!evidence.some((e) => e.kind !== "BEFORE")) throw invalid("Add at least one after-photo or test document as completion evidence.");
+    await assertToolsCheck(tx, ctx.orgId, job.locationId, d.toolsAndAreaOk);
     await move(tx, ctx.orgId, job, "AWAITING_VERIFICATION", { completedAt });
     const version = (await tx.completion.count({ where: { jobId: job.id } })) + 1;
     const c = await tx.completion.create({
       data: { orgId: ctx.orgId, jobId: job.id, version, workPerformed: d.workPerformed, observations: d.observations, completedAt, submittedById: ctx.userId,
-        contractorId: contractorJob ? job.contractorId : null },
+        contractorId: contractorJob ? job.contractorId : null, rootCauses: d.rootCauses, rootCauseNotes: d.rootCauseNotes, toolsAndAreaOk: d.toolsAndAreaOk },
     });
+    await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "COMPLETED", name: ctx.userName, userId: ctx.userId, dataUrl: signature, completionId: c.id });
     if (contractorJob) await revokeJobLinks(tx, ctx.orgId, job.id, "COMPLETION");
     await tx.attachment.updateMany({ where: { id: { in: evidence.map((e) => e.id) } }, data: { completionId: c.id } });
     await logEvent(tx, actorOf(ctx), job.id, "job.completion_submitted", `Completion submitted for verification (v${version})`, { completionId: c.id, evidence: evidence.length });
@@ -567,7 +590,7 @@ const verifySchema = z.object({ outcome: z.enum(["APPROVED", "REJECTED"]), comme
  *  - A MANAGER can check it instead (via INTERNAL); when the reporter was supposed to confirm, a reason is required.
  * Rejected work goes back to IN_PROGRESS; for contractor jobs a fresh completion link is emailed.
  */
-export async function confirmFixed(ctx: Ctx, jobId: string, input: z.input<typeof verifySchema>, opts: { signature?: { name: string; dataUrl: string } } = {}) {
+export async function confirmFixed(ctx: Ctx, jobId: string, input: z.input<typeof verifySchema>, opts: { signature?: { name: string; dataUrl: string }; reporterSignature?: string | null } = {}) {
   const d = parse(verifySchema, input);
   return prisma.$transaction(async (tx) => {
     const job = await loadJob(tx, ctx, jobId);
@@ -584,10 +607,14 @@ export async function confirmFixed(ctx: Ctx, jobId: string, input: z.input<typeo
     if (!c) throw conflict("There is no completed work waiting for confirmation.");
     const r = await tx.completion.updateMany({ where: { id: c.id, status: "SUBMITTED" }, data: { status: d.outcome } });
     if (r.count !== 1) throw conflict("A decision has already been recorded for this work.");
+    // "Confirmed by originator": signed on a staff device (always required there) or by the reporter in the app.
     let signatureId: string | null = null;
     if (opts.signature) {
-      const { storeSignature } = await import("./attachments");
-      signatureId = (await storeSignature(tx, { orgId: ctx.orgId, jobId: job.id, completionId: c.id, dataUrl: opts.signature.dataUrl })).id;
+      const sig = await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "ORIGINATOR", name: opts.signature.name, userId: null, dataUrl: opts.signature.dataUrl, completionId: c.id, required: true });
+      signatureId = sig!.attachmentId;
+    } else if (reporter) {
+      const sig = await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "ORIGINATOR", name: ctx.userName, userId: ctx.userId, dataUrl: opts.reporterSignature, completionId: c.id });
+      signatureId = sig?.attachmentId ?? null;
     }
     const via = captured ? "IN_PERSON" : reporter ? "PORTAL" : "INTERNAL";
     const deciderName = captured ? opts.signature!.name : ctx.userName;
@@ -613,7 +640,7 @@ export async function confirmFixed(ctx: Ctx, jobId: string, input: z.input<typeo
  * Close a job: from VERIFIED (someone confirmed it is fixed), or straight from AWAITING_VERIFICATION when
  * reporter confirmation is not required (the manager's check is recorded as an INTERNAL decision).
  */
-export async function closeJob(ctx: Ctx, jobId: string, input: { comment?: string } = {}) {
+export async function closeJob(ctx: Ctx, jobId: string, input: { comment?: string } = {}, signature?: string | null) {
   requirePerm(ctx, "job.manage");
   return prisma.$transaction(async (tx) => {
     const job = await loadJob(tx, ctx, jobId);
@@ -632,6 +659,7 @@ export async function closeJob(ctx: Ctx, jobId: string, input: { comment?: strin
       const d = completion.decision;
       if (completion.status !== "APPROVED" || !d || d.outcome !== "APPROVED") throw conflict("A confirmation for the latest completed work is missing.");
     }
+    await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "MANAGER", name: ctx.userName, userId: ctx.userId, dataUrl: signature, completionId: completion.id });
     await move(tx, ctx.orgId, job, "CLOSED", { closedAt: new Date() });
     await revokeJobLinks(tx, ctx.orgId, job.id);
     await logEvent(tx, actorOf(ctx), job.id, "job.closed", "Job closed");

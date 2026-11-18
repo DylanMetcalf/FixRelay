@@ -80,3 +80,9 @@ export function nextAction(job: {
     default: return { label: "No further action", party: "Nobody" };
   }
 }
+
+/** Root cause boxes on the maintenance work requisition. */
+export const ROOT_CAUSE_LABEL: Record<"MAINTENANCE" | "AGE_OF_MACHINE" | "OPERATOR" | "HUMAN_ERROR" | "WEAR_AND_TEAR" | "BREAKDOWN" | "CHANGE_OVER" | "OTHER", string> = {
+  MAINTENANCE: "Maintenance", AGE_OF_MACHINE: "Age of machine", OPERATOR: "Operator", HUMAN_ERROR: "Human error",
+  WEAR_AND_TEAR: "Wear and tear", BREAKDOWN: "Breakdown", CHANGE_OVER: "Change over", OTHER: "Other",
+};

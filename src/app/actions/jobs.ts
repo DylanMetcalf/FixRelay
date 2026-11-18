@@ -14,6 +14,13 @@ import { clientIp, requireCtx } from "../_lib/session";
 const id = (fd: FormData) => str(fd, "jobId");
 const optDate = (v: string) => (v ? new Date(v) : null);
 const optInt = (v: string) => (v.trim() ? Number.parseInt(v, 10) : null);
+/** Drawn signature (PNG data URL) from the signature pad, if any. */
+const sig = (fd: FormData) => str(fd, "signature") || null;
+/** Requisition completion details: root cause boxes, notes, and the food-area tools/clean check (Y/N). */
+const completionDetails = (fd: FormData) => ({
+  rootCauses: list(fd, "rootCauses") as ("OTHER")[], rootCauseNotes: str(fd, "rootCauseNotes"),
+  toolsAndAreaOk: str(fd, "toolsAndAreaOk") === "yes" ? true : str(fd, "toolsAndAreaOk") === "no" ? false : null,
+});
 
 async function attach(ctx: Awaited<ReturnType<typeof requireCtx>>, fd: FormData, jobId: string, kind: AttachmentKind, field = "files", quoteId?: string) {
   for (const f of await filesOf(fd, field)) await addJobAttachment(ctx, { jobId, kind, quoteId, ...f });
@@ -25,8 +32,8 @@ export async function createJobAction(_: ActionState, fd: FormData) {
     const job = await jobs.createJob(ctx, {
       title: str(fd, "title"), description: str(fd, "description"), siteId: str(fd, "siteId"),
       locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), category: str(fd, "category") as "General",
-      priority: str(fd, "priority") as "NORMAL", emergency: bool(fd, "emergency"),
-    });
+      priority: str(fd, "priority") as "NORMAL", emergency: bool(fd, "emergency"), isProject: bool(fd, "isProject"),
+    }, sig(fd));
     await attach(ctx, fd, job.id, "REQUEST");
     return { redirect: `/jobs/${job.id}` };
   });
@@ -42,7 +49,7 @@ export async function publicReportAction(_: ActionState, fd: FormData) {
     const r = await jobs.createPublicReport(token, {
       title: str(fd, "title"), description: str(fd, "description"), locationId: str(fd, "locationId"), assetId: str(fd, "assetId"),
       reporterName: str(fd, "reporterName"), reporterPhone: str(fd, "reporterPhone"), reporterEmail: str(fd, "reporterEmail"),
-    });
+    }, sig(fd), ip);
     return { ok: `Thank you. Your report ${r.reference} has been sent to the maintenance team.`, data: { sent: "1", reference: r.reference } };
   });
 }
@@ -54,7 +61,7 @@ export async function signoffRuleAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.setSignoffRequired(await requireCtx(), id(fd), str(fd, "required") === "true"); return { ok: "Updated." }; });
 }
 export async function requestAssessmentAction(_: ActionState, fd: FormData) {
-  return run(async () => { await jobs.requestAssessment(await requireCtx(), id(fd), { assessorId: str(fd, "assessorId") }); return { ok: "Sent for assessment." }; });
+  return run(async () => { await jobs.requestAssessment(await requireCtx(), id(fd), { assessorId: str(fd, "assessorId") }, sig(fd)); return { ok: "Sent for assessment." }; });
 }
 
 export async function assessmentAction(_: ActionState, fd: FormData) {
@@ -63,7 +70,7 @@ export async function assessmentAction(_: ActionState, fd: FormData) {
     await jobs.submitAssessment(ctx, id(fd), {
       findings: str(fd, "findings"), suspectedCause: str(fd, "suspectedCause"), recommendedWork: str(fd, "recommendedWork"), materials: str(fd, "materials"),
       labourHoursEstimate: str(fd, "labourHoursEstimate"), quoteRequired: str(fd, "quoteRequired") === "yes", externalHelpRequired: bool(fd, "externalHelpRequired"),
-    });
+    }, sig(fd));
     await attach(ctx, fd, id(fd), "ASSESSMENT");
     return { ok: "Assessment recorded." };
   });
@@ -125,7 +132,7 @@ export async function completionAction(_: ActionState, fd: FormData) {
     await attach(ctx, fd, id(fd), "BEFORE", "before");
     await attach(ctx, fd, id(fd), "AFTER", "after");
     await attach(ctx, fd, id(fd), "TEST_DOCUMENT", "tests");
-    await jobs.submitCompletion(ctx, id(fd), { workPerformed: str(fd, "workPerformed"), observations: str(fd, "observations"), completedAt: str(fd, "completedAt") });
+    await jobs.submitCompletion(ctx, id(fd), { workPerformed: str(fd, "workPerformed"), observations: str(fd, "observations"), completedAt: str(fd, "completedAt"), ...completionDetails(fd) }, sig(fd));
     return { ok: "Submitted for confirmation." };
   });
 }
@@ -134,7 +141,7 @@ export async function completionAction(_: ActionState, fd: FormData) {
 export async function confirmFixedAction(_: ActionState, fd: FormData) {
   return run(async () => {
     const ok = str(fd, "outcome") === "APPROVED";
-    await jobs.confirmFixed(await requireCtx(), id(fd), { outcome: ok ? "APPROVED" : "REJECTED", comment: str(fd, "comment") });
+    await jobs.confirmFixed(await requireCtx(), id(fd), { outcome: ok ? "APPROVED" : "REJECTED", comment: str(fd, "comment") }, { reporterSignature: sig(fd) });
     return { ok: ok ? "Thank you – confirmed fixed." : "Thank you – it has been sent back to be fixed." };
   });
 }
@@ -156,7 +163,7 @@ export async function resendCompletionLinkAction(_: ActionState, fd: FormData) {
 }
 
 export async function closeAction(_: ActionState, fd: FormData) {
-  return run(async () => { await jobs.closeJob(await requireCtx(), id(fd), { comment: str(fd, "comment") }); return { ok: "Job closed." }; });
+  return run(async () => { await jobs.closeJob(await requireCtx(), id(fd), { comment: str(fd, "comment") }, sig(fd)); return { ok: "Signed off and closed." }; });
 }
 export async function reopenAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.reopenJob(await requireCtx(), id(fd), { reason: str(fd, "reason") }); return { ok: "Job reopened." }; });
@@ -190,7 +197,7 @@ export async function withdrawInviteAction(_: ActionState, fd: FormData) {
 const approveInput = (fd: FormData) => ({ poNumber: str(fd, "poNumber"), exceptionReason: str(fd, "exceptionReason"), comment: str(fd, "comment") });
 
 export async function approveQuoteAction(_: ActionState, fd: FormData) {
-  return run(async () => { await approvals.approveQuote(await requireCtx(), str(fd, "quoteId"), approveInput(fd)); return { ok: "Quote approved and contractor appointed." }; });
+  return run(async () => { await approvals.approveQuote(await requireCtx(), str(fd, "quoteId"), approveInput(fd), sig(fd)); return { ok: "Quote approved and contractor appointed." }; });
 }
 export async function recommendQuoteAction(_: ActionState, fd: FormData) {
   return run(async () => { await approvals.recommendQuote(await requireCtx(), str(fd, "quoteId"), approveInput(fd)); return { ok: "Sent for approval." }; });
@@ -214,8 +221,9 @@ export async function contractorQuoteAction(_: ActionState, fd: FormData) {
 
 export async function contractorCompletionAction(_: ActionState, fd: FormData) {
   return run(async () => {
-    await rateLimit(`contractor:ip:${await clientIp()}`, 40, 60 * 60_000);
-    await portal.submitCompletionViaLink(str(fd, "token"), { workPerformed: str(fd, "workPerformed"), observations: str(fd, "observations") }, await filesOf(fd, "files"));
+    const ip = await clientIp();
+    await rateLimit(`contractor:ip:${ip}`, 40, 60 * 60_000);
+    await portal.submitCompletionViaLink(str(fd, "token"), { workPerformed: str(fd, "workPerformed"), observations: str(fd, "observations"), signerName: str(fd, "signerName"), ...completionDetails(fd) }, await filesOf(fd, "files"), sig(fd), ip);
     return { ok: "Thank you. Your completion has been submitted. The site will check the work." };
   });
 }

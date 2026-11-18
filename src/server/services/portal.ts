@@ -9,7 +9,8 @@ import { conflict, invalid, notFound } from "@/lib/errors";
 import { hashToken } from "@/lib/tokens";
 import { type Actor, logEvent } from "./activity";
 import { addContractorFiles } from "./attachments";
-import { notifyCompletion, move } from "./jobs";
+import { assertToolsCheck, completionDetails, notifyCompletion, move } from "./jobs";
+import { addSignature } from "./signatures";
 import { insertContractorQuote, type QuoteFigures } from "./quotes";
 
 const VISIBLE_KINDS = ["REQUEST", "ASSESSMENT"] as const;
@@ -25,7 +26,7 @@ export async function getContractorLinkView(token: string) {
   if (!link || (link.revokedAt && link.purpose !== "QUOTE")) return null;
   const { job, contractor } = link;
   const [org, files, myQuotes, completion] = await Promise.all([
-    prisma.organisation.findUniqueOrThrow({ where: { id: link.orgId }, select: { name: true, brandColour: true, logoAttachmentId: true, phone: true, contactEmail: true } }),
+    prisma.organisation.findUniqueOrThrow({ where: { id: link.orgId }, select: { name: true, brandColour: true, logoAttachmentId: true, phone: true, contactEmail: true, requireSignatures: true } }),
     prisma.attachment.findMany({ where: { orgId: link.orgId, jobId: job.id, kind: { in: [...VISIBLE_KINDS] } }, select: { id: true, filename: true, mimeType: true, kind: true }, orderBy: { createdAt: "asc" } }),
     prisma.quote.findMany({ where: { jobId: job.id, contractorId: contractor.id }, orderBy: { version: "desc" }, select: { id: true, number: true, version: true, status: true, subtotalCents: true, vatCents: true, totalCents: true, leadTimeDays: true, validUntil: true, scope: true, submittedAt: true } }),
     link.purpose === "COMPLETION" ? prisma.completion.findFirst({ where: { jobId: job.id, contractorId: contractor.id }, orderBy: { version: "desc" } }) : null,
@@ -36,10 +37,10 @@ export async function getContractorLinkView(token: string) {
   else state = link.usedAt ? "submitted" : !["ASSIGNED", "IN_PROGRESS"].includes(job.status) || job.contractorId !== contractor.id ? "closed" : expired ? "expired" : "open";
   return {
     state, purpose: link.purpose, expiresAt: link.expiresAt, org,
-    contractor: { name: contractor.name, vatRegistered: contractor.vatRegistered },
+    contractor: { name: contractor.name, vatRegistered: contractor.vatRegistered, contactName: contractor.contactName },
     job: {
       reference: job.reference, title: job.title, description: job.description, priority: job.priority, emergency: job.emergency,
-      site: job.site.name, address: job.site.address, location: job.location?.name ?? null, asset: job.asset ? `${job.asset.reference} – ${job.asset.name}` : null,
+      site: job.site.name, address: job.site.address, location: job.location?.name ?? null, foodArea: !!job.location?.foodArea, asset: job.asset ? `${job.asset.reference} – ${job.asset.name}` : null,
       scope: link.purpose === "QUOTE" ? link.scope : null,
       quoteDeadline: job.quoteDeadline, poNumber: link.purpose === "COMPLETION" ? job.poNumber : null,
       approvedCostCents: link.purpose === "COMPLETION" ? job.approvedCostCents : null,
@@ -68,10 +69,11 @@ export async function submitQuoteViaLink(token: string, input: QuoteFigures, fil
 const completionSchema = z.object({
   workPerformed: z.string().trim().min(5, "Describe the work you did.").max(5000),
   observations: z.string().trim().max(5000).default(""),
-});
+  signerName: z.string().trim().max(120).default(""),
+}).merge(completionDetails);
 
 /** Appointed contractor submits completion with at least one photo. Single use per link. */
-export async function submitCompletionViaLink(token: string, input: z.input<typeof completionSchema>, files: { filename: string; bytes: Buffer }[]) {
+export async function submitCompletionViaLink(token: string, input: z.input<typeof completionSchema>, files: { filename: string; bytes: Buffer }[], signature?: string | null, ip?: string | null) {
   const p = completionSchema.safeParse(input);
   if (!p.success) throw invalid(p.error.issues[0]!.message);
   if (!files.length) throw invalid("Add at least one photo of the completed work.");
@@ -83,12 +85,16 @@ export async function submitCompletionViaLink(token: string, input: z.input<type
     if (claimed.count !== 1) throw conflict("Completion has already been submitted with this link.");
     const job = await tx.job.findUniqueOrThrow({ where: { id: link.jobId } });
     if (job.contractorId !== link.contractorId || !["ASSIGNED", "IN_PROGRESS"].includes(job.status)) throw conflict("This job is not waiting for your completion.");
+    await assertToolsCheck(tx, link.orgId, job.locationId, p.data.toolsAndAreaOk);
     const actor = actorFor(link.orgId, link.contractor.name);
     const version = (await tx.completion.count({ where: { jobId: job.id } })) + 1;
     const now = new Date();
     const c = await tx.completion.create({
-      data: { orgId: link.orgId, jobId: job.id, version, workPerformed: p.data.workPerformed, observations: p.data.observations, completedAt: now, submittedById: null, contractorId: link.contractorId },
+      data: { orgId: link.orgId, jobId: job.id, version, workPerformed: p.data.workPerformed, observations: p.data.observations, completedAt: now, submittedById: null, contractorId: link.contractorId,
+        rootCauses: p.data.rootCauses, rootCauseNotes: p.data.rootCauseNotes, toolsAndAreaOk: p.data.toolsAndAreaOk },
     });
+    const signer = p.data.signerName || link.contractor.contactName || link.contractor.name;
+    await addSignature(tx, { orgId: link.orgId, jobId: job.id, step: "COMPLETED", name: `${signer} (${link.contractor.name})`, userId: null, dataUrl: signature, completionId: c.id, ip });
     await addContractorFiles(tx, { orgId: link.orgId, jobId: job.id, completionId: c.id, kind: "AFTER", files, actor });
     await move(tx, link.orgId, job, "AWAITING_VERIFICATION", { completedAt: now, startedAt: job.startedAt ?? now });
     await logEvent(tx, actor, job.id, "job.completion_submitted", `Completion submitted by ${link.contractor.name} (v${version}, ${files.length} photo${files.length === 1 ? "" : "s"})`, { completionId: c.id });

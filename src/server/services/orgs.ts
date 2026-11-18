@@ -85,6 +85,34 @@ export async function updateOrgSettings(ctx: Ctx, input: z.input<typeof settings
   });
 }
 
+const requisitionSchema = z.object({
+  referencePrefix: z.string().trim().max(10, "Keep the prefix to 10 characters or fewer.").regex(/^[A-Za-z0-9/-]*$/, "Use letters, numbers, - or / only."),
+  nextNumber: z.number().int().min(1).max(99_999_999).nullable(),
+  requireSignatures: z.boolean(),
+});
+
+/**
+ * The maintenance work requisition: number format (e.g. no prefix and the next number 12601 to continue a paper
+ * book), and whether drawn signatures are required at each signature line. The next number can only go up,
+ * so a requisition number is never reused.
+ */
+export async function setRequisitionSettings(ctx: Ctx, input: z.input<typeof requisitionSchema>) {
+  requirePerm(ctx, "org.manage");
+  const p = requisitionSchema.safeParse(input);
+  if (!p.success) throw invalid(p.error.issues[0]!.message);
+  const d = p.data;
+  return prisma.$transaction(async (tx) => {
+    const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId } });
+    if (d.nextNumber != null && d.nextNumber <= org.jobSeq) throw invalid(`The next number must be higher than the last one used (${org.jobSeq}).`);
+    await tx.organisation.update({
+      where: { id: ctx.orgId },
+      data: { referencePrefix: d.referencePrefix, requireSignatures: d.requireSignatures, ...(d.nextNumber != null ? { jobSeq: d.nextNumber - 1 } : {}) },
+    });
+    await logEvent(tx, actorOf(ctx), null, "org.requisition_changed",
+      `Requisition settings: prefix "${d.referencePrefix}"${d.nextNumber != null ? `, next number ${d.nextNumber}` : ""}, signatures ${d.requireSignatures ? "required" : "optional"}`);
+  });
+}
+
 const approvalSchema = z.object({
   managerApprovalLimitCents: z.number().int().min(0).max(2_000_000_000),
   approverApprovalLimitCents: z.number().int().min(0).max(2_000_000_000).nullable(),

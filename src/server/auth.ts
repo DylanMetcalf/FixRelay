@@ -72,7 +72,7 @@ export interface SessionView {
   ctx: Ctx | null;
   org: {
     id: string; name: string; slug: string; isDemo: boolean; brandColour: string;
-    logoAttachmentId: string | null; publicReportingEnabled: boolean;
+    logoAttachmentId: string | null; publicReportingEnabled: boolean; requireSignatures: boolean; referencePrefix: string;
   } | null;
   subscription: SubscriptionView | null;
   workspaces: { orgId: string; name: string; isDemo: boolean }[];

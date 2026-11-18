@@ -29,11 +29,24 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
         <div className="space-y-5 lg:col-span-2">
           <Card title="Locations">
             {s.locations.length === 0 ? <p className="muted">No locations yet. Add areas such as “Cold Room 2” or “Main Kitchen” so faults can be pinpointed.</p> : (
-              <div className="flex flex-wrap gap-2">{s.locations.map((l) => <Pill key={l.id}>{l.name}{l._count.jobs ? ` · ${l._count.jobs} job${l._count.jobs === 1 ? "" : "s"}` : ""}</Pill>)}</div>
+              <ul className="divide-y divide-gray-200" data-testid="locations">
+                {s.locations.map((l) => (
+                  <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span className="font-semibold">{l.name}{l._count.jobs ? <span className="font-normal text-gray-600"> · {l._count.jobs} job{l._count.jobs === 1 ? "" : "s"}</span> : null}
+                      {l.foodArea && <Pill tone="amber">Food-handling area</Pill>}</span>
+                    {manage && (
+                      <ActionButton action={a.foodAreaAction} hidden={{ id: l.id, foodArea: String(!l.foodArea) }} className="btn btn-secondary btn-sm">
+                        {l.foodArea ? "Not a food area" : "Mark as food area"}
+                      </ActionButton>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
             {manage && (
               <Form action={a.createLocationAction} hidden={{ siteId: s.id }} className="mt-3 flex flex-wrap items-end gap-2">
                 <input name="name" aria-label={`New location at ${s.name}`} placeholder="Add a location, e.g. Plant room" className="input max-w-xs !min-h-10 text-sm" required />
+                <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" name="foodArea" className="h-4 w-4" />Food-handling area</label>
                 <Submit className="btn btn-secondary btn-sm">Add location</Submit>
               </Form>
             )}

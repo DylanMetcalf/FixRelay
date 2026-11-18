@@ -20,9 +20,9 @@ describe("in-house route: fault reported → fixed by the site's own team", () =
     await jobs.assignJob(t.manager, job.id, { leadTechnicianId: t.tech.userId });
     await jobs.startWork(t.tech, job.id);
     await jobs.addWorkUpdate(t.tech, job.id, { note: "Hinge replaced", labourMinutes: 45 });
-    await expect(jobs.submitCompletion(t.tech, job.id, { workPerformed: "Replaced hinge" })).rejects.toThrow(/evidence/);
+    await expect(jobs.submitCompletion(t.tech, job.id, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Replaced hinge" })).rejects.toThrow(/evidence/);
     await addJobAttachment(t.tech, { jobId: job.id, kind: "AFTER", filename: "after.png", bytes: PNG });
-    await jobs.submitCompletion(t.tech, job.id, { workPerformed: "Replaced hinge, door closes properly" });
+    await jobs.submitCompletion(t.tech, job.id, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Replaced hinge, door closes properly" });
     expect(await prisma.notification.count({ where: { userId: t.requester.userId, type: "job.confirm_fixed" } })).toBe(1);
     await expect(jobs.closeJob(t.manager, job.id)).rejects.toThrow(/needs to confirm/);
     await expect(jobs.confirmFixed(t.tech, job.id, { outcome: "APPROVED" })).rejects.toEqual(code("FORBIDDEN"));
@@ -40,7 +40,7 @@ describe("in-house route: fault reported → fixed by the site's own team", () =
     await jobs.confirmFixed(t.requester, job.id, { outcome: "REJECTED", comment: "Still leaking" });
     expect(await status(job.id)).toBe("IN_PROGRESS");
     await addJobAttachment(t.tech, { jobId: job.id, kind: "AFTER", filename: "a2.png", bytes: PNG });
-    await jobs.submitCompletion(t.tech, job.id, { workPerformed: "Resealed properly" });
+    await jobs.submitCompletion(t.tech, job.id, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Resealed properly" });
     await expect(jobs.confirmFixed(t.manager, job.id, { outcome: "APPROVED" })).rejects.toThrow(/Say why/);
     await jobs.confirmFixed(t.manager, job.id, { outcome: "APPROVED", comment: "Checked on site, reporter on leave" });
     const d = await prisma.decision.findFirstOrThrow({ where: { jobId: job.id, outcome: "APPROVED" } });
@@ -92,9 +92,9 @@ describe("contractor route: quotes → approval → contractor fixes it", () => 
     // The appointed contractor completes through their completion link.
     const done = await linkFromEmail(t.contractors[2].email);
     expect((await portal.getContractorLinkView(done))).toMatchObject({ purpose: "COMPLETION", state: "open", job: { poNumber: "PO-77", approvedCostCents: 420000 } });
-    await expect(portal.submitCompletionViaLink(done, { workPerformed: "Replaced" }, [])).rejects.toThrow(/at least one photo/);
-    await portal.submitCompletionViaLink(done, { workPerformed: "Replaced capacitor, ran 1 hour" }, [{ filename: "after.png", bytes: PNG }]);
-    await expect(portal.submitCompletionViaLink(done, { workPerformed: "Again" }, [{ filename: "a.png", bytes: PNG }])).rejects.toThrow(/already been submitted/);
+    await expect(portal.submitCompletionViaLink(done, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Replaced" }, [])).rejects.toThrow(/at least one photo/);
+    await portal.submitCompletionViaLink(done, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Replaced capacitor, ran 1 hour" }, [{ filename: "after.png", bytes: PNG }]);
+    await expect(portal.submitCompletionViaLink(done, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Again" }, [{ filename: "a.png", bytes: PNG }])).rejects.toThrow(/already been submitted/);
     expect(await status(job.id)).toBe("AWAITING_VERIFICATION");
     await jobs.confirmFixed(t.requester, job.id, { outcome: "APPROVED" });
     await jobs.closeJob(t.manager, job.id);
@@ -171,12 +171,12 @@ describe("contractor route: quotes → approval → contractor fixes it", () => 
   it("rework: the site rejects the contractor's work, the contractor gets a fresh link; reopen re-issues one too", async () => {
     const t = await tenant();
     const { job, contractor } = await appointedJob(t);
-    await portal.submitCompletionViaLink(await linkFromEmail(contractor.email), { workPerformed: "Done and tested" }, [{ filename: "a.png", bytes: PNG }]);
+    await portal.submitCompletionViaLink(await linkFromEmail(contractor.email), { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Done and tested" }, [{ filename: "a.png", bytes: PNG }]);
     await jobs.confirmFixed(t.requester, job.id, { outcome: "REJECTED", comment: "Still trips" });
     expect(await status(job.id)).toBe("IN_PROGRESS");
     const rework = await linkFromEmail(contractor.email);
     expect((await prisma.outboxEmail.findFirstOrThrow({ where: { toEmail: contractor.email }, orderBy: { createdAt: "desc" } })).body).toMatch(/Rework needed: Still trips/);
-    await portal.submitCompletionViaLink(rework, { workPerformed: "Replaced relay too" }, [{ filename: "b.png", bytes: PNG }]);
+    await portal.submitCompletionViaLink(rework, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Replaced relay too" }, [{ filename: "b.png", bytes: PNG }]);
     await jobs.confirmFixed(t.requester, job.id, { outcome: "APPROVED" });
     await jobs.closeJob(t.manager, job.id);
     await jobs.reopenJob(t.manager, job.id, { reason: "Tripped again" });
@@ -195,9 +195,9 @@ describe("contractor route: quotes → approval → contractor fixes it", () => 
   it("a manager can record a contractor's completion for them (photos sent by email)", async () => {
     const t = await tenant();
     const { job } = await appointedJob(t);
-    await expect(jobs.submitCompletion(t.tech, job.id, { workPerformed: "I did it myself" })).rejects.toEqual(code("NOT_FOUND")); // not his job: invisible
+    await expect(jobs.submitCompletion(t.tech, job.id, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "I did it myself" })).rejects.toEqual(code("NOT_FOUND")); // not his job: invisible
     await addJobAttachment(t.manager, { jobId: job.id, kind: "AFTER", filename: "emailed.png", bytes: PNG });
-    await jobs.submitCompletion(t.manager, job.id, { workPerformed: "Contractor's job card: capacitor replaced" });
+    await jobs.submitCompletion(t.manager, job.id, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Contractor's job card: capacitor replaced" });
     expect(await status(job.id)).toBe("AWAITING_VERIFICATION");
     expect(await prisma.contractorLink.count({ where: { jobId: job.id, purpose: "COMPLETION", revokedAt: null } })).toBe(0);
   });
@@ -240,7 +240,7 @@ describe("concurrency", () => {
     expect(new Set(made.map((j) => j.reference)).size).toBe(10);
     const { contractor } = await appointedJob(t);
     const tok = await linkFromEmail(contractor.email);
-    const rs = await Promise.allSettled([1, 2, 3].map(() => portal.submitCompletionViaLink(tok, { workPerformed: "Done done" }, [{ filename: "a.png", bytes: PNG }])));
+    const rs = await Promise.allSettled([1, 2, 3].map(() => portal.submitCompletionViaLink(tok, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Done done" }, [{ filename: "a.png", bytes: PNG }])));
     expect(rs.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   });
 

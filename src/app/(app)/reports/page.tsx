@@ -65,6 +65,9 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
         <Card title="Spend by equipment"><p className="muted mb-2">{DEF.spendByAsset}</p>
           {r.spendByAsset.length === 0 ? <p className="text-sm">No equipment spend in this period.</p> : <Bars rows={r.spendByAsset.map((x) => ({ label: x.label, n: x.value, text: formatZar(x.value) }))} />}
         </Card>
+        <Card title="Root causes"><p className="muted mb-2">{DEF.rootCauses}</p>
+          {r.rootCauses.length === 0 ? <p className="text-sm">No closed jobs with a root cause in this period.</p> : <Bars rows={r.rootCauses.map((w) => ({ label: w.label, n: w.count }))} />}
+        </Card>
         <Card title="Where faults are reported"><p className="muted mb-2">{DEF.byLocation}</p>
           {r.byLocation.length === 0 ? <p className="text-sm">No faults in this period.</p> : <Bars rows={r.byLocation.map((w) => ({ label: w.label, n: w.count }))} />}
         </Card>

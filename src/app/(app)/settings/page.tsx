@@ -100,6 +100,20 @@ export default async function Settings() {
             </Card>
           )}
           {owner && (
+            <Card title="Maintenance work requisition">
+              <p className="muted mb-3">Every fault becomes a numbered requisition, filled in digitally as the job moves along. To continue your paper book, leave the prefix empty and set the next number.</p>
+              <Form action={a.saveRequisitionAction}>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Number prefix (may be empty)" name="referencePrefix" defaultValue={org.referencePrefix} maxLength={10} placeholder="e.g. REQ-" />
+                  <Field label={`Next number (last used: ${org.jobSeq})`} name="nextNumber" inputMode="numeric" placeholder={String(org.jobSeq + 1)} />
+                </div>
+                <p className="text-xs text-gray-600">Next requisition: <strong>{org.referencePrefix}{String(org.jobSeq + 1).padStart(5, "0")}</strong>. Numbers only go up and are never reused.</p>
+                <Check name="requireSignatures" label="Require signatures on every line: submitted by, received by maintenance, quote sign-off, work completed by, confirmed by originator and confirmed by manager" defaultChecked={org.requireSignatures} />
+                <Submit>Save requisition settings</Submit>
+              </Form>
+            </Card>
+          )}
+          {owner && (
             <Card title="Approval rules">
               <p className="muted mb-3">Who may approve contractor quotes, by amount incl. VAT. Owners can approve any amount. Changes are recorded in the history.</p>
               <Form action={a.saveApprovalRulesAction}>

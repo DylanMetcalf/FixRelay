@@ -86,7 +86,7 @@ export async function completedInHouse(t: Tenant, reporterConfirmation = true) {
   await jobs.assignJob(t.manager, job.id, { leadTechnicianId: t.tech.userId });
   await jobs.startWork(t.tech, job.id);
   await addJobAttachment(t.tech, { jobId: job.id, kind: "AFTER", filename: "after.png", bytes: PNG });
-  const completion = await jobs.submitCompletion(t.tech, job.id, { workPerformed: "Replaced the capacitor and tested." });
+  const completion = await jobs.submitCompletion(t.tech, job.id, { rootCauses: ["WEAR_AND_TEAR"], workPerformed: "Replaced the capacitor and tested." });
   return { job, completion };
 }
 

@@ -25,6 +25,7 @@ Job (the fault report and the job are ONE record moving through JobStatus; route
  ├─ Assessment
  ├─ Quote (per contractor, versioned; viaLink; leadTimeDays) ─< QuoteLine
  │     └─ Decision (0..1: spend approval)
+ ├─ JobSignature (requisition signature lines: REPORTED, RECEIVED, APPROVAL, COMPLETED, ORIGINATOR, MANAGER; append-only)
  ├─ ContractorLink (QUOTE | COMPLETION; hashed token, expiry, used/revoked; scope shown to the contractor)
  ├─ WorkUpdate (progress, notes, labour minutes, material cost)
  ├─ Completion (version 1..n; by a technician or a contractor) ─ Decision (0..1: fixed / not fixed)
@@ -49,7 +50,8 @@ Design choice: a "fault report" is the early stage of a job (statuses NEW, ASSES
 | At most one SUBMITTED completion per job | partial UNIQUE index |
 | One decision per quote version and per completion | UNIQUE (`Decision.quoteId`, `Decision.completionId`) |
 | Quote number+version unique per tenant; job reference unique per tenant; asset reference unique per tenant; site public token and link token hash globally unique | UNIQUE |
-| `ActivityEvent` and `Decision` cannot be updated or deleted | trigger `fr_append_only` |
+| `ActivityEvent`, `Decision` and `JobSignature` cannot be updated or deleted | trigger `fr_append_only` |
+| Requisition prefix ≤ 10 characters; signer name ≥ 2 characters | CHECK |
 | Non-draft quotes: commercial fields (incl. contractor and lead time) frozen; cannot be deleted; their lines cannot change | triggers `fr_quote_frozen`, `fr_quoteline_frozen` |
 
 ## Money
@@ -88,4 +90,4 @@ Nothing else is hard-deleted by the application. Sites and contractors are archi
 
 ## Migration history note
 
-`20261117154601_site_internal_model` converted the original contractor-facing model (customers, customer review links) to the internal site model: CLIENT roles became REQUESTER, `Client` and `ApprovalLink` were dropped, columns were renamed rather than dropped where data could be kept, and existing sites got a QR token. `20261117190000_contractor_link_scope` stores the quote-request scope on the link.
+`20261117154601_site_internal_model` converted the original contractor-facing model (customers, customer review links) to the internal site model: CLIENT roles became REQUESTER, `Client` and `ApprovalLink` were dropped, columns were renamed rather than dropped where data could be kept, and existing sites got a QR token. `20261117190000_contractor_link_scope` stores the quote-request scope on the link. `20261118100000_requisition_form` adds the requisition: signatures, root cause, tools/clean check, projects, food areas, numbering and the signature setting.

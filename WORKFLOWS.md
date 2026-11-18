@@ -63,6 +63,31 @@ Any open state except AWAITING_VERIFICATION / VERIFIED ──► CANCELLED (term
 
 **Close / reopen / cancel**: close from VERIFIED (or directly when confirmation is off). Reopen needs a reason → ASSIGNED; contractor jobs get a new completion link. Cancel needs a reason and is not allowed once work is awaiting confirmation.
 
+## The maintenance work requisition (digital form)
+
+Every job *is* a numbered maintenance work requisition, filled in automatically as it moves along. The printable form (`/jobs/:id/report`, "Requisition form" on the job page) follows the paper version line by line:
+
+| Paper form | Filled in from | When |
+|---|---|---|
+| Requisition number (e.g. 12600) | `Job.reference` = company prefix + number (Settings: prefix may be empty; "next number" continues a paper book and can only go up) | Reported |
+| Date reported / Reported time | `reportedAt` (automatic) | Reported |
+| Area | Site · location · equipment | Reported |
+| Projects ☐ | `Job.isProject` ("This is a project (planned work, not a breakdown)") | Reported |
+| Description of fault / breakdown | Title and description | Reported |
+| Submitted by + Signature | Reporter (app user, or name/phone from the QR page) + `REPORTED` signature | Reported |
+| Submitted to + Signature | The maintenance person who accepts it ("Send for assessment" or "Assess it myself") + `RECEIVED` signature | Received |
+| Maintenance start date & time | `startedAt` (automatic on "Start work") | Started |
+| Maintenance report | The completion's "What was done?" (+ contractor, PO, approved value) | Completed |
+| For food hall use: tools out = tools in, area clean Y/N | `Completion.toolsAndAreaOk` — asked (and required) only for locations marked **food-handling area** | Completed |
+| Root cause boxes + lines | `Completion.rootCauses` (at least one) + `rootCauseNotes` | Completed |
+| Date / time completed, By + Signature | `completedAt` (automatic) + `COMPLETED` signature (technician, or the contractor through their link with their name) | Completed |
+| Confirmed by originator + Date + Signature | The reporter answers "Is it fixed?" in the app, or signs on the technician's device (`ORIGINATOR`) | Confirmed |
+| Confirmed by manager + Date + Signature | "Sign off and close" (`MANAGER`) | Closed |
+
+Quote sign-off is also signed (`APPROVAL`) and shown on page 2 with the quotes, assessment, work log, photos and full history.
+
+**Signatures**: drawn on screen (finger or mouse) and stored as PNG with the signer's name, the server's date and time, and the IP for public/contractor signatures (`JobSignature`, append-only by trigger). Settings → "Require signatures on every line" makes each step refuse to continue without one; otherwise signing is optional. Signing on a staff device for the reporter is always required.
+
 ## Who decides what
 
 | Decision | Channel | Recorded as |

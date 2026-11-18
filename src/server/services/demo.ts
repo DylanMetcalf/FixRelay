@@ -12,19 +12,22 @@ import * as jobs from "./jobs";
 import { createOrganisation } from "./orgs";
 import * as quotes from "./quotes";
 import * as sites from "./sites";
+import sharp from "sharp";
+import { addJobAttachment } from "./attachments";
 
 export async function createDemoWorkspace(user: { id: string; name: string; email: string }): Promise<string> {
   if (await prisma.membership.findFirst({ where: { userId: user.id, org: { isDemo: true } } })) throw conflict("You already have a demo workspace.");
   const org = await prisma.$transaction((tx) => createOrganisation(tx, user.id, "Demo Foods – sample data", true));
   await prisma.membership.updateMany({ where: { orgId: org.id, userId: user.id }, data: { roles: ["OWNER", "MANAGER", "TECHNICIAN"] } });
-  await prisma.organisation.update({ where: { id: org.id }, data: { publicReportingEnabled: true } });
+  // Requisition numbers continue a paper book (12600, 12601, …).
+  await prisma.organisation.update({ where: { id: org.id }, data: { publicReportingEnabled: true, referencePrefix: "", jobSeq: 12599 } });
   const ctx: Ctx = { userId: user.id, userName: user.name, userEmail: user.email, orgId: org.id, roles: ["OWNER", "MANAGER", "TECHNICIAN"], siteIds: [], support: false, locked: false, emailVerified: true };
 
   const plant = await sites.createSite(ctx, { name: "Germiston Plant", address: "14 Refinery Rd, Germiston" });
   const dc = await sites.createSite(ctx, { name: "Midrand Distribution Centre", address: "8 Lever Rd, Midrand" });
   const cold = await sites.createLocation(ctx, { siteId: plant.id, name: "Cold Room 2" });
   const packing = await sites.createLocation(ctx, { siteId: plant.id, name: "Packing Hall" });
-  await sites.createLocation(ctx, { siteId: plant.id, name: "Staff Kitchen" });
+  const kitchen = await sites.createLocation(ctx, { siteId: plant.id, name: "Staff Kitchen", foodArea: true });
   const bay = await sites.createLocation(ctx, { siteId: dc.id, name: "Loading Bay 3" });
   const comp = await sites.createAsset(ctx, { siteId: plant.id, locationId: cold.id, reference: "CMP-002", name: "Compressor 2", type: "Refrigeration compressor", manufacturer: "Bitzer", model: "4NES-20Y", serialNumber: "SN-48213" });
   const fork = await sites.createAsset(ctx, { siteId: dc.id, locationId: bay.id, reference: "FL-03", name: "Forklift 3", type: "Electric forklift", manufacturer: "Toyota", model: "8FBE18" });
@@ -56,6 +59,34 @@ export async function createDemoWorkspace(user: { id: string; name: string; emai
   await jobs.submitAssessment(ctx, j4.id, { findings: "Mast cylinder seal leaking.", quoteRequired: true });
   await quotes.requestQuotes(ctx, j4.id, { contractorIds: [lift.id], scope: "Replace mast cylinder seals and test.", deadline: null });
   const q4 = await quotes.recordQuote(ctx, j4.id, lift.id, { scope: "Reseal mast cylinders, top up hydraulic oil.", priceExclVatCents: 420000, leadTimeDays: 2 });
-  await approvals.approveQuote(ctx, q4.id, { poNumber: "PO-1042", exceptionReason: "", comment: "Only approved forklift agent." });
+  await approvals.approveQuote(ctx, q4.id, { poNumber: "PO-1042", exceptionReason: "", comment: "Only approved forklift agent." }, await scribble(4));
+
+  // 5. A complete, signed requisition: reported → received → fixed in-house → confirmed by originator → signed off.
+  const j5 = await jobs.createJob(ctx, { title: "Staff kitchen extractor fan very noisy", description: "Grinding noise from the extractor above the stove, getting louder.", siteId: plant.id, locationId: kitchen.id, category: "Mechanical", priority: "NORMAL" }, await scribble(1));
+  await jobs.submitAssessment(ctx, j5.id, { findings: "Fan motor bearing worn.", recommendedWork: "Replace bearing, clean filter.", quoteRequired: false }, await scribble(2));
+  await jobs.routeInHouse(ctx, j5.id, {});
+  await jobs.assignJob(ctx, j5.id, { leadTechnicianId: user.id, instructions: "Switch off at the isolator first." });
+  await jobs.startWork(ctx, j5.id);
+  await addJobAttachment(ctx, { jobId: j5.id, kind: "AFTER", filename: "fan-after.jpg", bytes: await samplePhoto() });
+  await jobs.submitCompletion(ctx, j5.id, { workPerformed: "Replaced the motor bearing, cleaned the grease filter, ran for 30 minutes: quiet.", rootCauses: ["WEAR_AND_TEAR", "AGE_OF_MACHINE"], rootCauseNotes: "Bearing worn after 6 years. Add to the 6-monthly service list.", toolsAndAreaOk: true }, await scribble(3));
+  await jobs.confirmFixed(ctx, j5.id, { outcome: "APPROVED", comment: "Quiet now, thank you." }, { signature: { name: "Thandi Mokoena (kitchen supervisor)", dataUrl: await scribble(5) } });
+  await jobs.closeJob(ctx, j5.id, {}, await scribble(6));
+
+  // Signatures are required from here on, as a company using paper requisitions would expect.
+  await prisma.organisation.update({ where: { id: org.id }, data: { requireSignatures: true } });
   return org.id;
+}
+
+/** A hand-drawn-looking signature for the sample data (PNG data URL), different per seed. */
+async function scribble(seed: number) {
+  const r = (i: number) => ((Math.sin(seed * 97 + i * 13.7) + 1) / 2);
+  let d = `M 30 ${100 + r(0) * 30}`;
+  for (let i = 1; i <= 7; i++) d += ` C ${i * 70 - 40} ${30 + r(i) * 60}, ${i * 70 - 20} ${150 - r(i + 9) * 60}, ${i * 70 + 10} ${90 + r(i + 20) * 40}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="180"><path d="${d}" fill="none" stroke="#111827" stroke-width="4" stroke-linecap="round"/><path d="M ${60 + r(30) * 40} 150 L ${420 + r(31) * 100} ${140 + r(32) * 10}" stroke="#111827" stroke-width="3"/></svg>`;
+  return `data:image/png;base64,${(await sharp(Buffer.from(svg)).png().toBuffer()).toString("base64")}`;
+}
+
+/** A plain sample "after" photo. */
+async function samplePhoto() {
+  return sharp({ create: { width: 800, height: 600, channels: 3, background: "#9aa7b4" } }).jpeg().toBuffer();
 }
