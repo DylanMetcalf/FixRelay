@@ -66,8 +66,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
           <div className="flex items-center gap-2">
             <Link href="/requests/new" className="btn btn-primary btn-sm hidden md:inline-flex">+ Report a fault</Link>
-            <Link href="/notifications" className="btn btn-secondary btn-sm relative" aria-label={`Alerts, ${unread} unread`}>
-              Alerts{unread > 0 && <span className="ml-1 rounded-full bg-red-700 px-1.5 text-[11px] text-white" data-testid="unread">{unread}</span>}
+            {/* The accessible name starts with the visible words ("Alerts 1"), so voice control matches what people see. */}
+            <Link href="/notifications" className="btn btn-secondary btn-sm relative">
+              Alerts{unread > 0 && <> <span className="ml-1 rounded-full bg-red-700 px-1.5 text-[11px] text-white" data-testid="unread">{unread}</span><span className="sr-only"> unread</span></>}
             </Link>
           </div>
         </header>

@@ -25,8 +25,8 @@ const parse = <T extends z.ZodTypeAny>(s: T, v: unknown): z.output<T> => {
   if (!p.success) throw invalid(p.error.issues[0]!.message);
   return p.data;
 };
-const optId = z.preprocess((v) => (v === "" || v == null ? null : v), z.string().uuid().nullable());
-const optDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable());
+const optId = z.preprocess((v) => (v === "" || v == null ? null : v), z.string().uuid().nullable()).optional();
+const optDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable()).optional();
 const reason = z.string().trim().min(3, "Please give a reason.").max(1000);
 const priority = z.enum(["LOW", "NORMAL", "HIGH", "CRITICAL"]);
 export const CATEGORIES = ["General", "Electrical", "Mechanical", "Plumbing", "HVAC", "Building", "Safety", "Other"] as const;
@@ -317,7 +317,7 @@ const assessmentSchema = z.object({
   suspectedCause: z.string().trim().max(2000).default(""),
   recommendedWork: z.string().trim().max(5000).default(""),
   materials: z.string().trim().max(2000).default(""),
-  labourHoursEstimate: z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.number().min(0).max(100000).nullable()),
+  labourHoursEstimate: z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.number().min(0).max(100000).nullable()).optional(),
   quoteRequired: z.boolean(),
   externalHelpRequired: z.boolean().default(false),
 });
@@ -515,7 +515,7 @@ export async function cancelJob(ctx: Ctx, jobId: string, input: { reason: string
 const completionSchema = z.object({
   workPerformed: z.string().trim().min(5, "Describe the work performed.").max(5000),
   observations: z.string().trim().max(5000).default(""),
-  completedAt: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.coerce.date().optional()),
+  completedAt: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.coerce.date().optional()).optional(),
   rootCauses: z.array(z.enum(ROOT_CAUSES)).min(1, "Tick at least one root cause."),
   rootCauseNotes: z.string().trim().max(2000).default(""),
   // Food-handling areas only: "Tools out = tools in and area is clean and tidy" (Y/N).

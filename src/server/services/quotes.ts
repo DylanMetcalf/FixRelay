@@ -18,7 +18,7 @@ import { loadJob, move } from "./jobs";
 import { managerIds, notify } from "./notifications";
 
 export const SA_VAT_BPS = 1500;
-const optDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable());
+const optDate = z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable()).optional();
 
 const requestSchema = z.object({
   contractorIds: z.array(z.string().uuid()).min(1, "Choose at least one contractor.").max(10, "Choose up to 10 contractors."),

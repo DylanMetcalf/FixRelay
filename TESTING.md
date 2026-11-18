@@ -30,6 +30,8 @@ npm run typecheck
 - `npm test` (with `CLAMAV_TEST_PORT=3310`): **72 / 72 passed**, 7 files (incl. `requisition.test.ts`: every signature line enforced when required, root cause, food-area check, numbering that never goes backwards, append-only signatures, contractor and public signatures)
 - `npm run test:e2e`: **34 / 34 passed** (4 journeys, 15 feature tests, 15 requisition tests in `e2e/requisition.spec.ts`), about 3.5 minutes
 - `npm run build`: **pass**
+- `npm audit --omit=dev`: **0 vulnerabilities**
+- Broad audit (30 screens × desktop/phone, WCAG 2.1 AA, sideways scroll, console and HTTP errors, cross-company and signed-out security probes): **no findings** in rounds 4 and 5 – see AUDITS.md
 - `prisma migrate diff` (migrations vs schema): **no drift**
 - axe-core WCAG 2.1 AA: **0 violations** on the main screens at desktop and phone sizes (e2e test 14)
 - **Live demo** (https://fixrelay-demo.onrender.com, commit `ae1a87a`): smoke test passed: landing, manifest and service worker, CSP/HSTS, sign-up (`__Host-` cookie, confirmation email sent through Resend), demo workspace, the contractor job with its quote comparison, site report link, QR sheet, and an anonymous phone report through the QR link (reference shown). Note: in the build sandbox the browser could not load page scripts whose path contains `(app)` plus an ID (the sandbox's network re-encoded the path); fetched from outside the sandbox the same file returns 200, so the smoke test routes static files through Playwright's own network stack. One React hydration warning (#418) was seen once on the live jobs list and did not reproduce in five later runs or locally with a different timezone/language.

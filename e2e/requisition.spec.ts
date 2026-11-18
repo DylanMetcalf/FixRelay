@@ -1,9 +1,13 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { card, company, db, f, gotoReady, logRequest, newPage, next, openPanel, sign, status, uid } from "./helpers";
 
 test.afterAll(async () => { await db.$disconnect(); });
 
 const PHOTO = "public/icon-192.png";
+
+/** The company (organisation) a test account owns – data is looked up per company, never by title alone. */
+const orgOf = async (email: string) => (await db.membership.findFirstOrThrow({ where: { user: { email } }, orderBy: { createdAt: "asc" } })).orgId;
 
 /** Requisition settings card in Settings. */
 async function requisitionSettings(p: Page, o: { prefix?: string; next?: string; signatures?: boolean }) {
@@ -76,6 +80,8 @@ test("R1 · guided report: each step is checked before moving on, Back keeps ans
   await expect(review).toContainText("High – affecting work");
   await expect(review).toContainText("Germiston Plant");
   await expect(review.getByText("This is an emergency")).toHaveCount(0); // unticked boxes are left out
+  const a11y = await new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(a11y.violations.map((v) => v.id)).toEqual([]); // the review (incl. "Nothing added" sections) is valid
   await review.getByRole("button", { name: "Edit What is wrong?" }).click();
   await f(p, "title").fill("Hot tap dripping in the staff kitchen");
   await next(p); await next(p); await next(p);
@@ -206,7 +212,7 @@ test("R10 · area report: most-affected areas link through to the area's history
 });
 
 test("R11 · area CSV download only contains that area, with root causes and the Projects column", async ({ browser }) => {
-  const { p, sitePath } = await company(browser);
+  const { p, sitePath, email } = await company(browser);
   await gotoReady(p, sitePath);
   await p.getByPlaceholder("Add a location, e.g. Plant room").fill("Packing Hall");
   await p.getByRole("button", { name: "Add location" }).click();
@@ -214,7 +220,7 @@ test("R11 · area CSV download only contains that area, with root causes and the
   const cold = await logRequest(p, "Cold room fault A");
   await logRequest(p, "Packing hall fault B", undefined, { location: "Packing Hall" });
   await ownerCompletes(p, cold, { causes: ["Operator"] });
-  const loc = await db.location.findFirstOrThrow({ where: { name: "Cold Room 2", site: { jobs: { some: { title: "Cold room fault A" } } } } });
+  const loc = await db.location.findFirstOrThrow({ where: { name: "Cold Room 2", orgId: await orgOf(email) } });
   await gotoReady(p, `/areas/${loc.id}`);
   const href = await p.getByRole("link", { name: "Download (CSV)" }).getAttribute("href");
   const csv = await (await p.request.get(href!)).text();
@@ -243,7 +249,7 @@ test("R12 · Insights can be narrowed to one area of a site", async ({ browser }
 });
 
 test("R13 · no-account QR report: the details step is checked, the review shows it, and the requisition records the reporter", async ({ browser }) => {
-  const { p, sitePath } = await company(browser);
+  const { p, sitePath, email } = await company(browser);
   await gotoReady(p, "/settings");
   await f(p, "publicReportingEnabled").check();
   await p.getByRole("button", { name: "Save company settings" }).click();
@@ -264,7 +270,7 @@ test("R13 · no-account QR report: the details step is checked, the review shows
   await expect(anon.getByTestId("review")).toContainText("082 123 4567");
   await anon.getByRole("button", { name: "Send report" }).click();
   await expect(anon.getByText(/Thank you\. Your report/)).toBeVisible();
-  const job = await db.job.findFirstOrThrow({ where: { title: "Broken window in canteen" } });
+  const job = await db.job.findFirstOrThrow({ where: { title: "Broken window in canteen", orgId: await orgOf(email) } });
   await gotoReady(p, `/jobs/${job.id}/report`);
   await expect(p.getByTestId("submitted-by")).toContainText("Grace Visitor (082 123 4567) – via QR / site link");
 });

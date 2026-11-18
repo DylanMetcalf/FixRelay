@@ -198,6 +198,9 @@ test("10 · technician on a phone: bottom navigation, alerts, and opening the jo
 
   await gotoReady(tech, "/my-jobs");
   await expect(tech.getByTestId("unread")).toHaveText("1");
+  // With an unread alert showing, the header and nav must still pass WCAG 2.1 AA (e.g. "Alerts 1" names match).
+  const a11y = await new AxeBuilder({ page: tech }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(a11y.violations.map((v) => v.id)).toEqual([]);
   await tech.getByText("Generator will not start").filter({ visible: true }).click();
   await expect(tech).toHaveURL(jobUrl);
   await expect(tech.getByTestId("next-action")).toContainText("Assess the problem");
@@ -221,7 +224,7 @@ test("11 · reports show defined metrics and the CSV export neutralises spreadsh
 });
 
 test("12 · owners can export all company data; other roles and visitors cannot", async ({ browser }) => {
-  const { p } = await company(browser);
+  const { p, email } = await company(browser);
   await logRequest(p, "Export me");
   const res = await p.request.get("/api/export");
   expect(res.status()).toBe(200);
@@ -237,7 +240,7 @@ test("12 · owners can export all company data; other roles and visitors cannot"
   expect((await anon.request.get("/api/export")).status()).toBe(404);
   await gotoReady(p, "/jobs");
   await expect(p.getByText("Export me").filter({ visible: true })).toBeVisible();
-  const history = await db.activityEvent.findFirst({ where: { type: "data.exported", actorLabel: "Olive Owner" }, orderBy: { createdAt: "desc" } });
+  const history = await db.activityEvent.findFirst({ where: { type: "data.exported", orgId: (await db.membership.findFirstOrThrow({ where: { user: { email } } })).orgId }, orderBy: { createdAt: "desc" } });
   expect(history).not.toBeNull();
 });
 

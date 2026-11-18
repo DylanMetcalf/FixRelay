@@ -87,3 +87,18 @@ After FixRelay was changed to an internal site maintenance system, the new scree
 | I.4 | The QR sheet inserts generated SVG with `dangerouslySetInnerHTML` | Low (reviewed) | SVG comes only from the `qrcode` library and our own URL; documented in SECURITY.md | — |
 | I.5 | Public QR reports could be abused for spam | Medium | Off by default; IP and per-site rate limits; manager screening queue; link rotation | e2e journey 3, `workflow.test.ts` |
 | I.6 | Money wrapped in the quote comparison; bare "· 0" counts on location chips | Low | No-wrap amounts; "· N jobs" only when there are jobs | screenshots |
+
+## Repeated test-and-fix rounds (2026-11-18)
+
+Each round ran: all unit/integration tests, all browser tests, `npm audit` for production dependencies, and a broad audit script (WCAG 2.1 AA on 30 screens at desktop and phone size with real demo data, every step of the guided report, sideways scrolling, console errors, HTTP errors, and cross-company / signed-out security probes on area reports, requisitions, sites, signature files and CSV export). Fixes were then re-tested with exactly the same checks until two consecutive rounds found nothing.
+
+| Round | Found | Fixed |
+|---|---|---|
+| 1 | 8 dependency advisories (sharp/libvips image CVEs, nodemailer SMTP injection and wrong-domain delivery, zod memory exhaustion, postcss, prisma's deepmerge-ts) | Upgraded sharp 0.35.5, nodemailer 10.6, zod 4.6 (adjusted optional fields); overrides for postcss and deepmerge-ts → **0 vulnerabilities** |
+| 1 | "Alerts" button: spoken name "Alerts, 1 unread" did not contain the visible "Alerts 1" (voice control can't activate it) – on every page | Visible text is now the name; "unread" added for screen readers. Browser test 10 now runs the accessibility scan with an unread alert |
+| 1 | Review step: "Nothing added" placed inside the summary list (invalid list) | Rendered as a paragraph; test R1 scans the review step |
+| 2 | Phone: quotes table squeezed, totals cut off | Card per quote on phones, table on larger screens |
+| 2 | Phone: seven filter controls pushed the job list off the first screen | Search plus a "Filters" fold-out on phones (opens when filters are on) |
+| 2 | Quotes without an expiry showed "valid —" | Only shown when there is a date |
+| 3 | Two browser tests looked up data by title and could pick another company's record from earlier runs (test isolation) | Tests look up data by their own company; an export-audit check tightened the same way |
+| 4, 5 | Nothing | – |

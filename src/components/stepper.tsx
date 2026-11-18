@@ -116,8 +116,9 @@ export function Stepper({ children }: { children: React.ReactNode }) {
                 <p className="text-sm font-extrabold">{s.title}</p>
                 <button type="button" className="link text-sm" onClick={() => go(s.index)}>Edit<span className="sr-only"> {s.title}</span></button>
               </div>
+              {s.rows.length === 0 ? <p className="mt-1 text-sm text-gray-600">Nothing added</p> : (
               <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[11rem_1fr]">
-                {s.rows.length === 0 && <dd className="text-gray-600 sm:col-span-2">Nothing added</dd>}
+
                 {s.rows.map((r) => (
                   <div key={r.label} className="contents">
                     <dt className="font-semibold text-gray-700">{r.label}</dt>
@@ -130,6 +131,7 @@ export function Stepper({ children }: { children: React.ReactNode }) {
                   </div>
                 ))}
               </dl>
+              )}
             </div>
           ))}
         </div>
