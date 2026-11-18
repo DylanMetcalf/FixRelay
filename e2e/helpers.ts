@@ -118,11 +118,28 @@ export async function acceptInvite(b: Browser, path: string, mobile = false) {
   return q;
 }
 
-export async function logRequest(p: Page, title: string, extra: (p: Page) => Promise<void> = async () => {}) {
+/** Click "Next →" in a guided (step-by-step) form. */
+export async function next(scope: Page | Locator) {
+  await scope.getByRole("button", { name: "Next →" }).click();
+}
+
+/**
+ * Report a fault through the guided form: What is wrong? → Where is it? → Add a photo → Check and sign.
+ * `extra` runs on the first step (e.g. choose urgency); `opts.location` picks the area; `opts.sign` signs on the review step.
+ */
+export async function logRequest(p: Page, title: string, extra: (p: Page) => Promise<void> = async () => {}, opts: { sign?: boolean; location?: string } = {}) {
   await gotoReady(p, "/requests/new");
   await f(p, "title").fill(title);
   await f(p, "description").fill("Reported during e2e test.");
   await extra(p);
+  await next(p);
+  // "Where is it?": the named area, or the site's first area when none is chosen yet.
+  const loc = f(p, "locationId");
+  if (opts.location) await loc.selectOption({ label: opts.location });
+  else if (!(await loc.inputValue()) && (await loc.locator("option").count()) > 1) await loc.selectOption({ index: 1 });
+  await next(p); await next(p);
+  await expect(p.getByTestId("review")).toContainText(title);
+  if (opts.sign) await sign(p);
   await p.getByRole("button", { name: "Send report" }).click();
   await expect(p).toHaveURL(/jobs\/[0-9a-f-]{36}$/);
   return new URL(p.url()).pathname;

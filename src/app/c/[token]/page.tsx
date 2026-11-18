@@ -1,4 +1,5 @@
 import { RootCauseFields, SignLine } from "@/components/requisition-fields";
+import { Step, Stepper } from "@/components/stepper";
 import { contractorCompletionAction, contractorQuoteAction } from "@/app/actions/jobs";
 import { Form, Submit } from "@/components/form";
 import { PublicMessage, PublicShell } from "@/components/public-shell";
@@ -82,13 +83,21 @@ export default async function ContractorPage({ params }: { params: Promise<{ tok
       {v.state === "open" && !isQuote && (
         <Card title="Submit completed work">
           <Form action={contractorCompletionAction} hidden={{ token }}>
-            <TextArea label="What did you do?" name="workPerformed" required rows={4} />
-            <TextArea label="Anything the site should know?" name="observations" rows={2} placeholder="Follow-up work, parts on order, safety notes…" />
-            <Field label="Photos of the completed work" name="files" hint="At least one photo is required."><input id="files" name="files" type="file" multiple accept="image/*" capture="environment" className="input" required /></Field>
-            <RootCauseFields foodArea={v.job.foodArea} />
-            <Field label="Your name" name="signerName" required autoComplete="name" defaultValue={v.contractor.contactName ?? ""} />
-            <SignLine label="Work completed by – your signature" required={v.org.requireSignatures} />
-            <Submit className="btn btn-primary w-full">Submit completion</Submit>
+            <Stepper>
+              <Step title="Maintenance report">
+                <TextArea label="What did you do?" name="workPerformed" required rows={4} />
+                <TextArea label="Anything the site should know?" name="observations" rows={2} placeholder="Follow-up work, parts on order, safety notes…" />
+              </Step>
+              <Step title="Photos">
+                <Field label="Photos of the completed work" name="files" hint="At least one photo is required."><input id="files" name="files" type="file" multiple accept="image/*" capture="environment" className="input" required /></Field>
+              </Step>
+              <Step title="Root cause"><RootCauseFields foodArea={v.job.foodArea} /></Step>
+              <Step title="Check and sign" review>
+                <Field label="Your name" name="signerName" required autoComplete="name" defaultValue={v.contractor.contactName ?? ""} />
+                <SignLine label="Work completed by – your signature" required={v.org.requireSignatures} />
+                <Submit className="btn btn-primary w-full">Submit completion</Submit>
+              </Step>
+            </Stepper>
           </Form>
         </Card>
       )}

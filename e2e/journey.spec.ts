@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-  acceptInvite, addContractor, addSite, card, db, f, gotoReady, invite, lastEmail, logRequest, newPage, openPanel, pathFrom, register, sign, status, uid, verifyEmail,
+  acceptInvite, addContractor, addSite, card, db, f, gotoReady, invite, lastEmail, logRequest, newPage, next, openPanel, pathFrom, register, sign, status, uid, verifyEmail,
 } from "./helpers";
 
 const id = uid();
@@ -41,10 +41,21 @@ test("in-house journey: reporter logs a fault on a phone → assess → in-house
   // 1. Someone on site reports a fault from their phone, with a photo. Reporters get the simple home screen.
   await expect(rita.getByRole("heading", { name: "Hello, Rita" })).toBeVisible();
   await gotoReady(rita, "/requests/new");
+  // The report is a guided form: one section at a time, then a review that reads like the requisition.
+  await expect(rita.getByTestId("step-label")).toHaveText("Step 1 of 4 · What is wrong?");
+  await next(rita); // required fields are checked before moving on
+  await expect(rita.getByTestId("step-label")).toContainText("Step 1 of 4");
   await f(rita, "title").fill("Cold room door not sealing");
   await f(rita, "description").fill("Ice building up on the floor at the door.");
+  await next(rita);
   await f(rita, "locationId").selectOption({ label: "Cold Room 2" });
+  await next(rita);
   await f(rita, "files").setInputFiles(PHOTO);
+  await next(rita);
+  const review = rita.getByTestId("review");
+  await expect(review).toContainText("Cold room door not sealing");
+  await expect(review).toContainText("Cold Room 2");
+  await expect(review).toContainText("icon-192.png");
   await rita.getByRole("button", { name: "Send report" }).click();
   await expect(rita.locator("p[role=alert]")).toContainText("sign the report"); // "Submitted by" signature required
   await sign(rita);
@@ -98,13 +109,19 @@ test("in-house journey: reporter logs a fault on a phone → assess → in-house
   await expect(tech.getByText("Old gasket removed.")).toBeVisible();
   const done = await openPanel(tech, "Work finished – submit evidence");
   await done.locator('[name="workPerformed"]').fill("Fitted new gasket, door seals.");
-  await done.getByRole("button", { name: "Submit for confirmation" }).click();
-  await expect(done.locator("p[role=alert]")).toContainText("root cause");
+  await next(done); // → photos (skipped for now)
+  await next(done); // → root cause
+  await next(done);
+  await expect(done.locator("p[role=alert]")).toContainText("root cause"); // checked before moving on
   await done.getByLabel("Wear and tear").check();
   await done.locator('[name="rootCauseNotes"]').fill("Gasket perished; replace yearly.");
+  await next(done);
+  await expect(done.getByTestId("review")).toContainText("Wear and tear");
   await done.getByRole("button", { name: "Submit for confirmation" }).click();
-  await expect(done.locator("p[role=alert]")).toContainText("after-photo");
+  await expect(done.locator("p[role=alert]")).toContainText("after-photo"); // evidence is required by the server
+  await done.getByRole("button", { name: "Edit Photos and documents" }).click();
   await done.locator('[name="after"]').setInputFiles(PHOTO);
+  await next(done); await next(done);
   await sign(done); // "Work completed by"
   await done.getByRole("button", { name: "Submit for confirmation" }).click();
   await expect(status(tech)).toHaveText("Awaiting confirmation");
@@ -190,7 +207,7 @@ test("contractor journey: quotes by secure link → compare → over-limit goes 
   await addContractor(page, sparks.name, sparks.email, false);
 
   // Fault logged and assessed: needs a contractor.
-  const job = await logRequest(mgr, "Compressor 2 tripping on overload", async (p) => { await f(p, "priority").selectOption("HIGH"); await sign(p); });
+  const job = await logRequest(mgr, "Compressor 2 tripping on overload", async (p) => { await f(p, "priority").selectOption("HIGH"); }, { sign: true });
   const a = await openPanel(mgr, "Assess it myself now");
   await a.locator('[name="findings"]').fill("Start capacitor degraded; contactor pitted.");
   await a.locator('[name="quoteRequired"]').selectOption("yes");
@@ -261,9 +278,12 @@ test("contractor journey: quotes by secure link → compare → over-limit goes 
   await gotoReady(c1, doneLink);
   await expect(c1.getByText("PO-2001").first()).toBeVisible();
   await f(c1, "workPerformed").fill("Replaced capacitor and contactor; ran for one hour, no trips.");
+  await next(c1);
   await expect(f(c1, "files")).toHaveAttribute("required", ""); // a photo is required (also enforced on the server)
   await f(c1, "files").setInputFiles(PHOTO);
+  await next(c1);
   await c1.getByLabel("Age of machine").check();
+  await next(c1);
   await f(c1, "signerName").fill("Sipho Dlamini");
   await sign(c1);
   await c1.getByRole("button", { name: "Submit completion" }).click();
@@ -320,11 +340,15 @@ test("QR reporting without an account: off by default; when on, the scanned loca
 
   await gotoReady(anon, `${link}?l=${loc.id}`);
   await expect(anon.getByRole("heading", { name: "What needs fixing?" })).toBeVisible();
-  await expect(f(anon, "locationId")).toHaveValue(loc.id);
   await f(anon, "title").fill("Conveyor guard loose");
   await f(anon, "description").fill("Guard rattles when the belt runs.");
+  await next(anon);
+  await expect(f(anon, "locationId")).toHaveValue(loc.id); // pre-filled from the QR code
+  await next(anon);
   await f(anon, "reporterName").fill("Vusi Visitor");
   await f(anon, "reporterPhone").fill("082 555 0101");
+  await next(anon);
+  await expect(anon.getByTestId("review")).toContainText("Packing Hall");
   await sign(anon); // signatures are required in this company (set in the first journey)
   await anon.getByRole("button", { name: "Send report" }).click();
   await expect(anon.getByText(/Your report 126\d\d has been sent/)).toBeVisible();

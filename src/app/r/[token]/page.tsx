@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { SignLine } from "@/components/requisition-fields";
+import { Step, Stepper } from "@/components/stepper";
 import { publicReportAction } from "@/app/actions/jobs";
 import { getSession } from "@/app/_lib/session";
 import { RequestPlaceFields } from "@/components/client-forms";
@@ -43,17 +44,26 @@ export default async function SiteReport({ params, searchParams }: { params: Pro
       </Card>
       <Card>
         <Form action={publicReportAction} hidden={{ siteToken: token }}>
-          <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Light not working in the passage" />
-          <TextArea label="Describe it" name="description" required rows={3} placeholder="Where exactly, since when, is it getting worse?" />
-          <RequestPlaceFields sites={[{ id: site.id, name: site.name, locations: site.locations, assets: site.assets }]} initial={{ siteId: site.id, locationId, assetId }} />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Your name" name="reporterName" required autoComplete="name" />
-            <Field label="Phone number" name="reporterPhone" required type="tel" autoComplete="tel" />
-          </div>
-          <Field label="Email (optional)" name="reporterEmail" type="email" autoComplete="email" hint="We will email you the reference number." />
-          <SignLine label="Submitted by – your signature" required={org.requireSignatures} />
-          <p className="text-xs text-gray-600">Your name and number are only used by the maintenance team to follow up on this report.</p>
-          <Submit className="btn btn-primary w-full">Send report</Submit>
+          <Stepper>
+            <Step title="What is wrong?">
+              <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Light not working in the passage" />
+              <TextArea label="Describe it" name="description" required rows={3} placeholder="Where exactly, since when, is it getting worse?" />
+            </Step>
+            <Step title="Where is it?">
+              {(locationId || assetId) && <p className="rounded-md bg-blue-50 p-3 text-sm font-semibold text-blue-950">Filled in from the QR code. Change it if it is wrong.</p>}
+              <RequestPlaceFields sites={[{ id: site.id, name: site.name, locations: site.locations, assets: site.assets }]} initial={{ siteId: site.id, locationId, assetId }} />
+            </Step>
+            <Step title="Your details">
+              <Field label="Your name" name="reporterName" required autoComplete="name" />
+              <Field label="Phone number" name="reporterPhone" required type="tel" autoComplete="tel" />
+              <Field label="Email (optional)" name="reporterEmail" type="email" autoComplete="email" hint="We will email you the reference number." />
+              <p className="text-xs text-gray-600">Your name and number are only used by the maintenance team to follow up on this report.</p>
+            </Step>
+            <Step title="Check and sign" review>
+              <SignLine label="Submitted by – your signature" required={org.requireSignatures} />
+              <Submit className="btn btn-primary w-full">Send report</Submit>
+            </Step>
+          </Stepper>
         </Form>
       </Card>
     </PublicShell>

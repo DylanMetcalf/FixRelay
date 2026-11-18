@@ -108,7 +108,7 @@ export function SignaturePad({ name = "signature", label = "Signature", required
       <span className="label">{label}{required ? <span className="text-red-700"> *</span> : <span className="font-normal text-gray-600"> (optional)</span>}</span>
       <canvas ref={canvas} width={600} height={180} data-testid="signature-pad" aria-label="Signature area: sign with your finger or mouse"
         className="w-full touch-none rounded-md border-2 border-dashed border-gray-400 bg-white" onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerLeave={end} />
-      <input type="hidden" name={name} value={value} />
+      <input type="hidden" name={name} value={value} data-signature="" data-required={required ? "true" : "false"} data-label={label.replace(/ – .*$/, "")} />
       <div className="mt-1 flex items-center justify-between">
         <p className="text-xs text-gray-600">{hint} The date and time are added automatically.</p>
         <button type="button" className="btn btn-secondary btn-sm" onClick={clear}>Clear</button>

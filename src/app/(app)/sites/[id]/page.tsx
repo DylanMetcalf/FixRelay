@@ -19,6 +19,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
   const s = await getSite(ctx, id).catch((e) => { if (e instanceof AppError) notFound(); throw e; });
   const [jobs, org] = await Promise.all([listJobs(ctx, { siteId: s.id }, 15), prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { publicReportingEnabled: true } })]);
   const manage = can(ctx, "sites.manage");
+  const reports = can(ctx, "reports.view");
   return (
     <>
       <PageHeader title={s.name} subtitle={s.address}>
@@ -32,7 +33,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
               <ul className="divide-y divide-gray-200" data-testid="locations">
                 {s.locations.map((l) => (
                   <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-                    <span className="font-semibold">{l.name}{l._count.jobs ? <span className="font-normal text-gray-600"> · {l._count.jobs} job{l._count.jobs === 1 ? "" : "s"}</span> : null}
+                    <span className="font-semibold">{reports ? <Link className="link" href={`/areas/${l.id}`}>{l.name}</Link> : l.name}{l._count.jobs ? <span className="font-normal text-gray-600"> · {l._count.jobs} job{l._count.jobs === 1 ? "" : "s"}</span> : null}
                       {l.foodArea && <Pill tone="amber">Food-handling area</Pill>}</span>
                     {manage && (
                       <ActionButton action={a.foodAreaAction} hidden={{ id: l.id, foodArea: String(!l.foodArea) }} className="btn btn-secondary btn-sm">

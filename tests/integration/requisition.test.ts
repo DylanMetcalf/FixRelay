@@ -126,4 +126,23 @@ describe("maintenance work requisition", () => {
     const t2 = await tenant();
     await appointedJob(t2);
   });
+
+  it("area reports only show areas the caller may see, with the area's own history", async () => {
+    const t = await tenant();
+    const other = await sites.createLocation(t.owner, { siteId: t.site.id, name: "Dispatch" });
+    await newJob(t);
+    await jobs.createJob(t.requester, { title: "Dispatch door", description: "Stuck.", siteId: t.site.id, locationId: other.id });
+    const { areaHistory, getReport } = await import("@/server/services/reports");
+    const a = await areaHistory(t.manager, t.location.id);
+    expect(a!.jobs.map((j) => j.title)).toEqual(["Compressor tripping"]);
+    const r = await getReport(t.manager, { from: new Date(Date.now() - 86_400_000), to: new Date(Date.now() + 86_400_000), locationId: other.id });
+    expect(r.jobsOpened).toBe(1);
+    await expect(areaHistory(t.tech, t.location.id)).rejects.toThrow(); // technicians don't get reports
+    const rival = await tenant();
+    expect(await areaHistory(rival.manager, t.location.id)).toBeNull(); // another company: nothing
+    const site2 = await sites.createSite(t.owner, { name: "Second site" });
+    const { member } = await import("../helpers");
+    const scoped = await member(t.orgId, ["MANAGER"], [site2.id]);
+    expect(await areaHistory(scoped, t.location.id)).toBeNull(); // limited to another site
+  });
 });

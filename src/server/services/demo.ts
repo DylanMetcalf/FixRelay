@@ -72,6 +72,29 @@ export async function createDemoWorkspace(user: { id: string; name: string; emai
   await jobs.confirmFixed(ctx, j5.id, { outcome: "APPROVED", comment: "Quiet now, thank you." }, { signature: { name: "Thandi Mokoena (kitchen supervisor)", dataUrl: await scribble(5) } });
   await jobs.closeJob(ctx, j5.id, {}, await scribble(6));
 
+  // 6. Some history, so Insights and area reports have something to show.
+  const past: [string, string, string, ("WEAR_AND_TEAR" | "OPERATOR" | "AGE_OF_MACHINE" | "BREAKDOWN" | "HUMAN_ERROR")[], number][] = [
+    ["Cold room door seal torn", plant.id, cold.id, ["WEAR_AND_TEAR"], 75],
+    ["Compressor 2 high-pressure alarm", plant.id, cold.id, ["AGE_OF_MACHINE", "BREAKDOWN"], 48],
+    ["Cold room light fitting broken", plant.id, cold.id, ["HUMAN_ERROR"], 20],
+    ["Packing line conveyor belt slipping", plant.id, packing.id, ["WEAR_AND_TEAR", "OPERATOR"], 33],
+    ["Dock leveller not lifting", dc.id, bay.id, ["BREAKDOWN"], 12],
+  ];
+  for (const [title, siteId, locationId, rootCauses, daysAgo] of past) {
+    const j = await jobs.createJob(ctx, { title, description: "Logged on the paper requisition before FixRelay.", siteId, locationId, category: "Mechanical", priority: "NORMAL" });
+    await jobs.submitAssessment(ctx, j.id, { findings: "Checked on site.", quoteRequired: false });
+    await jobs.routeInHouse(ctx, j.id, {});
+    await jobs.assignJob(ctx, j.id, { leadTechnicianId: user.id });
+    await jobs.startWork(ctx, j.id);
+    await addJobAttachment(ctx, { jobId: j.id, kind: "AFTER", filename: "after.jpg", bytes: await samplePhoto() });
+    await jobs.submitCompletion(ctx, j.id, { workPerformed: "Repaired and tested.", rootCauses, toolsAndAreaOk: null });
+    await jobs.confirmFixed(ctx, j.id, { outcome: "APPROVED", comment: "" });
+    await jobs.closeJob(ctx, j.id, {});
+    const at = (d: number, h = 0) => new Date(Date.now() - d * 86_400_000 + h * 3_600_000);
+    await prisma.job.update({ where: { id: j.id }, data: { reportedAt: at(daysAgo), respondedAt: at(daysAgo, 2), assignedAt: at(daysAgo, 3), startedAt: at(daysAgo, 20), completedAt: at(daysAgo, 26), closedAt: at(daysAgo, 30) } });
+    await prisma.completion.updateMany({ where: { jobId: j.id }, data: { completedAt: at(daysAgo, 26) } });
+  }
+
   // Signatures are required from here on, as a company using paper requisitions would expect.
   await prisma.organisation.update({ where: { id: org.id }, data: { requireSignatures: true } });
   return org.id;

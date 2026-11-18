@@ -5,7 +5,7 @@ import { SignaturePad } from "./client";
 export function RootCauseFields({ foodArea }: { foodArea: boolean }) {
   return (
     <>
-      <fieldset data-testid="root-causes">
+      <fieldset data-testid="root-causes" data-require-one="Tick at least one root cause.">
         <legend className="label">Root cause <span className="text-red-700">*</span> <span className="font-normal text-gray-600">(tick all that apply)</span></legend>
         <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
           {Object.entries(ROOT_CAUSE_LABEL).map(([v, l]) => (

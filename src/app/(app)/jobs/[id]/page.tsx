@@ -13,6 +13,7 @@ import { listAssignable } from "@/server/services/orgs";
 import { nextAction, ROUTE_LABEL } from "@/server/workflow";
 import { ActionsPanel } from "./actions-panel";
 import { QuotesCard } from "./quotes-card";
+import { RequisitionCard } from "./requisition-card";
 
 export const metadata = { title: "Job" };
 
@@ -157,7 +158,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           )}
         </div>
 
-        <Card title="Activity history" className="self-start">
+        <div className="space-y-5 self-start">
+          <RequisitionCard job={job} />
+        <Card title="Activity history">
           <ol className="space-y-3" data-testid="timeline">
             {[...job.events].reverse().map((e) => (
               <li key={e.id} className="border-l-2 border-gray-300 pl-3">
@@ -167,6 +170,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             ))}
           </ol>
         </Card>
+        </div>
       </div>
     </>
   );

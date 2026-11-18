@@ -1,5 +1,6 @@
 import * as a from "@/app/actions/jobs";
 import { RootCauseFields, SignLine } from "@/components/requisition-fields";
+import { Step, Stepper } from "@/components/stepper";
 import { LinkForm } from "@/components/client-forms";
 import { ActionButton, Form, Submit } from "@/components/form";
 import { Card, Check, Field, Select, TextArea } from "@/components/ui";
@@ -146,14 +147,22 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigR
     blocks.push(
       <D key="done" label="Work finished – submit evidence" primary>
         <Form action={a.completionAction} hidden={h}>
-          <TextArea label="What was done?" name="workPerformed" required />
-          <TextArea label="Anything to watch?" name="observations" rows={2} />
-          <Field label="Before photos" name="before"><input id="before" name="before" type="file" multiple accept="image/*" className="input" /></Field>
-          <Field label="After photos" name="after" hint="At least one after-photo or test document is required."><input id="after" name="after" type="file" multiple accept="image/*" capture="environment" className="input" /></Field>
-          <Field label="Test documents" name="tests"><input id="tests" name="tests" type="file" multiple accept={FILES} className="input" /></Field>
-          <RootCauseFields foodArea={foodArea} />
-          <SignLine label="Work completed by – your signature" required={sigRequired} />
-          <Submit>Submit for confirmation</Submit>
+          <Stepper>
+            <Step title="Maintenance report">
+              <TextArea label="What was done?" name="workPerformed" required />
+              <TextArea label="Anything to watch?" name="observations" rows={2} />
+            </Step>
+            <Step title="Photos and documents">
+              <Field label="Before photos" name="before"><input id="before" name="before" type="file" multiple accept="image/*" className="input" /></Field>
+              <Field label="After photos" name="after" hint="At least one after-photo or test document is required."><input id="after" name="after" type="file" multiple accept="image/*" capture="environment" className="input" /></Field>
+              <Field label="Test documents" name="tests"><input id="tests" name="tests" type="file" multiple accept={FILES} className="input" /></Field>
+            </Step>
+            <Step title="Root cause"><RootCauseFields foodArea={foodArea} /></Step>
+            <Step title="Check and sign" review>
+              <SignLine label="Work completed by – your signature" required={sigRequired} />
+              <Submit>Submit for confirmation</Submit>
+            </Step>
+          </Stepper>
         </Form>
       </D>,
     );

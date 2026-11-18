@@ -34,15 +34,15 @@ const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b
 const hours = (a: Date, b: Date) => (b.getTime() - a.getTime()) / 3_600_000;
 const inc = (m: Map<string, number>, k: string, by = 1) => m.set(k, (m.get(k) ?? 0) + by);
 
-export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: string }) {
+export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: string; locationId?: string }) {
   requirePerm(ctx, "reports.view");
   const sites = siteFilter(ctx);
-  const base = { orgId: ctx.orgId, ...sites, ...(f.siteId && (!ctx.siteIds.length || ctx.siteIds.includes(f.siteId)) ? { siteId: f.siteId } : {}) };
+  const base = { orgId: ctx.orgId, ...sites, ...(f.siteId && (!ctx.siteIds.length || ctx.siteIds.includes(f.siteId)) ? { siteId: f.siteId } : {}), ...(f.locationId ? { locationId: f.locationId } : {}) };
   const period = { gte: f.from, lt: f.to };
   const now = new Date();
   const [opened, closed, pending, approved, overdueJobs, open, rules, reopenedCount, links] = await Promise.all([
     prisma.job.findMany({ where: { ...base, reportedAt: period }, take: 5000,
-      select: { reportedAt: true, assignedAt: true, completedAt: true, respondedAt: true, priority: true, site: { select: { name: true } }, location: { select: { name: true } } } }),
+      select: { reportedAt: true, assignedAt: true, completedAt: true, respondedAt: true, priority: true, site: { select: { name: true } }, location: { select: { id: true, name: true } }, status: true } }),
     prisma.job.findMany({ where: { ...base, status: "CLOSED", closedAt: period }, take: 5000,
       select: { id: true, reference: true, title: true, route: true, approvedCostCents: true, contractorId: true, assignedAt: true, completedAt: true, reopenCount: true,
         site: { select: { name: true } }, asset: { select: { id: true, name: true, reference: true } }, updates: { select: { labourMinutes: true, materialCostCents: true } },
@@ -69,7 +69,13 @@ export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: st
   const rootCauses = new Map<string, number>();
   for (const j of closed) if (!j.isProject) for (const c of j.completions[0]?.rootCauses ?? []) inc(rootCauses, ROOT_CAUSE_LABEL[c]);
   for (const j of contractorJobs) { inc(spendBySite, j.site.name, j.approvedCostCents ?? 0); if (j.asset) inc(spendByAsset, `${j.asset.reference} – ${j.asset.name}`, j.approvedCostCents ?? 0); }
-  for (const j of opened) inc(byLocation, `${j.site.name}${j.location ? ` — ${j.location.name}` : ""}`);
+  const areaIds = new Map<string, string>(); const areaOpen = new Map<string, number>();
+  for (const j of opened) {
+    const label = `${j.site.name}${j.location ? ` — ${j.location.name}` : ""}`;
+    inc(byLocation, label);
+    if (j.location) areaIds.set(label, j.location.id);
+    if (OPEN_STATUSES.includes(j.status)) inc(areaOpen, label);
+  }
 
   // Contractor performance
   const contractorIds = [...new Set([...links.map((l) => l.contractorId), ...contractorJobs.map((j) => j.contractorId!).filter(Boolean)])];
@@ -109,7 +115,7 @@ export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: st
     spendByAsset: sorted(spendByAsset).slice(0, 10),
     contractorPerformance: performance,
     workload: open.map((o) => ({ name: techs.find((t) => t.id === o.leadTechnicianId)?.name ?? "Unknown", openJobs: o._count })).sort((a, b) => b.openJobs - a.openJobs),
-    byLocation: sorted(byLocation).map((x) => ({ label: x.label, count: x.value })),
+    byLocation: sorted(byLocation).map((x) => ({ label: x.label, count: x.value, locationId: areaIds.get(x.label) ?? null, open: areaOpen.get(x.label) ?? 0 })),
     rootCauses: sorted(rootCauses).map((x) => ({ label: x.label, count: x.value })),
     reopened: { count: reopenedCount, pct: closed.length ? Math.round((reopenedCount / closed.length) * 100) : null },
     inHouseCosts: inHouseJobs.map((j) => ({
@@ -118,4 +124,19 @@ export async function getReport(ctx: Ctx, f: { from: Date; to: Date; siteId?: st
       labourHours: Math.round((j.updates.reduce((a, u) => a + u.labourMinutes, 0) / 60) * 10) / 10,
     })),
   };
+}
+
+/** Everything about one area (location) of a site: the requisition history and what keeps going wrong there. */
+export async function areaHistory(ctx: Ctx, locationId: string) {
+  requirePerm(ctx, "reports.view");
+  const loc = await prisma.location.findFirst({ where: { id: locationId, orgId: ctx.orgId, ...(ctx.siteIds.length ? { siteId: { in: ctx.siteIds } } : {}) },
+    include: { site: { select: { id: true, name: true, address: true } }, assets: { select: { id: true, reference: true, name: true, _count: { select: { jobs: true } } }, orderBy: { reference: "asc" } } } });
+  if (!loc) return null;
+  const jobs = await prisma.job.findMany({
+    where: { orgId: ctx.orgId, locationId: loc.id }, orderBy: { reportedAt: "desc" }, take: 500,
+    select: { id: true, reference: true, title: true, status: true, route: true, priority: true, isProject: true, reportedAt: true, closedAt: true, completedAt: true, reopenCount: true,
+      approvedCostCents: true, contractor: { select: { name: true } }, asset: { select: { reference: true } },
+      completions: { orderBy: { version: "desc" }, take: 1, select: { rootCauses: true } } },
+  });
+  return { location: loc, jobs };
 }
