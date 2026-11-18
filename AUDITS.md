@@ -102,3 +102,6 @@ Each round ran: all unit/integration tests, all browser tests, `npm audit` for p
 | 2 | Quotes without an expiry showed "valid —" | Only shown when there is a date |
 | 3 | Two browser tests looked up data by title and could pick another company's record from earlier runs (test isolation) | Tests look up data by their own company; an export-audit check tightened the same way |
 | 4, 5 | Nothing | – |
+
+### Final round (2026-11-19)
+Simple QR reporting rebuilt for non-technical users; steady phone screens (fields ≥16px so iPhones don't zoom on tap, no double-tap zoom, no sideways movement, pinch-zoom kept for accessibility). Full rerun: 72/72 unit/integration, 35/35 browser tests (new R16), broad audit no findings, 0 dependency vulnerabilities. One run failed 10 upload tests because the local virus scanner had stopped – the app correctly refused unscanned uploads (fail-closed); with the scanner running they all pass.

@@ -24,6 +24,7 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 - **Contractor appointment and completion**: appointment email with a completion link; the contractor submits what was done with photos; "not selected" emails to the others.
 - **Confirmed fixed**: the person who reported it answers "Is it fixed?" (or signs on the technician's phone); "not fixed" sends it back, and contractors get a fresh link. Reopening needs a reason.
 - **Digital maintenance work requisition**: every job is a numbered requisition (numbers can continue a paper book, e.g. 12600) laid out like the paper form, with automatic dates and times, a Projects box, root-cause boxes, the food-area "tools out = tools in, area clean" check, and drawn signatures on every line (submitted by, received by maintenance, quote sign-off, completed by, confirmed by originator, confirmed by manager). Signatures can be made compulsory. Print or save as PDF.
+- **Simple QR reporting for anyone**: big text and buttons, one question per screen (tap the kind of problem, describe it, place already filled in from the code, optional photo, name and phone), a clear thank-you with the report number; the phone screen never zooms in on its own or slides sideways.
 - **Guided forms**: reporting a fault and completing work go one section at a time, then show a review that reads like the requisition before signing.
 - **Area reports**: per area of a site: faults, open jobs, time to fix, spend, root causes, equipment and the full requisition history; printable and CSV. Insights can be narrowed to one area; the most affected areas link straight through.
 - **Audit trail**: append-only and enforced by a database trigger, shown on every job and in a printable **job report** (print → PDF).
@@ -77,7 +78,7 @@ npm run worker    # separate terminal: emails (printed to the console by default
 | `npm run worker` | Background worker (email outbox, overdue scan, session cleanup) |
 | `npm run typecheck` | TypeScript strict check |
 | `npm test` | Unit and integration tests (Vitest, against the real test database) |
-| `npm run build && npm run test:e2e` | Browser end-to-end tests (34, Playwright, production build on port 3100) |
+| `npm run build && npm run test:e2e` | Browser end-to-end tests (35, Playwright, production build on port 3100) |
 | `npm run db:migrate` | Apply migrations (production-safe) |
 | `npm run db:migrate:dev` | Create a new migration in development |
 | `npm run db:seed` | Plans and the platform operator account (idempotent) |
