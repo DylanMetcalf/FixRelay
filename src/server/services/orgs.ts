@@ -160,12 +160,12 @@ export async function setPriorityRules(ctx: Ctx, rules: z.input<typeof ruleSchem
 const inviteSchema = z.object({
   email: emailSchema,
   name: text(120),
-  roles: z.array(z.enum(["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "REQUESTER"])).min(1, "Choose at least one role."),
+  roles: z.array(z.enum(["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "STORES", "REQUESTER"])).min(1, "Choose at least one role."),
   siteIds: z.array(z.string().uuid()).max(200).default([]),
 });
 export const INVITE_DAYS = 7;
 
-const STAFF_ROLES: Role[] = ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN"];
+const STAFF_ROLES: Role[] = ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "STORES"];
 const isSeat = (roles: Role[]) => roles.some((r) => STAFF_ROLES.includes(r));
 
 async function assertSites(tx: Tx, orgId: string, siteIds: string[]) {
@@ -279,7 +279,7 @@ export async function listAssignable(ctx: Ctx, roles: Role[] = ["TECHNICIAN"]) {
 }
 
 const memberSchema = z.object({
-  roles: z.array(z.enum(["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "REQUESTER"])).min(1, "Choose at least one role."),
+  roles: z.array(z.enum(["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "STORES", "REQUESTER"])).min(1, "Choose at least one role."),
   active: z.boolean(),
   siteIds: z.array(z.string().uuid()).max(200).optional(),
 });

@@ -1,7 +1,7 @@
 import { createJobAction } from "@/app/actions/jobs";
 import { requirePage } from "@/app/_lib/session";
 import { RequestPlaceFields } from "@/components/client-forms";
-import { SignLine } from "@/components/requisition-fields";
+import { PriorityChoice, SignLine } from "@/components/requisition-fields";
 import { Step, Stepper } from "@/components/stepper";
 import { Form, Submit } from "@/components/form";
 import Link from "@/components/link";
@@ -30,13 +30,13 @@ export default async function NewRequest({ searchParams }: { searchParams: Promi
             <Step title="What is wrong?">
               <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Cold room door not sealing" />
               <TextArea label="Describe it" name="description" required rows={4} placeholder="What happened, when did it start, is anything unsafe?" />
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {!simple && <Select label="Type of problem" name="category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />}
-                <Select label="How urgent?" name="priority" defaultValue="NORMAL" options={[{ value: "LOW", label: "Low – when convenient" }, { value: "NORMAL", label: "Normal" }, { value: "HIGH", label: "High – affecting work" }, { value: "CRITICAL", label: "Critical – stopped / unsafe" }]} />
-              </div>
-              <Check name="emergency" label="This is an emergency (needs immediate attention)" />
+              {!simple && <Select label="Type of problem" name="category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />}
               {!simple && <Check name="isProject" label="This is a project (planned work, not a breakdown)" />}
-              <p className="text-xs text-gray-600">Urgency tells the team how quickly to respond. It does not replace your site&apos;s safety procedures: if there is danger, make the area safe and call your supervisor.</p>
+            </Step>
+            <Step title="How urgent is it?">
+              <PriorityChoice />
+              <Check name="emergency" label="This is an emergency (needs immediate attention)" />
+              <p className="text-sm text-gray-600">If anyone is in danger, make the area safe and call your supervisor first.</p>
             </Step>
             <Step title="Where is it?">
               {fromQr && <p className="rounded-md bg-blue-50 p-3 text-sm font-semibold text-blue-950">Filled in from the QR code. Change it if it is wrong.</p>}

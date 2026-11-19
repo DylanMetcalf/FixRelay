@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-  acceptInvite, addContractor, addSite, card, db, f, gotoReady, invite, lastEmail, logRequest, newPage, next, openPanel, pathFrom, register, sign, status, uid, verifyEmail,
+  acceptInvite, addContractor, addSite, card, choosePriority, db, f, gotoReady, invite, lastEmail, logRequest, newPage, next, openPanel, pathFrom, register, sign, status, uid, verifyEmail,
 } from "./helpers";
 
 const id = uid();
@@ -42,11 +42,14 @@ test("in-house journey: reporter logs a fault on a phone → assess → in-house
   await expect(rita.getByRole("heading", { name: "Hello, Rita" })).toBeVisible();
   await gotoReady(rita, "/requests/new");
   // The report is a guided form: one section at a time, then a review that reads like the requisition.
-  await expect(rita.getByTestId("step-label")).toHaveText("Step 1 of 4 · What is wrong?");
+  await expect(rita.getByTestId("step-label")).toHaveText("Step 1 of 5 · What is wrong?");
   await next(rita); // required fields are checked before moving on
-  await expect(rita.getByTestId("step-label")).toContainText("Step 1 of 4");
+  await expect(rita.getByTestId("step-label")).toContainText("Step 1 of 5");
   await f(rita, "title").fill("Cold room door not sealing");
   await f(rita, "description").fill("Ice building up on the floor at the door.");
+  await next(rita);
+  await expect(rita.getByTestId("step-label")).toHaveText("Step 2 of 5 · How urgent is it?");
+  await choosePriority(rita, "HIGH");
   await next(rita);
   await f(rita, "locationId").selectOption({ label: "Cold Room 2" });
   await next(rita);
@@ -55,6 +58,7 @@ test("in-house journey: reporter logs a fault on a phone → assess → in-house
   const review = rita.getByTestId("review");
   await expect(review).toContainText("Cold room door not sealing");
   await expect(review).toContainText("Cold Room 2");
+  await expect(review).toContainText("High – affecting work");
   await expect(review).toContainText("icon-192.png");
   await rita.getByRole("button", { name: "Send report" }).click();
   await expect(rita.locator("p[role=alert]")).toContainText("sign the report"); // "Submitted by" signature required
@@ -207,7 +211,7 @@ test("contractor journey: quotes by secure link → compare → over-limit goes 
   await addContractor(page, sparks.name, sparks.email, false);
 
   // Fault logged and assessed: needs a contractor.
-  const job = await logRequest(mgr, "Compressor 2 tripping on overload", async (p) => { await f(p, "priority").selectOption("HIGH"); }, { sign: true });
+  const job = await logRequest(mgr, "Compressor 2 tripping on overload", undefined, { sign: true, priority: "HIGH" });
   const a = await openPanel(mgr, "Assess it myself now");
   await a.locator('[name="findings"]').fill("Start capacitor degraded; contactor pitted.");
   await a.locator('[name="quoteRequired"]').selectOption("yes");
@@ -342,6 +346,8 @@ test("QR reporting without an account: off by default; when on, the scanned loca
   await expect(anon.getByRole("heading", { name: "Report a problem" })).toBeVisible();
   await anon.getByText("Unsafe", { exact: true }).click();
   await f(anon, "description").fill("Conveyor guard loose – rattles when the belt runs.");
+  await next(anon);
+  await choosePriority(anon, "CRITICAL"); // the reporter says how urgent it is
   await next(anon);
   await expect(anon.getByTestId("place-confirm")).toContainText("Packing Hall"); // filled in from the QR code
   await next(anon); await next(anon); // photo is optional

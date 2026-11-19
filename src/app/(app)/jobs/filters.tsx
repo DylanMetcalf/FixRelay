@@ -8,16 +8,14 @@ type Opt = { value: string; label: string };
  * GET form: filters live in the URL, so views are shareable and work without JavaScript.
  * Phones get the search box plus a "Filters" fold-out (so jobs show on the first screen); larger screens get one row.
  */
-export function JobFilterBar({ base, f, sites, techs, view }: { base: string; f: JobFilters; sites: Opt[]; techs: Opt[]; view?: string }) {
+export function JobFilterBar({ base, f, sites, techs, view, tab }: { base: string; f: JobFilters; sites: Opt[]; techs: Opt[]; view?: string; tab?: string }) {
+  const finished = (s: string) => s === "CLOSED" || s === "CANCELLED";
   const sel = "input !min-h-10 !py-1 text-sm";
-  const active = [f.status, f.priority, f.siteId, f.route, f.technicianId, f.from, f.to].filter(Boolean).length;
+  const active = [f.status, f.siteId, f.route, f.technicianId, f.from, f.to].filter(Boolean).length;
   const controls = (
     <>
       <select name="status" defaultValue={f.status ?? ""} aria-label="Status" className={sel}>
-        <option value="">Any status</option>{Object.entries(STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
-      <select name="priority" defaultValue={f.priority ?? ""} aria-label="Priority" className={sel}>
-        <option value="">Any priority</option>{["LOW", "NORMAL", "HIGH", "CRITICAL"].map((p) => <option key={p} value={p}>{p[0] + p.slice(1).toLowerCase()}</option>)}
+        <option value="">Any status</option>{Object.entries(STATUS_LABEL).filter(([v]) => (tab === "history") === finished(v)).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
       <select name="siteId" defaultValue={f.siteId ?? ""} aria-label="Site" className={sel}>
         <option value="">Any site</option>{sites.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -35,14 +33,14 @@ export function JobFilterBar({ base, f, sites, techs, view }: { base: string; f:
   const buttons = (
     <>
       <button className="btn btn-secondary btn-sm">Apply filters</button>
-      <Link href={view ? `${base}?view=${view}` : base} className="btn btn-sm underline">Clear</Link>
+      <Link href={`${base}?${new URLSearchParams({ ...(view ? { view } : {}), ...(tab ? { tab } : {}) })}`} className="btn btn-sm underline">Clear</Link>
     </>
   );
   return (
     <>
       {/* Phones */}
       <form method="get" action={base} className="card no-print space-y-2 !p-3 sm:hidden" aria-label="Filter jobs" data-testid="filters-phone">
-        {view && <input type="hidden" name="view" value={view} />}
+        {view && <input type="hidden" name="view" value={view} />}{tab && <input type="hidden" name="tab" value={tab} />}{f.priority && <input type="hidden" name="priority" value={f.priority} />}
         <div className="flex gap-2">
           <input name="q" defaultValue={f.q} placeholder="Search ref or title" aria-label="Search" className={`${sel} flex-1`} />
           <button className="btn btn-secondary btn-sm">Search</button>
@@ -54,11 +52,11 @@ export function JobFilterBar({ base, f, sites, techs, view }: { base: string; f:
         </details>
       </form>
       {/* Tablets and computers */}
-      <form method="get" action={base} className="card no-print hidden grid-cols-3 gap-2 !p-3 sm:grid lg:grid-cols-9" aria-label="Filter jobs">
-        {view && <input type="hidden" name="view" value={view} />}
+      <form method="get" action={base} className="card no-print hidden grid-cols-3 gap-2 !p-3 sm:grid lg:grid-cols-8" aria-label="Filter jobs">
+        {view && <input type="hidden" name="view" value={view} />}{tab && <input type="hidden" name="tab" value={tab} />}{f.priority && <input type="hidden" name="priority" value={f.priority} />}
         <input name="q" defaultValue={f.q} placeholder="Search ref or title" aria-label="Search" className={`${sel} col-span-2`} />
         {controls}
-        <div className="col-span-3 flex gap-2 lg:col-span-9">{buttons}</div>
+        <div className="col-span-3 flex gap-2 lg:col-span-8">{buttons}</div>
       </form>
     </>
   );

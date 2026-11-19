@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
-import { card, company, db, f, gotoReady, logRequest, newPage, next, openPanel, sign, status, uid } from "./helpers";
+import { card, choosePriority, company, db, f, gotoReady, logRequest, newPage, next, openPanel, sign, status, uid } from "./helpers";
 
 test.afterAll(async () => { await db.$disconnect(); });
 
@@ -67,14 +67,20 @@ test("R1 · guided report: each step is checked before moving on, Back keeps ans
   const { p } = await company(browser);
   await gotoReady(p, "/requests/new");
   await next(p);
-  await expect(p.getByTestId("step-label")).toContainText("Step 1 of 4"); // title and description are required
+  await expect(p.getByTestId("step-label")).toContainText("Step 1 of 5"); // title and description are required
   await f(p, "title").fill("Tap dripping in the staff kitchen");
   await f(p, "description").fill("Hot tap won't close fully.");
-  await f(p, "priority").selectOption("HIGH");
   await next(p);
-  await expect(p.getByTestId("step-label")).toHaveText("Step 2 of 4 · Where is it?");
+  await expect(p.getByTestId("step-label")).toHaveText("Step 2 of 5 · How urgent is it?");
+  await expect(p.locator('[data-testid="priority-choice"] input[value="NORMAL"]')).toBeChecked(); // Medium unless changed
+  await choosePriority(p, "HIGH");
+  await next(p);
+  await expect(p.getByTestId("step-label")).toHaveText("Step 3 of 5 · Where is it?");
+  await p.getByRole("button", { name: "← Back" }).click();
   await p.getByRole("button", { name: "← Back" }).click();
   await expect(f(p, "title")).toHaveValue("Tap dripping in the staff kitchen");
+  await next(p);
+  await expect(p.locator('[data-testid="priority-choice"] input[value="HIGH"]')).toBeChecked(); // Back keeps answers
   await next(p); await next(p); await next(p);
   const review = p.getByTestId("review");
   await expect(review).toContainText("High – affecting work");
@@ -84,7 +90,7 @@ test("R1 · guided report: each step is checked before moving on, Back keeps ans
   expect(a11y.violations.map((v) => v.id)).toEqual([]); // the review (incl. "Nothing added" sections) is valid
   await review.getByRole("button", { name: "Edit What is wrong?" }).click();
   await f(p, "title").fill("Hot tap dripping in the staff kitchen");
-  await next(p); await next(p); await next(p);
+  await next(p); await next(p); await next(p); await next(p);
   await expect(p.getByTestId("review")).toContainText("Hot tap dripping in the staff kitchen");
   await p.getByRole("button", { name: "Send report" }).click();
   await expect(p).toHaveURL(/jobs\/[0-9a-f-]{36}$/);
@@ -97,7 +103,7 @@ test("R2 · pressing Enter in a one-line field moves to the next step instead of
   await f(p, "description").fill("Something is wrong.");
   await f(p, "title").fill("Fire door not closing");
   await f(p, "title").press("Enter");
-  await expect(p.getByTestId("step-label")).toContainText("Step 2 of 4");
+  await expect(p.getByTestId("step-label")).toContainText("Step 2 of 5");
   await expect(p).toHaveURL(/requests\/new/);
   expect(await db.job.count({ where: { title: "Fire door not closing" } })).toBe(0);
 });
@@ -133,7 +139,7 @@ test("R5 · when signatures are required, the review step won't send without one
   await gotoReady(p, "/requests/new");
   await f(p, "title").fill("Extractor fan noisy");
   await f(p, "description").fill("Grinding noise.");
-  await next(p); await next(p); await next(p);
+  await next(p); await next(p); await next(p); await next(p);
   await expect(p.getByText("Submitted by – your signature")).toBeVisible();
   await expect(p.getByText("(optional)")).toHaveCount(0); // marked as required
   await sign(p);
@@ -206,7 +212,7 @@ test("R10 · area report: most-affected areas link through to the area's history
   await expect(p.getByTestId("area-history")).toContainText("Human error, Other");
   await expect(p.getByTestId("area-root-causes")).toContainText("Human error");
   await p.getByRole("link", { name: "+ Report a fault here" }).click();
-  await next(p);
+  await next(p); await next(p);
   await expect(f(p, "locationId")).toHaveValue(/[0-9a-f-]{36}/);
   expect(await f(p, "locationId").locator("option:checked").textContent()).toBe("Cold Room 2");
 });
@@ -259,10 +265,10 @@ test("R13 · no-account QR report: the details step is checked, the review shows
   const anon = await newPage(browser, { mobile: true });
   await gotoReady(anon, link);
   await f(anon, "description").fill("Broken window in canteen, glass on the floor.");
-  await next(anon); await next(anon); await next(anon);
+  await next(anon); await next(anon); await next(anon); await next(anon);
   await f(anon, "reporterName").fill("Grace Visitor");
   await next(anon);
-  await expect(anon.getByTestId("step-label")).toContainText("Step 4 of 5"); // phone number is required
+  await expect(anon.getByTestId("step-label")).toContainText("Step 5 of 6"); // phone number is required
   await f(anon, "reporterPhone").fill("082 123 4567");
   await next(anon);
   await expect(anon.getByTestId("review")).toContainText("Grace Visitor");
@@ -280,7 +286,7 @@ test("R14 · demo workspace: a fully signed requisition, history per area, and n
   await register(p, { email: `demo-${uid()}@e2e.example`, company: `Demo Check ${uid()}` });
   await p.getByRole("button", { name: "Explore a demo workspace" }).click();
   await expect(p.getByText("Demo workspace.")).toBeVisible({ timeout: 60_000 });
-  await gotoReady(p, "/jobs?view=all");
+  await gotoReady(p, "/jobs?tab=history"); // finished jobs live under History
   await p.getByText("Staff kitchen extractor fan very noisy").filter({ visible: true }).first().click();
   await p.getByRole("link", { name: "Requisition form" }).click();
   await expect(p.getByTestId("requisition-number")).toHaveText(/^126\d\d$/);
@@ -352,9 +358,13 @@ test("R16 · anyone with a phone: the QR report is simple, big and steady – no
   await expect(phone.getByText("If someone is hurt or in danger, call your supervisor first.")).toBeVisible();
   await steady("what's wrong");
   await next(phone);
-  await expect(phone.getByTestId("step-label")).toContainText("Step 1 of 5"); // a description is needed
+  await expect(phone.getByTestId("step-label")).toContainText("Step 1 of 6"); // a description is needed
   await phone.getByText("Leaking", { exact: true }).click();
   await f(phone, "description").fill("Water dripping from the ceiling by the door");
+  await next(phone);
+  await expect(phone.getByTestId("step-label")).toHaveText("Step 2 of 6 · How urgent is it?");
+  await steady("how urgent");
+  await phone.getByText("Stopped or unsafe").click(); // big cards: tap anywhere on "Critical"
   await next(phone);
   await expect(phone.getByTestId("place-confirm")).toContainText("Cold Room 2"); // from the QR code, no dropdown to work out
   await steady("where");
@@ -368,7 +378,7 @@ test("R16 · anyone with a phone: the QR report is simple, big and steady – no
   await f(phone, "reporterPhone").fill("072 555 0101");
   await next(phone);
   const review = phone.getByTestId("review");
-  for (const t of ["Leaking", "Water dripping", "Cold Room 2", "icon-192.png", "Grace Visitor"]) await expect(review).toContainText(t);
+  for (const t of ["Leaking", "Water dripping", "Critical – stopped or unsafe", "Cold Room 2", "icon-192.png", "Grace Visitor"]) await expect(review).toContainText(t);
   await steady("check and send");
   await phone.getByRole("button", { name: "Send report" }).click();
   await expect(phone.getByTestId("report-done")).toContainText("Thank you!");
@@ -380,8 +390,9 @@ test("R16 · anyone with a phone: the QR report is simple, big and steady – no
   const job = await db.job.findFirstOrThrow({ where: { reference: ref!, orgId: await orgOf(email) }, include: { attachments: true } });
   expect(job.title).toBe("Leaking: Water dripping from the ceiling by the door");
   expect(job.locationId).toBe(loc.id);
+  expect(job.priority).toBe("CRITICAL");
   expect(job.attachments.filter((a) => a.kind === "REQUEST" && a.mimeType.startsWith("image/"))).toHaveLength(1);
   await phone.getByRole("button", { name: "Report another problem" }).click();
-  await expect(phone.getByTestId("step-label")).toContainText("Step 1 of 5");
+  await expect(phone.getByTestId("step-label")).toContainText("Step 1 of 6");
   await expect(f(phone, "description")).toHaveValue("");
 });

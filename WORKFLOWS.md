@@ -88,6 +88,15 @@ Quote sign-off is also signed (`APPROVAL`) and shown on page 2 with the quotes, 
 
 **Signatures**: drawn on screen (finger or mouse) and stored as PNG with the signer's name, the server's date and time, and the IP for public/contractor signatures (`JobSignature`, append-only by trigger). Settings → "Require signatures on every line" makes each step refuse to continue without one; otherwise signing is optional. Signing on a staff device for the reporter is always required.
 
+## Priority and spares
+
+- **Priority** is chosen when the fault is reported (in the app and on the QR form): Critical (stopped or unsafe), High (affecting work), Medium (needs fixing soon, the default) or Low (when convenient). Managers are alerted with "CRITICAL:" for critical reports and can change the urgency later. Due dates follow the company's response times per priority.
+- **Spares**: the assessment asks "Spares or parts needed?": no / yes, in stock (stores to issue) / yes, must be bought or quoted (stores to order), plus which spares. A technician on the job can also ask for spares later.
+  - Spares status: none → in stock (to issue) or to buy → ordered (supplier and order number required, expected date optional) → ready.
+  - Only Owner, Manager and Stores move spares on; each step is in the job history and notifies the technician and managers.
+  - While an in-house job is approved, assigned, in progress or on hold and its spares are not ready, "What happens next" says Stores is responsible (issue, order, or waiting for delivery).
+- **Jobs board**: Open now (anything not closed or cancelled, most urgent first) and History (closed and cancelled, newest first), filtered by priority with counts.
+
 ## Who decides what
 
 | Decision | Channel | Recorded as |
@@ -107,6 +116,8 @@ Decisions are append-only (trigger) and unique per quote / completion version.
 | Fault reported | Managers; public reports also send the reporter an acknowledgement email if given |
 | Sent for assessment | Named assessor |
 | Assessed / quote received | Managers |
+| Spares needed (at assessment or mid-job) | Stores covering that site, and managers |
+| Spares ordered / issued / received | Lead technician, helpers and managers |
 | Sent for approval | Approvers whose limit covers the amount (and who cover that site) |
 | Approved / not approved | Managers; contractor appointment email; "not selected" emails |
 | Assigned | Lead and additional technicians |

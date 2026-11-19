@@ -57,13 +57,19 @@ export const OPEN_STATUSES: JobStatus[] = [
 ];
 export const REQUEST_STATUSES: JobStatus[] = ["NEW", "ASSESSING", "ASSESSED"];
 
-export type Party = "Maintenance manager" | "Technician" | "Contractor" | "Approver" | "Reporter" | "Nobody";
+export type Party = "Maintenance manager" | "Technician" | "Contractor" | "Approver" | "Stores" | "Reporter" | "Nobody";
 
 /** What happens next and who must do it — shown on every job. */
 export function nextAction(job: {
   status: JobStatus; route?: JobRoute; reporterConfirmation: boolean; leadTechnicianId?: string | null; contractorId?: string | null;
+  sparesStatus?: "NOT_NEEDED" | "ON_HAND" | "TO_BUY" | "ORDERED" | "READY";
 }): { label: string; party: Party } {
   const contractor = job.route === "CONTRACTOR";
+  // In-house work waiting for spares: stores are next (issue from stock, order, or wait for delivery).
+  if (!contractor && ["APPROVED", "ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(job.status) && job.sparesStatus && ["ON_HAND", "TO_BUY", "ORDERED"].includes(job.sparesStatus)) {
+    const label = { ON_HAND: "Issue the spares from stores", TO_BUY: "Order the spares", ORDERED: "Waiting for the spares to arrive" }[job.sparesStatus as "ON_HAND"];
+    return { label, party: "Stores" };
+  }
   switch (job.status) {
     case "NEW": return { label: "Review the report and send it for assessment", party: "Maintenance manager" };
     case "ASSESSING": return { label: "Assess the problem", party: job.leadTechnicianId ? "Technician" : "Maintenance manager" };
@@ -85,4 +91,18 @@ export function nextAction(job: {
 export const ROOT_CAUSE_LABEL: Record<"MAINTENANCE" | "AGE_OF_MACHINE" | "OPERATOR" | "HUMAN_ERROR" | "WEAR_AND_TEAR" | "BREAKDOWN" | "CHANGE_OVER" | "OTHER", string> = {
   MAINTENANCE: "Maintenance", AGE_OF_MACHINE: "Age of machine", OPERATOR: "Operator", HUMAN_ERROR: "Human error",
   WEAR_AND_TEAR: "Wear and tear", BREAKDOWN: "Breakdown", CHANGE_OVER: "Change over", OTHER: "Other",
+};
+
+/** Priority names people see. NORMAL is shown as "Medium". */
+export const PRIORITY_LABEL: Record<"LOW" | "NORMAL" | "HIGH" | "CRITICAL", string> = { LOW: "Low", NORMAL: "Medium", HIGH: "High", CRITICAL: "Critical" };
+/** With a short explanation, for the report forms. */
+export const PRIORITY_HELP: Record<"LOW" | "NORMAL" | "HIGH" | "CRITICAL", string> = {
+  CRITICAL: "Stopped or unsafe", HIGH: "Affecting work", NORMAL: "Needs fixing soon", LOW: "When convenient",
+};
+export const PRIORITY_ORDER = ["CRITICAL", "HIGH", "NORMAL", "LOW"] as const;
+
+/** Spares or parts for a job. */
+export const SPARES_LABEL: Record<"NOT_NEEDED" | "ON_HAND" | "TO_BUY" | "ORDERED" | "READY", string> = {
+  NOT_NEEDED: "No spares needed", ON_HAND: "Spares in stock – stores to issue", TO_BUY: "Spares to buy – stores to order",
+  ORDERED: "Spares ordered – waiting for delivery", READY: "Spares ready",
 };

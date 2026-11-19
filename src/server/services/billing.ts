@@ -68,7 +68,7 @@ export type Metered = "users" | "activeJobs" | "sites";
 export async function usage(db: Db, orgId: string): Promise<Record<Metered, number>> {
   const [users, activeJobs, sites] = await Promise.all([
     // Requesters (people who only report faults) are free: only maintenance staff and approvers are metered.
-    db.membership.count({ where: { orgId, active: true, roles: { hasSome: ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN"] } } }),
+    db.membership.count({ where: { orgId, active: true, roles: { hasSome: ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "STORES"] } } }),
     db.job.count({ where: { orgId, status: { in: OPEN_STATUSES } } }),
     db.site.count({ where: { orgId, archived: false } }),
   ]);

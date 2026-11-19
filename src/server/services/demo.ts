@@ -53,6 +53,8 @@ export async function createDemoWorkspace(user: { id: string; name: string; emai
   await jobs.assignJob(ctx, j3.id, { leadTechnicianId: user.id, plannedEnd: new Date(Date.now() + 2 * 86_400_000).toISOString(), instructions: "Work before the 07:00 shift starts." });
   await jobs.startWork(ctx, j3.id);
   await jobs.addWorkUpdate(ctx, j3.id, { note: "Rail straightened, waiting for lubricant delivery.", labourMinutes: 60 });
+  await jobs.requestSpares(ctx, j3.id, { sparesNeeded: "TO_BUY", sparesList: "Rail lubricant (5 L), 2 × door rollers" });
+  await jobs.updateSpares(ctx, j3.id, { action: "ORDERED", note: "Door Parts SA, PO 1187", eta: new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10) });
 
   // 4. Contractor appointed (approved with a PO).
   const j4 = await jobs.createJob(ctx, { title: "Forklift 3 hydraulic leak", description: "Oil under the mast after use.", siteId: dc.id, locationId: bay.id, assetId: fork.id, category: "Mechanical", priority: "NORMAL" });

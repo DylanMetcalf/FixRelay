@@ -1,3 +1,4 @@
+import { PRIORITY_LABEL } from "@/server/workflow";
 import * as a from "@/app/actions/admin";
 import { requirePage } from "@/app/_lib/session";
 import { LinkForm } from "@/components/client-forms";
@@ -15,6 +16,7 @@ const ROLES = [
   ["MANAGER", "Maintenance manager", "Runs jobs, quotes, contractors; approves up to the manager limit"],
   ["APPROVER", "Approver (site / finance)", "Approves spend up to the approver limit; sees all jobs"],
   ["TECHNICIAN", "Technician", "Assessments and in-house work on assigned jobs"],
+  ["STORES", "Stores / procurement", "Issues and buys spares; sees jobs that need spares"],
   ["REQUESTER", "Reports faults only", "Reports faults and follows their own reports (free)"],
 ] as const;
 
@@ -139,7 +141,7 @@ export default async function Settings() {
                 <tbody>{(["LOW", "NORMAL", "HIGH", "CRITICAL"] as const).map((p) => {
                   const r = rules.find((x) => x.priority === p);
                   return (
-                    <tr key={p}><td className="td font-bold">{p[0] + p.slice(1).toLowerCase()}</td>
+                    <tr key={p}><td className="td font-bold">{PRIORITY_LABEL[p]}</td>
                       <td className="td"><input name={`${p}_response`} aria-label={`${p} response hours`} defaultValue={r?.responseHours ?? 24} inputMode="numeric" className="input !min-h-9 w-24" /></td>
                       <td className="td"><input name={`${p}_completion`} aria-label={`${p} completion hours`} defaultValue={r?.completionHours ?? 120} inputMode="numeric" className="input !min-h-9 w-24" /></td></tr>
                   );

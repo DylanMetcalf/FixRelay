@@ -14,10 +14,12 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 
 - **Accounts**: email confirmation, secure password reset, show/hide passwords, session hardening.
 - **Company sign-up and onboarding**: trial subscription, a checklist computed from real records, branding (name, logo, colour), response times per priority, and an optional, clearly separated **demo workspace** with sample sites, contractors and jobs.
-- **Team and roles**: Owner, Maintenance manager, Approver (site/finance), Technician, and "Reports faults only" (free). Any member can be limited to certain sites. Invitations are single-use and expire.
+- **Team and roles**: Owner, Maintenance manager, Approver (site/finance), Technician, Stores / procurement, and "Reports faults only" (free). Any member can be limited to certain sites. Invitations are single-use and expire.
 - **Sites → Locations → Equipment**, with repair history and spend per machine.
-- **Fault reporting**: from the app on a phone, or by scanning a **QR code** printed per site, location or machine (pre-fills where). Optional **reporting without an account** (name + phone), screened by a manager. Photos, priority, emergency flag, due dates from priority rules.
-- **Assessment**: findings, cause, work needed, materials, time, and whether a contractor is needed.
+- **Fault reporting**: from the app on a phone, or by scanning a **QR code** printed per site, location or machine (pre-fills where). Optional **reporting without an account** (name + phone), screened by a manager. Photos, priority (Critical / High / Medium / Low, chosen by the reporter on big cards, also on the QR form), emergency flag, due dates from priority rules.
+- **Assessment**: findings, cause, work needed, materials, time, whether a contractor is needed, and **whether spares are needed** (in stock, or to be bought or quoted).
+- **Spares and stores**: when spares are needed, stores and the maintenance manager are told at once. Stores see a queue (to issue / to order / ordered), issue from stock, record the supplier, order number and expected date, and mark them received; the technician and managers are told at each step. A technician can ask for more spares mid-job. "What happens next" shows Stores while a job waits for spares.
+- **Jobs board**: **Open now** and **History** tabs, priority chips with live counts (All / Critical / High / Medium / Low), most urgent first, and each job card shows the first photo of the problem and opens the full job card.
 - **In-house route**: assign a lead technician and helpers, planned dates, instructions; time and materials logged.
 - **Contractor route**: contractor directory (VAT registered or not); **quote requests by secure link** (no contractor account) or capture a quote received by email; side-by-side comparison with the cheapest marked; revised quotes keep every version.
 - **Spend approval**: limits per role (manager / approver / owner), "send for approval" to whoever can approve the amount, three-quote rule above a threshold (or a recorded reason), optional or required **PO numbers**.

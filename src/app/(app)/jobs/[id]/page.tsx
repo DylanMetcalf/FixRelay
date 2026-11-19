@@ -12,6 +12,7 @@ import { markJobRead } from "@/server/services/notifications";
 import { listAssignable } from "@/server/services/orgs";
 import { nextAction, ROUTE_LABEL } from "@/server/workflow";
 import { ActionsPanel } from "./actions-panel";
+import { SparesCard } from "./spares-card";
 import { QuotesCard } from "./quotes-card";
 import { RequisitionCard } from "./requisition-card";
 
@@ -34,7 +35,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   const name = (id: string | null | undefined) => (id ? (job.people[id] ?? "Unknown") : "—");
   const reporter = job.requesterId ? name(job.requesterId) : `${job.reporterName ?? "Unknown"} (public link)`;
   const who = { "Maintenance manager": job.ownerId ? name(job.ownerId) : "Any maintenance manager", Technician: job.leadTechnicianId ? name(job.leadTechnicianId) : "Unassigned",
-    Contractor: job.contractor?.name ?? "—", Approver: "Site / finance approver", Reporter: reporter, Nobody: "—" }[next.party];
+    Contractor: job.contractor?.name ?? "—", Approver: "Site / finance approver", Stores: "Stores / procurement", Reporter: reporter, Nobody: "—" }[next.party];
   const groups = Object.keys(KIND_LABEL).map((k) => ({ kind: k, items: job.attachments.filter((a) => a.kind === k) })).filter((g) => g.items.length);
 
   return (
@@ -63,6 +64,8 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         <div className="space-y-5 lg:col-span-2">
           <ActionsPanel sigRequired={!!org?.requireSignatures} job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))}
             contractors={contractors.map((c) => ({ value: c.id, label: `${c.name}${c.trade ? ` – ${c.trade}` : ""}` }))} suggestedScope={assessment?.recommendedWork || job.description} />
+
+          {(staff || can(ctx, "spares.manage")) && <SparesCard job={job} ctx={ctx} />}
 
           {can(ctx, "quote.view") && <QuotesCard ctx={ctx} jobId={job.id} sigRequired={!!org?.requireSignatures} />}
 

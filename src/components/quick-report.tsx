@@ -3,6 +3,7 @@ import { useState } from "react";
 import { publicReportAction } from "@/app/actions/jobs";
 import { SignaturePad } from "./client";
 import { Form, Submit } from "./form";
+import { PriorityChoice } from "./requisition-fields";
 import { Step, Stepper } from "./stepper";
 
 type Loc = { id: string; name: string };
@@ -53,6 +54,10 @@ export function QuickReport({ token, siteName, locations, initialLocationId, ass
             <label className="label" htmlFor="qr-description">Tell us in your own words <span className="text-red-700">*</span></label>
             <textarea id="qr-description" name="description" required minLength={3} maxLength={2000} rows={4} className="input" placeholder="For example: the tap in the kitchen won’t stop dripping" />
           </div>
+        </Step>
+
+        <Step title="How urgent is it?">
+          <PriorityChoice />
         </Step>
 
         <Step title="Where is it?">

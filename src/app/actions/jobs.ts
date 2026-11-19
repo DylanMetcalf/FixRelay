@@ -51,7 +51,7 @@ export async function publicReportAction(_: ActionState, fd: FormData) {
     const description = str(fd, "description").trim();
     const title = str(fd, "title").trim() || [kind, description.split(/\s+/).slice(0, 10).join(" ")].filter(Boolean).join(": ").slice(0, 160);
     const r = await jobs.createPublicReport(token, {
-      title, description, locationId: str(fd, "locationId"), assetId: str(fd, "assetId"),
+      title, description, locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), priority: (str(fd, "priority") || "NORMAL") as "NORMAL",
       reporterName: str(fd, "reporterName"), reporterPhone: str(fd, "reporterPhone"), reporterEmail: str(fd, "reporterEmail"),
     }, sig(fd), ip, await filesOf(fd, "photos"));
     return { ok: `Thank you. Your report ${r.reference} has been sent to the maintenance team.`, data: { sent: "1", reference: r.reference } };
@@ -74,6 +74,7 @@ export async function assessmentAction(_: ActionState, fd: FormData) {
     await jobs.submitAssessment(ctx, id(fd), {
       findings: str(fd, "findings"), suspectedCause: str(fd, "suspectedCause"), recommendedWork: str(fd, "recommendedWork"), materials: str(fd, "materials"),
       labourHoursEstimate: str(fd, "labourHoursEstimate"), quoteRequired: str(fd, "quoteRequired") === "yes", externalHelpRequired: bool(fd, "externalHelpRequired"),
+      sparesNeeded: (str(fd, "sparesNeeded") || "NOT_NEEDED") as "NOT_NEEDED", sparesList: str(fd, "sparesList"),
     }, sig(fd));
     await attach(ctx, fd, id(fd), "ASSESSMENT");
     return { ok: "Assessment recorded." };
@@ -169,6 +170,21 @@ export async function resendCompletionLinkAction(_: ActionState, fd: FormData) {
 export async function closeAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.closeJob(await requireCtx(), id(fd), { comment: str(fd, "comment") }, sig(fd)); return { ok: "Signed off and closed." }; });
 }
+export async function sparesAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const action = str(fd, "sparesAction") as "ISSUED";
+    await jobs.updateSpares(await requireCtx(), id(fd), { action, note: str(fd, "note"), eta: str(fd, "eta") });
+    return { ok: { ISSUED: "Marked as issued.", ORDERED: "Marked as ordered.", RECEIVED: "Marked as received." }[action] ?? "Updated." };
+  });
+}
+
+export async function requestSparesAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    await jobs.requestSpares(await requireCtx(), id(fd), { sparesNeeded: str(fd, "sparesNeeded") as "ON_HAND", sparesList: str(fd, "sparesList") });
+    return { ok: "Stores and the maintenance manager have been told." };
+  });
+}
+
 export async function reopenAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.reopenJob(await requireCtx(), id(fd), { reason: str(fd, "reason") }); return { ok: "Job reopened." }; });
 }

@@ -22,7 +22,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const manager = can(ctx, "job.viewAll");
   const [counts, jobs, sites, techs] = await Promise.all([
     dashboardCounts(ctx, f),
-    listJobs(ctx, { ...f, view: f.status || f.overdue || f.source ? "all" : undefined }, 25),
+    listJobs(ctx, { ...f, view: f.status || f.overdue || f.source || f.spares ? "all" : undefined }, 25),
     manager ? listSites(ctx) : [],
     manager ? listAssignable(ctx) : [],
   ]);
@@ -39,6 +39,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     { label: "On hold", n: counts.onHold, href: "?status=ON_HOLD" },
     { label: "Awaiting confirmation it's fixed", n: counts.awaitingVerification, href: "?status=AWAITING_VERIFICATION" },
     { label: "Confirmed – ready to close", n: counts.readyToClose, href: "?status=VERIFIED" },
+    { label: "Waiting for spares", n: counts.sparesWaiting, href: "?spares=waiting" },
     { label: "Overdue", n: counts.overdue, href: "?overdue=true", alert: true },
   ];
   const setup = can(ctx, "org.manage") && !s.org.isDemo ? await onboarding(ctx.orgId, s.user.emailVerified) : null;
@@ -52,7 +53,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const pendingQuotes = pending.length ? await prisma.quote.findMany({ where: { id: { in: pending.map((p) => p.recommendedQuoteId!).filter(Boolean) } }, select: { id: true, totalCents: true, contractor: { select: { name: true } } } }) : [];
   const toApprove = pending.map((j) => ({ ...j, quote: pendingQuotes.find((q) => q.id === j.recommendedQuoteId) })).filter((j) => j.quote && j.quote.totalCents <= myLimit);
   const toConfirm = await prisma.job.findMany({ where: { orgId: ctx.orgId, requesterId: ctx.userId, status: "AWAITING_VERIFICATION", reporterConfirmation: true }, select: { id: true, reference: true, title: true, site: { select: { name: true } } } });
-  const myReports = !manager ? await listJobs(ctx, { view: "all" }, 10).then((js) => js.filter((j) => j.status !== "CLOSED" && j.status !== "CANCELLED")) : [];
+  const stores = can(ctx, "spares.manage") && !manager;
+  const spares = stores ? await listJobs(ctx, { view: "all", spares: "waiting" }, 100) : [];
+  const myReports = !manager ? await listJobs(ctx, { view: "all", reportedByMe: stores || undefined }, 10).then((js) => js.filter((j) => j.status !== "CLOSED" && j.status !== "CANCELLED")) : [];
   return (
     <>
       <PageHeader title={manager ? "Dashboard" : `Hello, ${s.user.name.split(" ")[0]}`} subtitle={manager ? "Every number below is a live count of jobs. Tap one to see them." : "Report faults and follow them until they are fixed."}>
@@ -82,6 +85,19 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             ))}
           </ul>
         </Card>
+      )}
+      {stores && (
+        <div className="mb-6 space-y-5" data-testid="stores-queue">
+          {([["ON_HAND", "Spares to issue from stores"], ["TO_BUY", "Spares to order"], ["ORDERED", "Ordered – waiting for delivery"]] as const).map(([k, title]) => {
+            const list = spares.filter((j) => j.sparesStatus === k);
+            return (
+              <section key={k}>
+                <h2 className="mb-3 text-lg font-extrabold">{title} <span className="tabular-nums text-gray-600">({list.length})</span></h2>
+                <JobList jobs={list} empty={<p className="muted">Nothing here.</p>} />
+              </section>
+            );
+          })}
+        </div>
       )}
       {!manager && (
         <>
@@ -121,7 +137,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </div>
           <p className="muted mb-4">{counts.unowned} new report{counts.unowned === 1 ? "" : "s"} with no responsible manager yet · {counts.recentlyClosed} closed in the last 7 days.</p>
           <JobFilterBar base="/dashboard" f={f} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />
-          <h2 className="mb-3 mt-5 text-lg font-extrabold">{f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : "Latest activity"}</h2>
+          <h2 className="mb-3 mt-5 text-lg font-extrabold">{f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : f.spares ? "Waiting for spares" : "Latest activity"}</h2>
           <JobList jobs={jobs} empty={<Empty title="Nothing here">No jobs match. <Link className="link" href="/requests/new">Report a fault</Link>.</Empty>} />
         </>
       )}

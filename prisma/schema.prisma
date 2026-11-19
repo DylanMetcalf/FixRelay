@@ -13,6 +13,7 @@ enum Role {
   MANAGER
   APPROVER
   TECHNICIAN
+  STORES // stores / procurement: issues and buys spares for jobs
   REQUESTER
 }
 
@@ -284,52 +285,56 @@ model Asset {
 
 // A maintenance request and the job it becomes are ONE record moving through JobStatus.
 model Job {
-  id                   String     @id @default(uuid()) @db.Uuid
-  orgId                String     @db.Uuid
+  id                   String       @id @default(uuid()) @db.Uuid
+  orgId                String       @db.Uuid
   reference            String
   title                String
   description          String
-  category             String     @default("General")
-  priority             Priority   @default(NORMAL)
-  emergency            Boolean    @default(false)
-  isProject            Boolean    @default(false) // planned project work rather than a breakdown ("Projects" box on the requisition)
-  status               JobStatus  @default(NEW)
+  category             String       @default("General")
+  priority             Priority     @default(NORMAL)
+  emergency            Boolean      @default(false)
+  isProject            Boolean      @default(false) // planned project work rather than a breakdown ("Projects" box on the requisition)
+  sparesStatus         SparesStatus @default(NOT_NEEDED) // set at assessment, moved on by stores
+  sparesList           String       @default("") // which spares or parts are needed
+  sparesNote           String       @default("") // stores' latest note (supplier, where to collect)
+  sparesEta            DateTime? // expected arrival when ordered
+  status               JobStatus    @default(NEW)
   heldFromStatus       JobStatus?
   holdReason           String?
   cancelReason         String?
   directAuthReason     String?
-  siteId               String     @db.Uuid
-  locationId           String?    @db.Uuid
-  assetId              String?    @db.Uuid
-  requesterId          String?    @db.Uuid // null when reported through a public link
-  source               JobSource  @default(APP)
+  siteId               String       @db.Uuid
+  locationId           String?      @db.Uuid
+  assetId              String?      @db.Uuid
+  requesterId          String?      @db.Uuid // null when reported through a public link
+  source               JobSource    @default(APP)
   reporterName         String? // public-link reports
   reporterPhone        String?
   reporterEmail        String?
-  route                JobRoute   @default(UNDECIDED)
-  contractorId         String?    @db.Uuid // appointed contractor (route CONTRACTOR)
-  recommendedQuoteId   String?    @db.Uuid // quote put forward for approval above the manager's limit
+  route                JobRoute     @default(UNDECIDED)
+  contractorId         String?      @db.Uuid // appointed contractor (route CONTRACTOR)
+  recommendedQuoteId   String?      @db.Uuid // quote put forward for approval above the manager's limit
   quoteDeadline        DateTime?
   quoteExceptionReason String? // why fewer quotes than required were accepted
   poNumber             String?
   approvedCostCents    Int?
-  ownerId              String?    @db.Uuid // responsible manager / dispatcher
-  leadTechnicianId     String?    @db.Uuid
+  ownerId              String?      @db.Uuid // responsible manager / dispatcher
+  leadTechnicianId     String?      @db.Uuid
   instructions         String?
   plannedStart         DateTime?
   plannedEnd           DateTime?
   dueAt                DateTime?
-  reporterConfirmation Boolean    @default(true)
-  reportedAt           DateTime   @default(now())
+  reporterConfirmation Boolean      @default(true)
+  reportedAt           DateTime     @default(now())
   respondedAt          DateTime? // first time the job left NEW (used for response-time reporting)
   assignedAt           DateTime?
   startedAt            DateTime?
   completedAt          DateTime?
   closedAt             DateTime?
-  reopenCount          Int        @default(0)
+  reopenCount          Int          @default(0)
   overdueNotifiedAt    DateTime?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   contractor      Contractor?      @relation(fields: [orgId, contractorId], references: [orgId, id])
   site            Site             @relation(fields: [orgId, siteId], references: [orgId, id])
@@ -350,6 +355,7 @@ model Job {
   @@index([orgId, status])
   @@index([orgId, siteId])
   @@index([orgId, leadTechnicianId])
+  @@index([orgId, sparesStatus])
 }
 
 model JobTechnician {
@@ -364,18 +370,20 @@ model JobTechnician {
 }
 
 model Assessment {
-  id                   String   @id @default(uuid()) @db.Uuid
-  orgId                String   @db.Uuid
-  jobId                String   @db.Uuid
-  authorId             String   @db.Uuid
+  id                   String       @id @default(uuid()) @db.Uuid
+  orgId                String       @db.Uuid
+  jobId                String       @db.Uuid
+  authorId             String       @db.Uuid
   findings             String
-  suspectedCause       String   @default("")
-  recommendedWork      String   @default("")
-  materials            String   @default("")
-  labourHoursEstimate  Decimal? @db.Decimal(8, 2)
+  suspectedCause       String       @default("")
+  recommendedWork      String       @default("")
+  materials            String       @default("")
+  labourHoursEstimate  Decimal?     @db.Decimal(8, 2)
   quoteRequired        Boolean
-  externalHelpRequired Boolean  @default(false)
-  createdAt            DateTime @default(now())
+  externalHelpRequired Boolean      @default(false)
+  sparesNeeded         SparesStatus @default(NOT_NEEDED)
+  sparesList           String       @default("")
+  createdAt            DateTime     @default(now())
 
   job Job @relation(fields: [orgId, jobId], references: [orgId, id])
 
@@ -730,4 +738,13 @@ model JobSignature {
   job Job @relation(fields: [orgId, jobId], references: [orgId, id])
 
   @@index([orgId, jobId])
+}
+
+/// Spares or parts for a job: none, in stock (stores to issue), to buy (stores to order), ordered, ready (issued or received).
+enum SparesStatus {
+  NOT_NEEDED
+  ON_HAND
+  TO_BUY
+  ORDERED
+  READY
 }

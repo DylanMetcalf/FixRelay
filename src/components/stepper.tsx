@@ -43,7 +43,7 @@ function summarise(section: HTMLElement): Row[] {
       done.add(name);
       if (group.length === 1 && el.type === "checkbox") { if (el.checked) rows.push({ label: fieldLabel(el), value: "Yes" }); continue; }
       const legend = el.closest("fieldset")?.querySelector("legend")?.textContent?.replace(/\s*\*.*$/, "").replace(/\(.*?\)/g, "").trim() ?? name;
-      const picked = group.filter((g) => g.checked).map((g) => g.closest("label")?.textContent?.trim() ?? g.value);
+      const picked = group.filter((g) => g.checked).map((g) => { const l = g.closest("label"); return l?.dataset.summary ?? l?.textContent?.trim() ?? g.value; });
       if (picked.length) rows.push({ label: legend, value: picked.join(", ") });
       continue;
     }

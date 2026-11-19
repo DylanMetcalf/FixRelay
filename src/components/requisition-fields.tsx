@@ -1,4 +1,4 @@
-import { ROOT_CAUSE_LABEL } from "@/server/workflow";
+import { PRIORITY_HELP, PRIORITY_LABEL, PRIORITY_ORDER, ROOT_CAUSE_LABEL } from "@/server/workflow";
 import { SignaturePad } from "./client";
 
 /** Root cause boxes, notes and (food areas only) the tools/clean-area check — as on the paper requisition. */
@@ -33,4 +33,25 @@ export function RootCauseFields({ foodArea }: { foodArea: boolean }) {
 /** One signature line of the requisition. */
 export function SignLine({ label, required, hint }: { label: string; required: boolean; hint?: string }) {
   return <SignaturePad label={label} required={required} hint={hint} />;
+}
+
+const PRIORITY_TONE: Record<string, string> = { CRITICAL: "bg-red-700", HIGH: "bg-orange-500", NORMAL: "bg-blue-600", LOW: "bg-gray-400" };
+
+/** "How urgent is it?" as four big cards – easy to understand without training. */
+export function PriorityChoice({ defaultValue = "NORMAL" }: { defaultValue?: string }) {
+  return (
+    <fieldset data-testid="priority-choice">
+      {/* The step title already asks the question; the legend names the group for screen readers. */}
+      <legend className="sr-only">How urgent is it?</legend>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {PRIORITY_ORDER.map((p) => (
+          <label key={p} className="choice" data-summary={`${PRIORITY_LABEL[p]} – ${PRIORITY_HELP[p].toLowerCase()}`}>
+            <input type="radio" name="priority" value={p} defaultChecked={p === defaultValue} required />
+            <span aria-hidden className={`h-3 w-3 shrink-0 rounded-full ${PRIORITY_TONE[p]}`} />
+            <span>{PRIORITY_LABEL[p]}<span className="block text-base font-normal text-gray-700">{PRIORITY_HELP[p]}</span></span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }

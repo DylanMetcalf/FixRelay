@@ -1,6 +1,6 @@
 # Build status
 
-Last updated: 2026-11-17. Legend: ✅ implemented and tested · 🟡 implemented, partly tested or with known limits · ❌ not started
+Last updated: 2026-11-19. Legend: ✅ implemented and tested · 🟡 implemented, partly tested or with known limits · ❌ not started
 
 ## Internal site maintenance model (2026-11-17)
 
@@ -21,7 +21,9 @@ FixRelay was changed from a tool for maintenance *contractors serving customers*
 | 11 | The reporter confirms it is fixed (or a manager with a reason / signature) | ✅ | e2e journeys 1–2; integration |
 | 12 | Job can be closed or reopened appropriately | ✅ | e2e journey 1; integration (contractor rework link) |
 | 13 | Complete audit history | ✅ | e2e timeline/report; DB trigger |
-| 14 | Main workflow passes meaningful automated tests | ✅ | 72 integration/unit + 34 e2e, all green |
+| 14 | Main workflow passes meaningful automated tests | ✅ | 76 integration/unit + 37 e2e, all green |
+| 18 | Priority when reporting (app and QR); Open now / History board with priority chips and photo cards | ✅ | e2e B1, R1, R16; `spares.test.ts` |
+| 19 | Spares at assessment; stores and managers notified; stores issue / order / receive; Stores role | ✅ | e2e B2; `spares.test.ts` |
 | 17 | Guided (step-by-step) report and completion forms; area reports and area CSV | ✅ | e2e R1–R15 |
 | 16 | Paper maintenance work requisition replaced by a digital, signed form | ✅ | Every line of the paper form (number, dates/times, area, projects, description, submitted by/to, start, report, food-area check, root cause, completed, originator and manager confirmation) filled in and signed; e2e journey 1, `requisition.test.ts`; print/PDF fits one A4 page |
 | 15 | Installed, configured and deployed using the documentation | ✅ | Live demo https://fixrelay-demo.onrender.com redeployed from this branch (migrations ran on start); live smoke test passed (TESTING.md). Pushes do not trigger deploys on this service (GitHub webhook not connected): deploy from the Render dashboard or API |

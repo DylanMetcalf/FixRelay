@@ -4,7 +4,7 @@
  * but this is the enforcement point. Matrix documented in SECURITY.md.
  *
  * Roles: OWNER (account admin) · MANAGER (maintenance manager) · APPROVER (site/finance manager who approves
- * spend) · TECHNICIAN (in-house) · REQUESTER (anyone on site who reports faults).
+ * spend) · TECHNICIAN (in-house) · STORES (issues and buys spares) · REQUESTER (anyone on site who reports faults).
  * Spending authority by amount: see `approvalLimit`.
  */
 import type { Prisma, Role } from "@prisma/client";
@@ -39,7 +39,8 @@ export const PERMISSIONS = {
   "sites.view": { roles: ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN"], write: false },
   "contractors.manage": { roles: MANAGERS, write: true },
   "contractors.view": { roles: OVERSIGHT, write: false },
-  "job.create": { roles: ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "REQUESTER"], write: true },
+  "job.create": { roles: ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "STORES", "REQUESTER"], write: true },
+  "spares.manage": { roles: ["OWNER", "MANAGER", "STORES"], write: true }, // issue / order / receive spares for a job
   "job.viewAll": { roles: OVERSIGHT, write: false }, // within the member's sites
   "job.manage": { roles: MANAGERS, write: true }, // triage, route, quotes, assign, hold, cancel, close, reopen
   "job.assess": { roles: STAFF, write: true }, // technicians: only jobs they are assigned to
@@ -100,5 +101,6 @@ export function jobScope(ctx: Ctx): Prisma.JobWhereInput {
   if (can(ctx, "job.viewAll")) return base;
   const or: Prisma.JobWhereInput[] = [{ requesterId: ctx.userId }];
   if (ctx.roles.includes("TECHNICIAN")) or.push({ leadTechnicianId: ctx.userId }, { technicians: { some: { userId: ctx.userId } } });
+  if (ctx.roles.includes("STORES")) or.push({ sparesStatus: { not: "NOT_NEEDED" } }); // stores see jobs that need spares
   return { ...base, OR: or };
 }

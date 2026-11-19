@@ -18,7 +18,7 @@ import { issueCompletionLink, revokeJobLinks } from "./contractor-links";
 import { assertTransition, OPEN_STATUSES, REQUEST_STATUSES } from "../workflow";
 import { actorOf, logEvent } from "./activity";
 import { assertWithinPlan } from "./billing";
-import { managerIds, notify, queueEmail } from "./notifications";
+import { storesIds, managerIds, notify, queueEmail } from "./notifications";
 import { findSite } from "./sites";
 
 const parse = <T extends z.ZodTypeAny>(s: T, v: unknown): z.output<T> => {
@@ -104,13 +104,13 @@ export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>, s
     await logEvent(tx, actorOf(ctx), job.id, "job.created", `Fault reported: ${job.title}`, { priority: d.priority, emergency: d.emergency });
     await notify(tx, {
       orgId: ctx.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, ctx.orgId), exceptUserId: ctx.userId,
-      title: `${d.emergency ? "EMERGENCY: " : ""}New fault ${job.reference} at ${site.name}`, body: job.title, eventKey: `job-created:${job.id}`,
+      title: `${d.emergency ? "EMERGENCY: " : d.priority === "CRITICAL" ? "CRITICAL: " : ""}New fault ${job.reference} at ${site.name}`, body: job.title, eventKey: `job-created:${job.id}`,
     });
     return job;
   });
 }
 
-const publicSchema = createSchema.omit({ siteId: true, emergency: true, category: true, priority: true, isProject: true }).extend({
+const publicSchema = createSchema.omit({ siteId: true, emergency: true, category: true, isProject: true }).extend({
   reporterName: z.string().trim().min(2, "Enter your name.").max(120),
   reporterPhone: z.string().trim().min(6, "Enter a phone number so the maintenance team can reach you.").max(40),
   reporterEmail: z.union([z.literal(""), z.string().trim().toLowerCase().email("Enter a valid email address, or leave it empty.")]).default(""),
@@ -129,7 +129,7 @@ export async function createPublicReport(siteToken: string, input: PublicReportI
   const org = site ? await prisma.organisation.findUnique({ where: { id: site.orgId }, include: { subscription: { include: { plan: true } } } }) : null;
   if (!site || site.archived || !org?.publicReportingEnabled) throw notFound("This report link is not active. Please contact the site's maintenance team.");
   return prisma.$transaction(async (tx) => {
-    const job = await insertJob(tx, site.orgId, { ...d, siteId: site.id, category: "General", priority: "NORMAL", emergency: false, isProject: false }, {
+    const job = await insertJob(tx, site.orgId, { ...d, siteId: site.id, category: "General", emergency: false, isProject: false }, {
       requesterId: null, source: "PUBLIC_LINK", reporterConfirmation: false,
       reporterName: d.reporterName, reporterPhone: d.reporterPhone, reporterEmail: d.reporterEmail || null,
     });
@@ -139,7 +139,7 @@ export async function createPublicReport(siteToken: string, input: PublicReportI
     await logEvent(tx, actor, job.id, "job.created", `Fault reported through the public link: ${job.title}`, { source: "PUBLIC_LINK" });
     await notify(tx, {
       orgId: site.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, site.orgId),
-      title: `New public report ${job.reference} at ${site.name} – please screen`, body: `${job.title}\nFrom ${d.reporterName}, ${d.reporterPhone}`, eventKey: `job-created:${job.id}`,
+      title: `${d.priority === "CRITICAL" ? "CRITICAL: " : ""}New public report ${job.reference} at ${site.name} – please screen`, body: `${job.title}\nFrom ${d.reporterName}, ${d.reporterPhone}`, eventKey: `job-created:${job.id}`,
     });
     if (d.reporterEmail)
       await queueEmail(tx, {
@@ -201,6 +201,12 @@ export type JobView = Awaited<ReturnType<typeof getJob>>;
 
 export interface JobFilters {
   view?: "requests" | "jobs" | "mine" | "all";
+  /** "open": anything not closed or cancelled. "history": closed and cancelled jobs. */
+  tab?: "open" | "history";
+  /** "waiting": open jobs whose spares are still with stores (to issue, to buy or ordered). */
+  spares?: string;
+  /** Only faults the signed-in person reported. */
+  reportedByMe?: boolean;
   status?: JobStatus; siteId?: string; technicianId?: string; contractorId?: string; route?: string; source?: string;
   priority?: string; from?: string; to?: string; overdue?: boolean; q?: string;
 }
@@ -211,6 +217,10 @@ function filterWhere(ctx: Ctx, f: JobFilters): Prisma.JobWhereInput {
   const date = (v?: string) => (v && !Number.isNaN(Date.parse(v)) ? new Date(v) : undefined);
   if (f.view === "requests") and.push({ status: { in: REQUEST_STATUSES } });
   if (f.view === "jobs") and.push({ status: { notIn: REQUEST_STATUSES } });
+  if (f.tab === "open") and.push({ status: { notIn: ["CLOSED", "CANCELLED"] } });
+  if (f.tab === "history") and.push({ status: { in: ["CLOSED", "CANCELLED"] } });
+  if (f.spares === "waiting") and.push({ status: { notIn: ["CLOSED", "CANCELLED"] }, sparesStatus: { in: ["ON_HAND", "TO_BUY", "ORDERED"] } });
+  if (f.reportedByMe) and.push({ requesterId: ctx.userId });
   if (f.view === "mine") and.push({ status: { in: OPEN_STATUSES }, OR: [{ leadTechnicianId: ctx.userId }, { technicians: { some: { userId: ctx.userId } } }] });
   if (f.status && f.status in { NEW: 1, ASSESSING: 1, ASSESSED: 1, QUOTING: 1, AWAITING_APPROVAL: 1, APPROVED: 1, ASSIGNED: 1, IN_PROGRESS: 1, ON_HOLD: 1, AWAITING_VERIFICATION: 1, VERIFIED: 1, CLOSED: 1, CANCELLED: 1 }) and.push({ status: f.status });
   if (uuid(f.contractorId)) and.push({ contractorId: f.contractorId });
@@ -233,33 +243,45 @@ export async function listJobs(ctx: Ctx, f: JobFilters = {}, take = 100) {
       id: true, reference: true, title: true, status: true, priority: true, emergency: true, dueAt: true, reportedAt: true,
       reporterConfirmation: true, leadTechnicianId: true, plannedStart: true, closedAt: true, route: true, source: true,
       contractorId: true, contractor: { select: { name: true } }, site: { select: { name: true } }, location: { select: { name: true } },
+      sparesStatus: true,
+      // First photo from the report, shown as a thumbnail on the job card.
+      attachments: { where: { kind: "REQUEST", mimeType: { startsWith: "image/" } }, select: { id: true }, orderBy: { createdAt: "asc" }, take: 1 },
     },
-    orderBy: [{ emergency: "desc" }, { reportedAt: "desc" }], take,
+    // Open work: most urgent first. History: most recently finished first.
+    orderBy: f.tab === "history" ? [{ closedAt: { sort: "desc", nulls: "last" } }, { reportedAt: "desc" }] : [{ emergency: "desc" }, { priority: "desc" }, { reportedAt: "desc" }], take,
   });
   const ids = [...new Set(jobs.map((j) => j.leadTechnicianId).filter((x): x is string => !!x))];
   const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }) : [];
   const names = Object.fromEntries(users.map((u) => [u.id, u.name]));
-  return jobs.map((j) => ({ ...j, technicianName: j.leadTechnicianId ? (names[j.leadTechnicianId] ?? null) : null }));
+  return jobs.map(({ attachments, ...j }) => ({ ...j, photoId: attachments[0]?.id ?? null, technicianName: j.leadTechnicianId ? (names[j.leadTechnicianId] ?? null) : null }));
 }
 export type JobRow = Awaited<ReturnType<typeof listJobs>>[number];
+
+/** How many jobs of each priority match the filters (ignoring the priority filter itself), for the priority chips. */
+export async function priorityCounts(ctx: Ctx, f: JobFilters = {}) {
+  const rows = await prisma.job.groupBy({ by: ["priority"], where: filterWhere(ctx, { ...f, priority: undefined }), _count: true });
+  const by = Object.fromEntries(rows.map((r) => [r.priority, r._count])) as Record<string, number>;
+  return { CRITICAL: by.CRITICAL ?? 0, HIGH: by.HIGH ?? 0, NORMAL: by.NORMAL ?? 0, LOW: by.LOW ?? 0, all: rows.reduce((a, r) => a + r._count, 0) };
+}
 
 /** Dashboard queue counts. Every number is a COUNT of real job rows visible to the viewer under the same filters. */
 export async function dashboardCounts(ctx: Ctx, f: JobFilters = {}) {
   const where = filterWhere(ctx, { ...f, view: "all", status: undefined });
   const now = new Date();
-  const [byStatus, overdue, unowned, recentlyClosed, toScreen] = await Promise.all([
+  const [byStatus, overdue, unowned, recentlyClosed, toScreen, sparesWaiting] = await Promise.all([
     prisma.job.groupBy({ by: ["status"], where, _count: true }),
     prisma.job.count({ where: { AND: [where, { status: { in: OPEN_STATUSES }, dueAt: { lt: now } }] } }),
     prisma.job.count({ where: { AND: [where, { status: "NEW", ownerId: null }] } }),
     prisma.job.count({ where: { AND: [where, { status: "CLOSED", closedAt: { gte: new Date(now.getTime() - 7 * 86_400_000) } }] } }),
     prisma.job.count({ where: { AND: [where, { status: "NEW", source: "PUBLIC_LINK" }] } }),
+    prisma.job.count({ where: { AND: [where, { status: { notIn: ["CLOSED", "CANCELLED"] }, sparesStatus: { in: ["ON_HAND", "TO_BUY", "ORDERED"] } }] } }),
   ]);
   const n = (s: JobStatus) => byStatus.find((x) => x.status === s)?._count ?? 0;
   return {
     newRequests: n("NEW"), unowned, awaitingAssessment: n("ASSESSING"), assessed: n("ASSESSED"), quoting: n("QUOTING"),
     awaitingApproval: n("AWAITING_APPROVAL"), awaitingAssignment: n("APPROVED"), assigned: n("ASSIGNED"),
     inProgress: n("IN_PROGRESS"), onHold: n("ON_HOLD"), awaitingVerification: n("AWAITING_VERIFICATION"),
-    readyToClose: n("VERIFIED"), overdue, recentlyClosed, toScreen,
+    readyToClose: n("VERIFIED"), overdue, recentlyClosed, toScreen, sparesWaiting,
   };
 }
 
@@ -323,7 +345,10 @@ const assessmentSchema = z.object({
   labourHoursEstimate: z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.number().min(0).max(100000).nullable()).optional(),
   quoteRequired: z.boolean(),
   externalHelpRequired: z.boolean().default(false),
-});
+  // Spares or parts: none, in stock (stores issue them), or to buy (stores order them).
+  sparesNeeded: z.enum(["NOT_NEEDED", "ON_HAND", "TO_BUY"]).default("NOT_NEEDED"),
+  sparesList: z.string().trim().max(2000).default(""),
+}).refine((d) => d.sparesNeeded === "NOT_NEEDED" || d.sparesList.length >= 3, { message: "List the spares or parts that are needed.", path: ["sparesList"] });
 
 /** Record an assessment → ASSESSED. A manager may assess a NEW request directly. */
 export async function submitAssessment(ctx: Ctx, jobId: string, input: z.input<typeof assessmentSchema>, signature?: string | null) {
@@ -339,6 +364,15 @@ export async function submitAssessment(ctx: Ctx, jobId: string, input: z.input<t
     }
     await move(tx, ctx.orgId, job, "ASSESSED");
     const a = await tx.assessment.create({ data: { ...d, orgId: ctx.orgId, jobId: job.id, authorId: ctx.userId } });
+    await tx.job.updateMany({ where: { id: job.id, orgId: ctx.orgId }, data: { sparesStatus: d.sparesNeeded, sparesList: d.sparesNeeded === "NOT_NEEDED" ? "" : d.sparesList, sparesNote: "", sparesEta: null } });
+    if (d.sparesNeeded !== "NOT_NEEDED") {
+      await logEvent(tx, actorOf(ctx), job.id, "spares.requested", `Spares ${d.sparesNeeded === "ON_HAND" ? "needed from stores" : "need to be bought"}: ${d.sparesList}`);
+      await notify(tx, {
+        orgId: ctx.orgId, jobId: job.id, type: "spares.requested", exceptUserId: ctx.userId,
+        userIds: [...(await storesIds(tx, ctx.orgId, job.siteId)), ...(await managerIds(tx, ctx.orgId))],
+        title: `${job.reference}: spares ${d.sparesNeeded === "ON_HAND" ? "to issue from stores" : "to buy"}`, body: d.sparesList, eventKey: `spares:${a.id}`,
+      });
+    }
     await logEvent(tx, actorOf(ctx), job.id, "assessment.submitted", "Assessment completed", { quoteRequired: d.quoteRequired, assessmentId: a.id });
     await logEvent(tx, actorOf(ctx), job.id, "job.assessed", `Assessment completed – ${d.quoteRequired ? "quotation required" : "no quotation required"}`);
     await notify(tx, {
@@ -509,6 +543,70 @@ export async function cancelJob(ctx: Ctx, jobId: string, input: { reason: string
     await notify(tx, {
       orgId: ctx.orgId, jobId: job.id, type: "job.cancelled", userIds: [job.requesterId, ...assignees(job)], exceptUserId: ctx.userId,
       title: `${job.reference} was cancelled`, body: why, eventKey: `cancelled:${job.id}`,
+    });
+  });
+}
+
+// ---------- Spares (stores) ----------
+
+const sparesSchema = z.object({
+  action: z.enum(["ISSUED", "ORDERED", "RECEIVED"]),
+  note: z.string().trim().max(1000).default(""),
+  eta: z.preprocess((v) => (v === "" || v == null ? null : v), z.coerce.date().nullable()).optional(),
+});
+const SPARES_MOVES = { ISSUED: { from: ["ON_HAND", "TO_BUY", "ORDERED"], to: "READY" }, ORDERED: { from: ["TO_BUY"], to: "ORDERED" }, RECEIVED: { from: ["ORDERED"], to: "READY" } } as const;
+const SPARES_SAID = { ISSUED: "Spares issued from stores", ORDERED: "Spares ordered", RECEIVED: "Spares received – ready" } as const;
+
+/**
+ * Stores move the spares on: issue them from stock, order them, then mark them received.
+ * The technician and the managers are told; every step is in the job history.
+ */
+export async function updateSpares(ctx: Ctx, jobId: string, input: z.input<typeof sparesSchema>) {
+  requirePerm(ctx, "spares.manage");
+  const d = parse(sparesSchema, input);
+  return prisma.$transaction(async (tx) => {
+    const job = await loadJob(tx, ctx, jobId);
+    if (job.status === "CLOSED" || job.status === "CANCELLED") throw conflict("This job is finished.");
+    const move = SPARES_MOVES[d.action];
+    if (!(move.from as readonly string[]).includes(job.sparesStatus)) throw conflict("The spares for this job are not at that step.");
+    if (d.action === "ORDERED" && d.note.length < 2) throw invalid("Say who the spares were ordered from (and any order number).");
+    const r = await tx.job.updateMany({ where: { id: job.id, orgId: ctx.orgId, sparesStatus: job.sparesStatus }, data: { sparesStatus: move.to, sparesNote: d.note, sparesEta: d.action === "ORDERED" ? (d.eta ?? null) : null } });
+    if (r.count !== 1) throw conflict("Someone else just updated these spares. Refresh and try again.");
+    const eta = d.action === "ORDERED" && d.eta ? `, expected ${d.eta.toISOString().slice(0, 10)}` : "";
+    await logEvent(tx, actorOf(ctx), job.id, `spares.${d.action.toLowerCase()}`, `${SPARES_SAID[d.action]}${eta}${d.note ? `: ${d.note}` : ""}`);
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "spares.updated", exceptUserId: ctx.userId,
+      userIds: [job.leadTechnicianId, ...assignees(job), ...(await managerIds(tx, ctx.orgId))],
+      title: `${job.reference}: ${SPARES_SAID[d.action].toLowerCase()}`, body: d.note || job.title, eventKey: `spares:${job.id}:${d.action}:${Date.now()}`,
+    });
+  });
+}
+
+const sparesRequestSchema = z.object({
+  sparesNeeded: z.enum(["ON_HAND", "TO_BUY"]),
+  sparesList: z.string().trim().min(3, "List the spares or parts needed.").max(2000),
+});
+
+/**
+ * The technician (or a manager) finds spares are needed after the assessment, e.g. once work has started.
+ * Stores and managers are told, exactly as when spares are asked for at the assessment.
+ */
+export async function requestSpares(ctx: Ctx, jobId: string, input: z.input<typeof sparesRequestSchema>) {
+  requirePerm(ctx, "job.work");
+  const d = parse(sparesRequestSchema, input);
+  return prisma.$transaction(async (tx) => {
+    const job = await loadJob(tx, ctx, jobId);
+    requireOnJob(ctx, job);
+    if (!["ASSESSED", "APPROVED", "ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(job.status)) throw conflict("Spares can be asked for once the job is assessed and before the work is finished.");
+    if (job.sparesStatus !== "NOT_NEEDED" && job.sparesStatus !== "READY") throw conflict("Spares are already being sorted out for this job.");
+    const list = job.sparesStatus === "READY" && job.sparesList ? `${job.sparesList}\n+ ${d.sparesList}` : d.sparesList;
+    const r = await tx.job.updateMany({ where: { id: job.id, orgId: ctx.orgId, sparesStatus: job.sparesStatus }, data: { sparesStatus: d.sparesNeeded, sparesList: list, sparesNote: "", sparesEta: null } });
+    if (r.count !== 1) throw conflict("Someone else just updated these spares. Refresh and try again.");
+    await logEvent(tx, actorOf(ctx), job.id, "spares.requested", `Spares ${d.sparesNeeded === "ON_HAND" ? "needed from stores" : "need to be bought"}: ${d.sparesList}`);
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "spares.requested", exceptUserId: ctx.userId,
+      userIds: [...(await storesIds(tx, ctx.orgId, job.siteId)), ...(await managerIds(tx, ctx.orgId))],
+      title: `${job.reference}: spares ${d.sparesNeeded === "ON_HAND" ? "to issue from stores" : "to buy"}`, body: d.sparesList, eventKey: `spares:req:${job.id}:${Date.now()}`,
     });
   });
 }

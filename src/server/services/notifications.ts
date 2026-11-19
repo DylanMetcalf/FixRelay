@@ -59,6 +59,12 @@ export async function queueEmail(tx: Tx, e: { orgId: string | null; to: string; 
   });
 }
 
+/** Stores / procurement people who cover a site (empty site list = all sites). */
+export async function storesIds(tx: Tx, orgId: string, siteId: string): Promise<string[]> {
+  const ms = await tx.membership.findMany({ where: { orgId, active: true, roles: { has: "STORES" } }, select: { userId: true, siteIds: true } });
+  return ms.filter((m) => !m.siteIds.length || m.siteIds.includes(siteId)).map((m) => m.userId);
+}
+
 export async function managerIds(tx: Tx, orgId: string): Promise<string[]> {
   const ms = await tx.membership.findMany({
     where: { orgId, active: true, roles: { hasSome: ["OWNER", "MANAGER"] } },

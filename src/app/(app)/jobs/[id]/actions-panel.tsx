@@ -6,6 +6,7 @@ import { ActionButton, Form, Submit } from "@/components/form";
 import { Card, Check, Field, Select, TextArea } from "@/components/ui";
 import { can, type Ctx } from "@/server/permissions";
 import type { JobView } from "@/server/services/jobs";
+import { PRIORITY_HELP, PRIORITY_LABEL, PRIORITY_ORDER } from "@/server/workflow";
 
 type Opt = { value: string; label: string };
 const FILES = "image/*,application/pdf";
@@ -32,6 +33,8 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigR
       <TextArea label="Likely cause" name="suspectedCause" rows={2} />
       <TextArea label="Work needed to fix it" name="recommendedWork" rows={2} />
       <TextArea label="Parts / materials" name="materials" rows={2} />
+      <Select label="Spares or parts needed?" name="sparesNeeded" required options={[{ value: "NOT_NEEDED", label: "No spares needed" }, { value: "ON_HAND", label: "Yes – in stock (stores to issue)" }, { value: "TO_BUY", label: "Yes – must be bought or quoted (stores to order)" }]} hint="Stores and the maintenance manager are told straight away." />
+      <TextArea label="Which spares? (if needed)" name="sparesList" rows={2} placeholder="e.g. 2 × 6204 bearings, 1 m drive belt" />
       <Field label="Time needed (hours)" name="labourHoursEstimate" inputMode="decimal" />
       <Select label="Who should fix it?" name="quoteRequired" required options={[{ value: "no", label: "Our in-house team can fix it" }, { value: "yes", label: "Needs an external contractor (get quotes)" }]} />
       <Check name="externalHelpRequired" label="A specialist is needed" />
@@ -257,7 +260,7 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigR
     blocks.push(
       <D key="prio" label="Change urgency">
         <Form action={a.priorityAction} hidden={h}>
-          <Select label="Urgency" name="priority" defaultValue={job.priority} options={["LOW", "NORMAL", "HIGH", "CRITICAL"].map((p) => ({ value: p, label: p[0] + p.slice(1).toLowerCase() }))} />
+          <Select label="Urgency" name="priority" defaultValue={job.priority} options={PRIORITY_ORDER.map((p) => ({ value: p, label: `${PRIORITY_LABEL[p]} – ${PRIORITY_HELP[p].toLowerCase()}` }))} />
           <Submit>Save</Submit>
         </Form>
       </D>,

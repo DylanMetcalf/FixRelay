@@ -24,11 +24,11 @@ npm run build && npm run test:e2e # starts `next start -p 3100` against the test
 npm run typecheck
 ```
 
-## Results (last run: 2026-11-17, after the switch to the internal site model; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
+## Results (last run: 2026-11-19, after adding priority, the Open/History board and spares/stores; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
 
 - `npm run typecheck`: **pass**
-- `npm test` (with `CLAMAV_TEST_PORT=3310`): **72 / 72 passed**, 7 files (incl. `requisition.test.ts`: every signature line enforced when required, root cause, food-area check, numbering that never goes backwards, append-only signatures, contractor and public signatures)
-- `npm run test:e2e`: **35 / 35 passed** (4 journeys, 15 feature tests, 16 requisition tests in `e2e/requisition.spec.ts`), about 3.7 minutes
+- `npm test` (with `CLAMAV_TEST_PORT=3310`): **76 / 76 passed**, 8 files (incl. `spares.test.ts`: priority kept on QR reports and critical alerts, board order/counts/history/photo, spares notify stores of that site and managers, stores see only jobs needing spares, order → receive and issue transitions, permissions, mid-job requests; and `requisition.test.ts`: every signature line enforced when required, root cause, food-area check, numbering that never goes backwards, append-only signatures, contractor and public signatures)
+- `npm run test:e2e`: **37 / 37 passed** (4 journeys, 15 feature tests, 16 requisition tests in `e2e/requisition.spec.ts`, 2 board/spares tests in `e2e/board.spec.ts`), about 3.8 minutes
 - `npm run build`: **pass**
 - `npm audit --omit=dev`: **0 vulnerabilities**
 - Broad audit (30 screens × desktop/phone, WCAG 2.1 AA, sideways scroll, console and HTTP errors, cross-company and signed-out security probes): **no findings** in rounds 4 and 5 – see AUDITS.md

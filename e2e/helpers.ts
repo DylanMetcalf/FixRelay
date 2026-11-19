@@ -118,20 +118,27 @@ export async function acceptInvite(b: Browser, path: string, mobile = false) {
   return q;
 }
 
+/** Tap one of the big urgency cards (Critical / High / Medium / Low). */
+export async function choosePriority(p: Page | Locator, value: "CRITICAL" | "HIGH" | "NORMAL" | "LOW") {
+  await p.locator(`[data-testid="priority-choice"] input[value="${value}"]`).check();
+}
+
 /** Click "Next →" in a guided (step-by-step) form. */
 export async function next(scope: Page | Locator) {
   await scope.getByRole("button", { name: "Next →" }).click();
 }
 
 /**
- * Report a fault through the guided form: What is wrong? → Where is it? → Add a photo → Check and sign.
- * `extra` runs on the first step (e.g. choose urgency); `opts.location` picks the area; `opts.sign` signs on the review step.
+ * Report a fault through the guided form: What is wrong? → How urgent? → Where is it? → Add a photo → Check and sign.
+ * `extra` runs on the first step; `opts.priority` picks the urgency (Medium is preselected); `opts.location` picks the area; `opts.sign` signs on the review step.
  */
-export async function logRequest(p: Page, title: string, extra: (p: Page) => Promise<void> = async () => {}, opts: { sign?: boolean; location?: string } = {}) {
+export async function logRequest(p: Page, title: string, extra: (p: Page) => Promise<void> = async () => {}, opts: { sign?: boolean; location?: string; priority?: "CRITICAL" | "HIGH" | "NORMAL" | "LOW" } = {}) {
   await gotoReady(p, "/requests/new");
   await f(p, "title").fill(title);
   await f(p, "description").fill("Reported during e2e test.");
   await extra(p);
+  await next(p);
+  if (opts.priority) await choosePriority(p, opts.priority);
   await next(p);
   // "Where is it?": the named area, or the site's first area when none is chosen yet.
   const loc = f(p, "locationId");

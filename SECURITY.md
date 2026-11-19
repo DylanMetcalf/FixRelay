@@ -21,26 +21,27 @@
 
 All checks are server-side in the service layer. The UI only hides controls.
 
-| Permission | Owner | Manager | Approver | Technician | Reports faults only | Platform support* |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| org.manage (settings, branding, approval rules, support grants) | ✓ | | | | | |
-| team.manage (invite staff, roles, sites, deactivate) | ✓ | | | | | |
-| team.view | ✓ | ✓ | | | | ✓ |
-| sites.manage (sites, locations, equipment, QR codes, invite fault reporters) | ✓ | ✓ | | | | |
-| sites.view | ✓ | ✓ | ✓ | ✓ | | ✓ |
-| contractors.manage / contractors.view | ✓ / ✓ | ✓ / ✓ | – / ✓ | | | – / ✓ |
-| job.create (report a fault) | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| job.viewAll (within the member's sites) | ✓ | ✓ | ✓ | | | ✓ |
-| job.manage (triage, route, quotes, assign, hold, cancel, close, reopen) | ✓ | ✓ | | | | |
-| job.assess / job.work | ✓ | ✓ | | ✓ (assigned jobs only) | | |
-| quote.manage / quote.view | ✓ / ✓ | ✓ / ✓ | – / ✓ | | | – / ✓ |
-| spend.approve (limited by amount) | unlimited | manager limit | approver limit | | | |
-| reports.view | ✓ | ✓ | ✓ | | | ✓ |
+| Permission | Owner | Manager | Approver | Technician | Stores | Reports faults only | Platform support* |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| org.manage (settings, branding, approval rules, support grants) | ✓ | | | | | | |
+| team.manage (invite staff, roles, sites, deactivate) | ✓ | | | | | | |
+| team.view | ✓ | ✓ | | | | | ✓ |
+| sites.manage (sites, locations, equipment, QR codes, invite fault reporters) | ✓ | ✓ | | | | | |
+| sites.view | ✓ | ✓ | ✓ | ✓ | | | ✓ |
+| contractors.manage / contractors.view | ✓ / ✓ | ✓ / ✓ | – / ✓ | | | | – / ✓ |
+| job.create (report a fault) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| job.viewAll (within the member's sites) | ✓ | ✓ | ✓ | | | | ✓ |
+| job.manage (triage, route, quotes, assign, hold, cancel, close, reopen) | ✓ | ✓ | | | | | |
+| job.assess / job.work | ✓ | ✓ | | ✓ (assigned jobs only) | | | |
+| quote.manage / quote.view | ✓ / ✓ | ✓ / ✓ | – / ✓ | | | | – / ✓ |
+| spend.approve (limited by amount) | unlimited | manager limit | approver limit | | | | |
+| spares.manage (issue, order and receive spares) | ✓ | ✓ | | | ✓ | | |
+| reports.view | ✓ | ✓ | ✓ | | | | ✓ |
 
 \*Platform support is read-only and needs a grant from the tenant (see below). "Reports faults only" members are free (not counted as seats).
 
 **Row-level job visibility (`jobScope`)**, which every job query uses:
-- Owner / Manager / Approver: all jobs in the tenant, limited to `Membership.siteIds` when set. Technician: jobs they lead, are added to, or reported. Fault reporters: only the jobs they reported.
+- Owner / Manager / Approver: all jobs in the tenant, limited to `Membership.siteIds` when set. Technician: jobs they lead, are added to, or reported. Stores: jobs that need spares (any spares status other than "none"), within their sites, plus jobs they reported. Fault reporters: only the jobs they reported.
 - Approvals are offered only to members whose limit covers the amount and who cover that site (`approverIdsFor`).
 - Fault reporters see the fault, the progress status and the work evidence (after photos, test documents, signature), not assessments, quotes, prices, internal notes or internal photos. Technicians never receive pricing.
 - Cross-tenant and out-of-scope IDs return **404 Not Found** (never 403), so they don't reveal that records exist.
