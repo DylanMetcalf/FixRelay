@@ -25,10 +25,17 @@ const config: NextConfig = {
   // type check. Those checks still run in development and CI (`npm run typecheck`, `npm run lint`, the test suites).
   ...(process.env.SKIP_BUILD_CHECKS === "1" ? { eslint: { ignoreDuringBuilds: true }, typescript: { ignoreBuildErrors: true } } : {}),
   experimental: { serverActions: { bodySizeLimit: "12mb" } },
+  // The PDF engine loads fonts and its layout engine at runtime; keep it out of the server bundle.
+  serverExternalPackages: ["@react-pdf/renderer"],
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },
       { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }] },
+      // Job documents may be shown inside Resultra's own job card viewer (same origin only).
+      { source: "/api/jobs/:id/documents/:kind", headers: [
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Content-Security-Policy", value: "default-src 'none'; frame-ancestors 'self'; object-src 'none'" },
+      ] },
     ];
   },
 };

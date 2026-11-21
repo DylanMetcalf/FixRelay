@@ -1,4 +1,5 @@
 import { AppError } from "@/lib/errors";
+import { logError } from "@/server/errors";
 
 export type ActionState = { error?: string; ok?: string; data?: Record<string, string>; redirectTo?: string; at?: number } | null;
 export type Outcome = { ok?: string; redirect?: string; data?: Record<string, string> } | void;
@@ -13,7 +14,7 @@ export async function run(fn: () => Promise<Outcome>): Promise<ActionState> {
     out = await fn();
   } catch (e) {
     if (e instanceof AppError) return { error: e.message };
-    console.error("[action error]", e);
+    await logError("action", e);
     return { error: "Something went wrong. Please try again." };
   }
   // Navigation happens in the browser (components/form.tsx). Server-side redirect()/revalidatePath() inside

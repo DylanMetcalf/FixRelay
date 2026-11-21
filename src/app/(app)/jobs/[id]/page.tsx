@@ -13,6 +13,7 @@ import { listAssignable } from "@/server/services/orgs";
 import { nextAction, ROUTE_LABEL } from "@/server/workflow";
 import { ActionsPanel } from "./actions-panel";
 import { SparesCard } from "./spares-card";
+import { DocumentsCard } from "./documents-card";
 import { QuotesCard } from "./quotes-card";
 import { RequisitionCard } from "./requisition-card";
 
@@ -41,6 +42,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
   return (
     <>
       <PageHeader title={job.title} subtitle={<><strong>{job.reference}</strong> · {job.site.name}{job.location && ` · ${job.location.name}`}</>}>
+        <Link href={`/jobs/${job.id}/card`} className="btn btn-secondary">Job card</Link>
         <Link href={`/jobs/${job.id}/report`} className="btn btn-secondary">Requisition form</Link>
       </PageHeader>
 
@@ -162,6 +164,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         </div>
 
         <div className="space-y-5 self-start">
+          <DocumentsCard job={job} ctx={ctx} />
           <RequisitionCard job={job} />
         <Card title="Activity history">
           <ol className="space-y-3" data-testid="timeline">

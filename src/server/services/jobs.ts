@@ -175,6 +175,8 @@ export async function getJob(ctx: Ctx, id: string) {
       attachments: { orderBy: { createdAt: "asc" } },
       signatures: { orderBy: { signedAt: "asc" } },
       events: { orderBy: { createdAt: "asc" } },
+      department: { select: { id: true, name: true } },
+      handovers: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!job) throw notFound("Job not found.");
@@ -189,10 +191,12 @@ export async function getJob(ctx: Ctx, id: string) {
     job.quotes = job.quotes.filter((q) => q.status !== "DRAFT" && q.status !== "WITHDRAWN");
     job.attachments = job.attachments.filter((a) => (CUSTOMER_VISIBLE_KINDS as readonly string[]).includes(a.kind));
     job.events = job.events.filter((e) => !e.type.startsWith("work.") && !e.type.startsWith("assessment."));
+    job.handovers = [];
   }
   const ids = new Set<string>([job.requesterId ?? "", ...job.events.map((e) => e.actorUserId ?? "")]);
   for (const x of [job.ownerId, job.leadTechnicianId, ...job.technicians.map((t) => t.userId), ...job.updates.map((u) => u.authorId),
-    ...job.assessments.map((a) => a.authorId), ...job.completions.map((c) => c.submittedById)]) if (x) ids.add(x);
+    ...job.assessments.map((a) => a.authorId), ...job.completions.map((c) => c.submittedById),
+    ...job.handovers.flatMap((h) => [h.byUserId, h.fromUserId, h.toUserId]), ...job.attachments.map((a) => a.uploadedById)]) if (x) ids.add(x);
   ids.delete("");
   const users = await prisma.user.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true } });
   return { ...job, people: Object.fromEntries(users.map((u) => [u.id, u.name])) as Record<string, string>, assigned: isAssigned(job, ctx.userId) };

@@ -5,6 +5,7 @@ const TEST_DB = process.env.TEST_DATABASE_URL ?? "postgresql://fixrelay:fixrelay
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  esbuild: { jsx: "automatic" }, // same JSX runtime as Next.js (used by the PDF documents)
   test: {
     include: ["tests/**/*.test.ts"],
     fileParallelism: false,

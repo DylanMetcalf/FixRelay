@@ -1,4 +1,4 @@
-// FixRelay schema. Every tenant-owned table carries orgId. See DATABASE.md.
+// Resultra schema (formerly FixRelay). Every tenant-owned table carries orgId. See DATABASE.md.
 generator client {
   provider = "prisma-client-js"
 }
@@ -134,6 +134,10 @@ model User {
   passwordHash    String
   isPlatformAdmin Boolean   @default(false)
   emailVerifiedAt DateTime?
+  phone           String    @default("")
+  jobTitle        String    @default("")
+  photoKey        String? // profile photo in file storage (optional)
+  demoPersona     Boolean   @default(false) // a sample person inside a demo company; cannot sign in, can be "viewed as"
   createdAt       DateTime  @default(now())
 
   sessions    Session[]
@@ -146,6 +150,7 @@ model Session {
   tokenHash   String   @unique
   userId      String   @db.Uuid
   activeOrgId String?  @db.Uuid
+  actAsUserId String?  @db.Uuid // demo companies only: the demonstrator is viewing as this sample person
   expiresAt   DateTime
   createdAt   DateTime @default(now())
 
@@ -155,29 +160,30 @@ model Session {
 }
 
 model Organisation {
-  id                         String   @id @default(uuid()) @db.Uuid
+  id                         String    @id @default(uuid()) @db.Uuid
   name                       String
-  slug                       String   @unique
-  isDemo                     Boolean  @default(false)
-  brandColour                String   @default("#1e5aa8")
-  logoAttachmentId           String?  @db.Uuid
-  address                    String   @default("")
-  phone                      String   @default("")
-  contactEmail               String   @default("")
-  currency                   String   @default("ZAR")
+  slug                       String    @unique
+  isDemo                     Boolean   @default(false)
+  brandColour                String    @default("#1e5aa8")
+  logoAttachmentId           String?   @db.Uuid
+  address                    String    @default("")
+  phone                      String    @default("")
+  contactEmail               String    @default("")
+  currency                   String    @default("ZAR")
   // Approvals (amounts in cents, incl. VAT). See WORKFLOWS.md "Approvals".
-  managerApprovalLimitCents  Int      @default(500000) // maintenance managers approve up to R5 000
-  approverApprovalLimitCents Int?     @default(5000000) // approvers up to R50 000; null = no limit; above → owner
-  poRequired                 Boolean  @default(false)
-  multiQuoteThresholdCents   Int      @default(1000000) // above R10 000 …
-  minQuotes                  Int      @default(3) // … this many quotes are needed (or a recorded reason)
-  reporterConfirmation       Boolean  @default(true) // the person who reported a fault confirms it is fixed
-  publicReportingEnabled     Boolean  @default(false) // anyone with a site link / QR code can report without an account
-  jobSeq                     Int      @default(0)
-  referencePrefix            String   @default("REQ-") // requisition number prefix ("" = plain numbers like 12600)
-  requireSignatures          Boolean  @default(false) // drawn signatures required on the requisition (reported, received, completed, originator, manager, approval)
-  quoteSeq                   Int      @default(0)
-  createdAt                  DateTime @default(now())
+  managerApprovalLimitCents  Int       @default(500000) // maintenance managers approve up to R5 000
+  approverApprovalLimitCents Int?      @default(5000000) // approvers up to R50 000; null = no limit; above → owner
+  poRequired                 Boolean   @default(false)
+  multiQuoteThresholdCents   Int       @default(1000000) // above R10 000 …
+  minQuotes                  Int       @default(3) // … this many quotes are needed (or a recorded reason)
+  reporterConfirmation       Boolean   @default(true) // the person who reported a fault confirms it is fixed
+  publicReportingEnabled     Boolean   @default(false) // anyone with a site link / QR code can report without an account
+  jobSeq                     Int       @default(0)
+  referencePrefix            String    @default("REQ-") // requisition number prefix ("" = plain numbers like 12600)
+  requireSignatures          Boolean   @default(false) // drawn signatures required on the requisition (reported, received, completed, originator, manager, approval)
+  quoteSeq                   Int       @default(0)
+  archivedAt                 DateTime? // demo companies replaced by "reset demo" (audit rows are append-only, so nothing is deleted)
+  createdAt                  DateTime  @default(now())
 
   memberships  Membership[]
   subscription Subscription?
@@ -185,13 +191,16 @@ model Organisation {
 }
 
 model Membership {
-  id        String   @id @default(uuid()) @db.Uuid
-  orgId     String   @db.Uuid
-  userId    String   @db.Uuid
-  roles     Role[]
-  siteIds   String[] @default([]) // empty = all sites; otherwise the member only sees/approves these sites
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id                    String           @id @default(uuid()) @db.Uuid
+  orgId                 String           @db.Uuid
+  userId                String           @db.Uuid
+  roles                 Role[]
+  siteIds               String[]         @default([]) // empty = all sites; otherwise the member only sees/approves these sites
+  active                Boolean          @default(true)
+  status                MembershipStatus @default(ACTIVE) // PENDING: registered with a site code, waiting for an administrator
+  joinCodeId            String?          @db.Uuid
+  requestedDepartmentId String?          @db.Uuid
+  createdAt             DateTime         @default(now())
 
   org  Organisation @relation(fields: [orgId], references: [id])
   user User         @relation(fields: [userId], references: [id])
@@ -234,6 +243,7 @@ model Site {
   name        String
   address     String   @default("")
   publicToken String   @unique // identifies the site in its public report link and QR codes (not a secret)
+  publicCode  String?  @unique // short, random code for /r/{code} links (no database IDs in public URLs)
   archived    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
@@ -246,12 +256,13 @@ model Site {
 }
 
 model Location {
-  id       String  @id @default(uuid()) @db.Uuid
-  orgId    String  @db.Uuid
-  siteId   String  @db.Uuid
-  name     String
+  id         String  @id @default(uuid()) @db.Uuid
+  orgId      String  @db.Uuid
+  siteId     String  @db.Uuid
+  name       String
   /// Food-handling area: completion asks "tools out = tools in, area clean and tidy".
-  foodArea Boolean @default(false)
+  foodArea   Boolean @default(false)
+  publicCode String? @unique // short code for this area's QR sign
 
   site   Site    @relation(fields: [orgId, siteId], references: [orgId, id])
   assets Asset[]
@@ -273,6 +284,7 @@ model Asset {
   model        String   @default("")
   serialNumber String   @default("")
   notes        String   @default("")
+  publicCode   String?  @unique // short code for this machine's QR label
   createdAt    DateTime @default(now())
 
   site     Site      @relation(fields: [orgId, siteId], references: [orgId, id])
@@ -285,56 +297,62 @@ model Asset {
 
 // A maintenance request and the job it becomes are ONE record moving through JobStatus.
 model Job {
-  id                   String       @id @default(uuid()) @db.Uuid
-  orgId                String       @db.Uuid
+  id                   String          @id @default(uuid()) @db.Uuid
+  orgId                String          @db.Uuid
   reference            String
   title                String
   description          String
-  category             String       @default("General")
-  priority             Priority     @default(NORMAL)
-  emergency            Boolean      @default(false)
-  isProject            Boolean      @default(false) // planned project work rather than a breakdown ("Projects" box on the requisition)
-  sparesStatus         SparesStatus @default(NOT_NEEDED) // set at assessment, moved on by stores
-  sparesList           String       @default("") // which spares or parts are needed
-  sparesNote           String       @default("") // stores' latest note (supplier, where to collect)
+  category             String          @default("General")
+  priority             Priority        @default(NORMAL)
+  emergency            Boolean         @default(false)
+  isProject            Boolean         @default(false) // planned project work rather than a breakdown ("Projects" box on the requisition)
+  sparesStatus         SparesStatus    @default(NOT_NEEDED) // set at assessment, moved on by stores
+  sparesList           String          @default("") // which spares or parts are needed
+  sparesNote           String          @default("") // stores' latest note (supplier, where to collect)
   sparesEta            DateTime? // expected arrival when ordered
-  status               JobStatus    @default(NEW)
+  status               JobStatus       @default(NEW)
   heldFromStatus       JobStatus?
   holdReason           String?
   cancelReason         String?
   directAuthReason     String?
-  siteId               String       @db.Uuid
-  locationId           String?      @db.Uuid
-  assetId              String?      @db.Uuid
-  requesterId          String?      @db.Uuid // null when reported through a public link
-  source               JobSource    @default(APP)
+  siteId               String          @db.Uuid
+  locationId           String?         @db.Uuid
+  assetId              String?         @db.Uuid
+  requesterId          String?         @db.Uuid // null when reported through a public link
+  source               JobSource       @default(APP)
   reporterName         String? // public-link reports
   reporterPhone        String?
   reporterEmail        String?
-  route                JobRoute     @default(UNDECIDED)
-  contractorId         String?      @db.Uuid // appointed contractor (route CONTRACTOR)
-  recommendedQuoteId   String?      @db.Uuid // quote put forward for approval above the manager's limit
+  route                JobRoute        @default(UNDECIDED)
+  contractorId         String?         @db.Uuid // appointed contractor (route CONTRACTOR)
+  recommendedQuoteId   String?         @db.Uuid // quote put forward for approval above the manager's limit
   quoteDeadline        DateTime?
   quoteExceptionReason String? // why fewer quotes than required were accepted
   poNumber             String?
   approvedCostCents    Int?
-  ownerId              String?      @db.Uuid // responsible manager / dispatcher
-  leadTechnicianId     String?      @db.Uuid
+  ownerId              String?         @db.Uuid // responsible manager / dispatcher
+  leadTechnicianId     String?         @db.Uuid
   instructions         String?
   plannedStart         DateTime?
   plannedEnd           DateTime?
   dueAt                DateTime?
-  reporterConfirmation Boolean      @default(true)
-  reportedAt           DateTime     @default(now())
+  reporterConfirmation Boolean         @default(true)
+  reportedAt           DateTime        @default(now())
   respondedAt          DateTime? // first time the job left NEW (used for response-time reporting)
   assignedAt           DateTime?
   startedAt            DateTime?
   completedAt          DateTime?
   closedAt             DateTime?
-  reopenCount          Int          @default(0)
+  reopenCount          Int             @default(0)
   overdueNotifiedAt    DateTime?
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  departmentId         String?         @db.Uuid // department currently responsible (see JobHandover)
+  duplicateStatus      DuplicateStatus @default(NONE)
+  possibleDuplicateIds String[]        @default([]) // open/recent jobs this report looks like (for manager review)
+  duplicateOfId        String?         @db.Uuid // linked by a manager as a duplicate of this job
+  repeatOfId           String?         @db.Uuid // the fault came back after this (closed) job
+  submissionKey        String? // one per form; stops double submissions creating two jobs
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
   contractor      Contractor?      @relation(fields: [orgId, contractorId], references: [orgId, id])
   site            Site             @relation(fields: [orgId, siteId], references: [orgId, id])
@@ -349,9 +367,14 @@ model Job {
   contractorLinks ContractorLink[]
   signatures      JobSignature[]
   events          ActivityEvent[]
+  department      Department?      @relation(fields: [orgId, departmentId], references: [orgId, id])
+  handovers       JobHandover[]
 
   @@unique([orgId, id])
   @@unique([orgId, reference])
+  @@unique([orgId, submissionKey])
+  @@index([orgId, departmentId])
+  @@index([orgId, duplicateStatus])
   @@index([orgId, status])
   @@index([orgId, siteId])
   @@index([orgId, leadTechnicianId])
@@ -747,4 +770,91 @@ enum SparesStatus {
   TO_BUY
   ORDERED
   READY
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PENDING
+  REJECTED
+}
+
+enum DuplicateStatus {
+  NONE
+  FLAGGED // looks like another job – a manager should review
+  LINKED // a manager linked it to the original
+  DISMISSED // a manager said it is not a duplicate
+}
+
+/// Organisational grouping (Maintenance, Operations, Finance …). Separate from roles (authority) and job status.
+model Department {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @db.Uuid
+  name      String
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  members DepartmentMember[]
+  jobs    Job[]
+
+  @@unique([orgId, id])
+  @@unique([orgId, name])
+}
+
+model DepartmentMember {
+  orgId        String   @db.Uuid
+  departmentId String   @db.Uuid
+  userId       String   @db.Uuid
+  isManager    Boolean  @default(false) // department manager: sees and hands over the department's jobs
+  createdAt    DateTime @default(now())
+
+  department Department @relation(fields: [orgId, departmentId], references: [orgId, id])
+
+  @@id([departmentId, userId])
+  @@index([orgId, userId])
+}
+
+/// A job passed from one department or person to another, with the reason / next action. Append-only (trigger).
+model JobHandover {
+  id               String   @id @default(uuid()) @db.Uuid
+  orgId            String   @db.Uuid
+  jobId            String   @db.Uuid
+  fromDepartmentId String?  @db.Uuid
+  toDepartmentId   String?  @db.Uuid
+  fromUserId       String?  @db.Uuid
+  toUserId         String?  @db.Uuid
+  byUserId         String   @db.Uuid
+  reason           String
+  createdAt        DateTime @default(now())
+
+  job Job @relation(fields: [orgId, jobId], references: [orgId, id])
+
+  @@index([orgId, jobId])
+}
+
+/// Site registration code employees use to ask for access. Never grants access by itself: an administrator approves.
+model JoinCode {
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @db.Uuid
+  siteId      String?   @db.Uuid
+  code        String    @unique
+  createdById String    @db.Uuid
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  uses        Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([orgId])
+}
+
+/// Unexpected server errors, for the platform console. No request bodies or personal data beyond IDs.
+model ErrorLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  source    String
+  message   String
+  path      String   @default("")
+  orgId     String?  @db.Uuid
+  userId    String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

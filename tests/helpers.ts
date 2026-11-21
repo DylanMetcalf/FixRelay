@@ -96,3 +96,27 @@ export async function linkFromEmail(to: string) {
   const mail = await prisma.outboxEmail.findFirstOrThrow({ where: { toEmail: to }, orderBy: { createdAt: "desc" } });
   return /\/c\/([A-Za-z0-9_-]{43})/.exec(mail.body)![1]!;
 }
+
+/** A real landscape photo-like JPEG (decodes through the upload pipeline), for document tests. */
+export async function photo(width = 1200, height = 800, colour = "#3b82f6") {
+  const sharp = (await import("sharp")).default;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${colour}"/><circle cx="${width / 2}" cy="${height / 2}" r="${Math.min(width, height) / 4}" fill="#f59e0b"/></svg>`;
+  return sharp(Buffer.from(svg)).jpeg({ quality: 80 }).toBuffer();
+}
+
+/** Text and layout facts of a PDF, read with Mozilla's pdf.js. */
+export async function readPdf(bytes: Buffer) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true }).promise;
+  const pages: { text: string; width: number; height: number; images: number }[] = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const vp = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    const ops = await page.getOperatorList();
+    const images = ops.fnArray.filter((f: number) => f === pdfjs.OPS.paintImageXObject || f === pdfjs.OPS.paintInlineImageXObject).length;
+    pages.push({ text: content.items.map((it) => ("str" in it ? it.str : "")).join(" ").replace(/\s+/g, " "), width: vp.width, height: vp.height, images });
+  }
+  const info = (await doc.getMetadata()).info as Record<string, unknown>;
+  return { pages, text: pages.map((p) => p.text).join(" \n "), title: String(info.Title ?? "") };
+}
