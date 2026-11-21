@@ -46,9 +46,11 @@ export async function createJobAction(_: ActionState, fd: FormData) {
 export async function publicReportAction(_: ActionState, fd: FormData) {
   return run(async () => {
     const ip = await clientIp();
-    const token = str(fd, "siteToken");
+    const token = str(fd, "code") || str(fd, "siteToken");
+    // Spam trap: a field people never see. Bots fill it in; pretend success and store nothing.
+    if (str(fd, "website")) return { ok: "Thank you.", data: { sent: "1", reference: "—" } };
     await rateLimit(`public-report:ip:${ip}`, 10, 60 * 60_000);
-    await rateLimit(`public-report:site:${token}`, 200, 24 * 60 * 60_000);
+    await rateLimit(`public-report:site:${token.slice(0, 64)}`, 200, 24 * 60 * 60_000);
     // The simple QR form asks "what kind of problem?" (optional tap) and a description; the title is made from them.
     const kind = str(fd, "kind").trim().slice(0, 40);
     const description = str(fd, "description").trim();
@@ -56,6 +58,7 @@ export async function publicReportAction(_: ActionState, fd: FormData) {
     const r = await jobs.createPublicReport(token, {
       title, description, locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), priority: (str(fd, "priority") || "NORMAL") as "NORMAL",
       reporterName: str(fd, "reporterName"), reporterPhone: str(fd, "reporterPhone"), reporterEmail: str(fd, "reporterEmail"),
+      submissionKey: str(fd, "submissionKey") || undefined,
     }, sig(fd), ip, await filesOf(fd, "photos"));
     return { ok: `Thank you. Your report ${r.reference} has been sent to the maintenance team.`, data: { sent: "1", reference: r.reference } };
   });

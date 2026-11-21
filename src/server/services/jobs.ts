@@ -19,7 +19,7 @@ import { assertTransition, OPEN_STATUSES, REQUEST_STATUSES } from "../workflow";
 import { actorOf, logEvent } from "./activity";
 import { assertWithinPlan } from "./billing";
 import { storesIds, managerIds, notify, queueEmail } from "./notifications";
-import { findSite } from "./sites";
+import { findSite, resolvePublicCode } from "./sites";
 import { findLikelyDuplicates } from "../duplicates";
 
 const parse = <T extends z.ZodTypeAny>(s: T, v: unknown): z.output<T> => {
@@ -159,9 +159,10 @@ export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>, s
   });
 }
 
-const publicSchema = createSchema.omit({ siteId: true, emergency: true, category: true, isProject: true }).extend({
+const publicSchema = createSchema.omit({ siteId: true, emergency: true, category: true, isProject: true, departmentId: true, repeatOfId: true }).extend({
   reporterName: z.string().trim().min(2, "Enter your name.").max(120),
-  reporterPhone: z.string().trim().min(6, "Enter a phone number so the maintenance team can reach you.").max(40),
+  // Contact details are optional: give one if the team may need to ask about the problem.
+  reporterPhone: z.union([z.literal(""), z.string().trim().min(6, "Enter a full phone number, or leave it empty.").max(40)]).default(""),
   reporterEmail: z.union([z.literal(""), z.string().trim().toLowerCase().email("Enter a valid email address, or leave it empty.")]).default(""),
 });
 export type PublicReportInput = z.input<typeof publicSchema>;
@@ -171,31 +172,39 @@ export type PublicReportInput = z.input<typeof publicSchema>;
  * has switched public reporting on. The report is marked as unverified for the maintenance team to screen;
  * the reporter cannot see anything else in the system.
  */
-export async function createPublicReport(siteToken: string, input: PublicReportInput, signature?: string | null, ip?: string | null, photos: { filename: string; bytes: Buffer }[] = []) {
+export async function createPublicReport(code: string, input: PublicReportInput, signature?: string | null, ip?: string | null, photos: { filename: string; bytes: Buffer }[] = []) {
   if (photos.length > 3) throw invalid("Add up to 3 photos.");
   const d = parse(publicSchema, input);
-  const site = await prisma.site.findUnique({ where: { publicToken: siteToken } });
+  const site = (await resolvePublicCode(code))?.site ?? null;
   const org = site ? await prisma.organisation.findUnique({ where: { id: site.orgId }, include: { subscription: { include: { plan: true } } } }) : null;
-  if (!site || site.archived || !org?.publicReportingEnabled) throw notFound("This report link is not active. Please contact the site's maintenance team.");
+  if (!site || site.archived || !org?.publicReportingEnabled || org.archivedAt) throw notFound("This report link is not active. Please contact the site's maintenance team.");
+  const again = await sameSubmission(site.orgId, d.submissionKey);
+  if (again) return { reference: again.reference };
   return prisma.$transaction(async (tx) => {
     const job = await insertJob(tx, site.orgId, { ...d, siteId: site.id, category: "General", emergency: false, isProject: false }, {
       requesterId: null, source: "PUBLIC_LINK", reporterConfirmation: false,
-      reporterName: d.reporterName, reporterPhone: d.reporterPhone, reporterEmail: d.reporterEmail || null,
+      reporterName: d.reporterName, reporterPhone: d.reporterPhone || null, reporterEmail: d.reporterEmail || null,
     });
     const actor = { orgId: site.orgId, userId: null, label: `${d.reporterName} (public report link)` };
     await addSignature(tx, { orgId: site.orgId, jobId: job.id, step: "REPORTED", name: d.reporterName, userId: null, dataUrl: signature, ip, required: org.requireSignatures });
     if (photos.length) await addContractorFiles(tx, { orgId: site.orgId, jobId: job.id, kind: "REQUEST", files: photos, actor, imagesOnly: true });
     await logEvent(tx, actor, job.id, "job.created", `Fault reported through the public link: ${job.title}`, { source: "PUBLIC_LINK" });
+    const extra = await afterReport(tx, site.orgId, job, actor);
     await notify(tx, {
       orgId: site.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, site.orgId),
-      title: `${d.priority === "CRITICAL" ? "CRITICAL: " : ""}New public report ${job.reference} at ${site.name} – please screen`, body: `${job.title}\nFrom ${d.reporterName}, ${d.reporterPhone}`, eventKey: `job-created:${job.id}`,
+      title: `${d.priority === "CRITICAL" ? "CRITICAL: " : ""}New public report ${job.reference} at ${site.name} – please screen`,
+      body: `${job.title}\nFrom ${d.reporterName}${d.reporterPhone ? `, ${d.reporterPhone}` : ""}${d.reporterEmail ? `, ${d.reporterEmail}` : ""}${extra}`, eventKey: `job-created:${job.id}`,
     });
     if (d.reporterEmail)
       await queueEmail(tx, {
         orgId: site.orgId, to: d.reporterEmail, subject: `We received your fault report ${job.reference}`, dedupeKey: `public-ack:${job.id}`,
-        body: `Hi ${d.reporterName},\n\nThank you. Your report "${job.title}" at ${site.name} was received as ${job.reference}. The maintenance team will look at it and may contact you on ${d.reporterPhone}.`,
+        body: `Hi ${d.reporterName},\n\nThank you. Your report "${job.title}" at ${site.name} was received as ${job.reference}. The maintenance team will look at it and may contact you if they have questions.`,
       });
     return { reference: job.reference };
+  }).catch(async (e) => {
+    const winner = isUniqueViolation(e) ? await sameSubmission(site.orgId, d.submissionKey) : null;
+    if (winner) return { reference: winner.reference };
+    throw e;
   });
 }
 

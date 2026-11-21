@@ -68,10 +68,11 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
           <Card title="Report link and QR codes">
             <p className="muted mb-2">Stick QR codes on machines and doors. Scanning one opens the fault form with the place already filled in.</p>
             <p className="text-sm">Reporting without an account is <strong>{org.publicReportingEnabled ? "on" : "off"}</strong>{can(ctx, "org.manage") && <> (<Link className="link" href="/settings">change</Link>)</>}. {org.publicReportingEnabled ? "Anyone with the link can report a fault; reports are marked for screening." : "People must sign in before reporting."}</p>
-            <input readOnly value={reportUrl(s.publicToken)} aria-label="Site report link" className="input mt-2 font-mono text-xs" data-testid="site-report-link" />
+            <input readOnly value={reportUrl(s.publicCode ?? s.publicToken)} aria-label="Site report link" className="input mt-2 font-mono text-xs" data-testid="site-report-link" />
             {manage && (
               <div className="mt-2 flex flex-wrap gap-2">
-                <Link href={`/sites/${s.id}/qr`} className="btn btn-secondary btn-sm">Print QR labels</Link>
+                <a href={`/api/sites/${s.id}/signs`} className="btn btn-primary btn-sm" download data-testid="qr-signs">Download QR signs (PDF)</a>
+                <Link href={`/sites/${s.id}/qr`} className="btn btn-secondary btn-sm">Print QR stickers</Link>
                 <ActionButton action={a.rotateSiteLinkAction} hidden={{ id: s.id }} className="btn btn-secondary btn-sm" confirm="Replace the link? All printed QR codes for this site will stop working.">Replace link</ActionButton>
               </div>
             )}

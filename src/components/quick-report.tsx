@@ -8,6 +8,9 @@ import { Step, Stepper } from "./stepper";
 
 type Loc = { id: string; name: string };
 
+/** A random key per report (crypto.randomUUID needs HTTPS, so fall back to getRandomValues). */
+const newKey = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+
 const KINDS = ["Not working", "Broken", "Leaking", "Blocked or dirty", "Unsafe"];
 
 /**
@@ -20,6 +23,8 @@ export function QuickReport({ token, siteName, locations, initialLocationId, ass
   const [done, setDone] = useState<string | null>(null);
   const [changing, setChanging] = useState(!initialLocationId);
   const [photos, setPhotos] = useState(0);
+  // One key per report: pressing Send twice (or a slow connection retrying) never creates two reports.
+  const [key, setKey] = useState(newKey);
   const here = locations.find((l) => l.id === initialLocationId);
 
   if (done !== null) {
@@ -33,13 +38,13 @@ export function QuickReport({ token, siteName, locations, initialLocationId, ass
           <p className="text-4xl font-extrabold tabular-nums" data-testid="report-number">{done}</p>
         </div>
         <p className="text-gray-700">You can close this page now.</p>
-        <button type="button" className="btn btn-secondary w-full" onClick={() => { setDone(null); setPhotos(0); setChanging(!initialLocationId); }}>Report another problem</button>
+        <button type="button" className="btn btn-secondary w-full" onClick={() => { setDone(null); setPhotos(0); setChanging(!initialLocationId); setKey(newKey()); }}>Report another problem</button>
       </div>
     );
   }
 
   return (
-    <Form action={publicReportAction} hidden={{ siteToken: token, assetId: asset?.id ?? "" }} onOk={(d) => setDone(d?.reference ?? "")} className="easy space-y-4">
+    <Form action={publicReportAction} hidden={{ code: token, assetId: asset?.id ?? "", submissionKey: key }} onOk={(d) => setDone(d?.reference ?? "")} className="easy space-y-4">
       <Stepper>
         <Step title="What’s wrong?">
           <fieldset>
@@ -93,16 +98,22 @@ export function QuickReport({ token, siteName, locations, initialLocationId, ass
           <p className="text-sm text-gray-600">Up to 3 photos. Location data is removed from photos.</p>
         </Step>
 
-        <Step title="Your name and number">
+        <Step title="Your name">
           <div>
             <label className="label" htmlFor="qr-name">Your name <span className="text-red-700">*</span></label>
             <input id="qr-name" name="reporterName" required minLength={2} maxLength={120} autoComplete="name" className="input" />
           </div>
           <div>
-            <label className="label" htmlFor="qr-phone">Phone number <span className="text-red-700">*</span></label>
-            <input id="qr-phone" name="reporterPhone" required minLength={6} maxLength={40} type="tel" inputMode="tel" autoComplete="tel" className="input" />
+            <label className="label" htmlFor="qr-phone">Phone number <span className="font-normal text-gray-600">(optional)</span></label>
+            <input id="qr-phone" name="reporterPhone" minLength={6} maxLength={40} type="tel" inputMode="tel" autoComplete="tel" className="input" />
           </div>
-          <p className="text-sm text-gray-600">Only the maintenance team sees this, so they can ask you about the problem.</p>
+          <div>
+            <label className="label" htmlFor="qr-email">Email <span className="font-normal text-gray-600">(optional)</span></label>
+            <input id="qr-email" name="reporterEmail" maxLength={200} type="email" autoComplete="email" className="input" />
+          </div>
+          {/* Spam trap: hidden from people and screen readers. */}
+          <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div>
+          <p className="text-sm text-gray-600">Add a phone number or email only if the team may need to ask you about it. Only the maintenance team sees it. With an email, you get your report number by email too.</p>
         </Step>
 
         <Step title="Check and send" review>

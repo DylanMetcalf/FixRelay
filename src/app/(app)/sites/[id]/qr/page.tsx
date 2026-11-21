@@ -14,9 +14,9 @@ export default async function QrSheet({ params }: { params: Promise<{ id: string
   const { ctx } = await requirePage("sites.manage");
   const s = await getSite(ctx, (await params).id).catch((e) => { if (e instanceof AppError) notFound(); throw e; });
   const labels = [
-    { title: s.name, sub: "Anywhere on this site", url: reportUrl(s.publicToken) },
-    ...s.locations.map((l) => ({ title: l.name, sub: s.name, url: reportUrl(s.publicToken, { locationId: l.id }) })),
-    ...s.assets.map((x) => ({ title: `${x.reference} – ${x.name}`, sub: `${s.name}${x.location ? ` · ${x.location.name}` : ""}`, url: reportUrl(s.publicToken, { locationId: x.locationId ?? undefined, assetId: x.id }) })),
+    { title: s.name, sub: "Anywhere on this site", url: reportUrl(s.publicCode ?? s.publicToken) },
+    ...s.locations.filter((l) => l.publicCode).map((l) => ({ title: l.name, sub: s.name, url: reportUrl(l.publicCode!) })),
+    ...s.assets.filter((x) => x.publicCode).map((x) => ({ title: `${x.reference} – ${x.name}`, sub: `${s.name}${x.location ? ` · ${x.location.name}` : ""}`, url: reportUrl(x.publicCode!) })),
   ];
   const svgs = await Promise.all(labels.map((l) => qrSvg(l.url)));
   return (
@@ -24,6 +24,7 @@ export default async function QrSheet({ params }: { params: Promise<{ id: string
       <div className="no-print mb-4 flex flex-wrap items-center gap-2">
         <Link href={`/sites/${s.id}`} className="btn btn-secondary">← Back to site</Link>
         <PrintButton />
+        <a href={`/api/sites/${s.id}/signs`} className="btn btn-secondary" download>A4 signs for the site and every area (PDF)</a>
         <p className="muted">{labels.length} labels. Print on A4 sticker paper or plain paper and laminate.</p>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 print:grid-cols-3 print:gap-2" data-testid="qr-labels">
@@ -34,7 +35,7 @@ export default async function QrSheet({ params }: { params: Promise<{ id: string
             <figcaption>
               <p className="text-sm font-extrabold leading-tight">{l.title}</p>
               <p className="text-xs text-gray-600">{l.sub}</p>
-              <p className="mt-1 flex items-center justify-center gap-1 text-[10px] text-gray-700"><Mark size={12} /> Resultra</p>
+              <p className="mt-1 flex items-center justify-center gap-1 text-[10px] text-gray-700"><Mark size={12} /> Resultra · {l.url.replace(/^https?:\/\//, "")}</p>
             </figcaption>
           </figure>
         ))}
