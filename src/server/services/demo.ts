@@ -83,7 +83,7 @@ export async function createDemoWorkspace(user: { id: string; name: string; emai
     ["Dock leveller not lifting", dc.id, bay.id, ["BREAKDOWN"], 12],
   ];
   for (const [title, siteId, locationId, rootCauses, daysAgo] of past) {
-    const j = await jobs.createJob(ctx, { title, description: "Logged on the paper requisition before FixRelay.", siteId, locationId, category: "Mechanical", priority: "NORMAL" });
+    const j = await jobs.createJob(ctx, { title, description: "Logged on the paper requisition before Resultra.", siteId, locationId, category: "Mechanical", priority: "NORMAL" });
     await jobs.submitAssessment(ctx, j.id, { findings: "Checked on site.", quoteRequired: false });
     await jobs.routeInHouse(ctx, j.id, {});
     await jobs.assignJob(ctx, j.id, { leadTechnicianId: user.id });

@@ -8,7 +8,7 @@ test.afterAll(async () => { await db.$disconnect(); });
 test("1 · landing page explains the product and leads to sign-up; signed-in users skip it", async ({ browser }) => {
   const p = await newPage(browser);
   await gotoReady(p, "/");
-  await expect(p.getByRole("heading", { level: 1 })).toHaveText("From fault reported to job completed.");
+  await expect(p.getByRole("heading", { level: 1 })).toHaveText("From reported to resolved.");
   await expect(p.getByRole("heading", { name: "How it works" })).toBeVisible();
   await expect(p.locator("#how li")).toHaveCount(5);
   await expect(p.getByRole("link", { name: "Privacy" }).first()).toHaveAttribute("href", "/privacy");
@@ -24,7 +24,7 @@ test("2 · installable PWA: manifest, icons, shortcuts, screenshots and an activ
   const p = await newPage(browser);
   await gotoReady(p, "/login");
   const m = await (await p.request.get("/api/manifest")).json();
-  expect(m).toMatchObject({ name: "FixRelay", short_name: "FixRelay", display: "standalone", start_url: expect.stringContaining("/dashboard"), theme_color: "#0B1F3A" });
+  expect(m).toMatchObject({ name: "Resultra", short_name: "Resultra", display: "standalone", start_url: expect.stringContaining("/dashboard"), theme_color: "#0B1F3A" });
   expect(m.icons.some((i: { purpose: string }) => i.purpose === "maskable")).toBe(true);
   expect(m.shortcuts.map((s: { url: string }) => s.url)).toEqual(expect.arrayContaining(["/requests/new", "/my-jobs"]));
   for (const src of [...m.icons.map((i: { src: string }) => i.src), ...m.screenshots.map((s: { src: string }) => s.src), "/apple-touch-icon.png", "/brand/og.png", "/offline.html"]) {
@@ -87,13 +87,13 @@ test("5 · forgot password: same answer for unknown emails, single-use link, old
   await p.waitForLoadState("networkidle");
   await f(p, "email").fill(`nobody-${uid()}@e2e.example`);
   await p.getByRole("button", { name: "Send reset link" }).click();
-  const generic = p.getByText(/If that email address has a FixRelay account/);
+  const generic = p.getByText(/If that email address has a Resultra account/);
   await expect(generic).toBeVisible();
   await gotoReady(p, "/forgot-password");
   await f(p, "email").fill(email);
   await p.getByRole("button", { name: "Send reset link" }).click();
   await expect(generic).toBeVisible();
-  const link = pathFrom((await lastEmail(email, /Reset your FixRelay password/)).body, "reset-password");
+  const link = pathFrom((await lastEmail(email, /Reset your Resultra password/)).body, "reset-password");
   await gotoReady(p, link);
   await f(p, "password").fill("brand-new-password-1");
   await f(p, "confirm").fill("brand-new-password-2");
@@ -251,7 +251,7 @@ test("13 · rate limiting: repeated reset requests for one address are slowed do
   for (let i = 0; i < 3; i++) {
     await f(p, "email").fill(email);
     await p.getByRole("button", { name: "Send reset link" }).click();
-    await expect(p.getByText(/If that email address has a FixRelay account/)).toBeVisible();
+    await expect(p.getByText(/If that email address has a Resultra account/)).toBeVisible();
     await gotoReady(p, "/forgot-password");
   }
   await f(p, "email").fill(email);

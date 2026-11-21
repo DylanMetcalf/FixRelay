@@ -236,13 +236,13 @@ describe("email delivery", () => {
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
     const port = (server.server.address() as AddressInfo).port;
     try {
-      const env = { EMAIL_TRANSPORT: "smtp", EMAIL_FROM: "FixRelay <no-reply@fixrelay.test>", SMTP_HOST: "127.0.0.1", SMTP_PORT: String(port), SMTP_USER: "mailer", SMTP_PASS: "s3cret", SMTP_REQUIRE_TLS: "false" } as unknown as NodeJS.ProcessEnv;
+      const env = { EMAIL_TRANSPORT: "smtp", EMAIL_FROM: "Resultra <no-reply@resultra.test>", SMTP_HOST: "127.0.0.1", SMTP_PORT: String(port), SMTP_USER: "mailer", SMTP_PASS: "s3cret", SMTP_REQUIRE_TLS: "false" } as unknown as NodeJS.ProcessEnv;
       const t = transportFromEnv(env);
       expect(t.name).toBe("smtp");
       const html = renderEmailHtml({ subject: "Quote Q-00001", text: "Please review:\nhttps://app.test/q/abc", brandName: "Acme <Maintenance>", brandColour: "#b91c1c" });
       await t.send({ to: "carl@client.test", subject: "Quote Q-00001", text: "Please review:\nhttps://app.test/q/abc", html });
       expect(received).toHaveLength(1);
-      expect(received[0]).toMatchObject({ user: "mailer", from: "no-reply@fixrelay.test", to: "carl@client.test" });
+      expect(received[0]).toMatchObject({ user: "mailer", from: "no-reply@resultra.test", to: "carl@client.test" });
       expect(received[0]!.raw).toContain("Subject: Quote Q-00001");
       expect(received[0]!.raw).toContain("text/html");
       expect(received[0]!.raw).toContain("Acme &lt;Maintenance&gt;"); // escaped
@@ -260,7 +260,7 @@ describe("email delivery", () => {
     await once(srv, "listening");
     const url = `http://127.0.0.1:${(srv.address() as AddressInfo).port}/emails`;
     try {
-      const env = { EMAIL_TRANSPORT: "resend", RESEND_API_KEY: "re_test_123", EMAIL_FROM: "FixRelay <no-reply@fixrelay.test>", EMAIL_API_URL: url } as unknown as NodeJS.ProcessEnv;
+      const env = { EMAIL_TRANSPORT: "resend", RESEND_API_KEY: "re_test_123", EMAIL_FROM: "Resultra <no-reply@resultra.test>", EMAIL_API_URL: url } as unknown as NodeJS.ProcessEnv;
       await transportFromEnv(env).send({ to: "a@b.test", subject: "Hi", text: "Body", html: "<p>Body</p>", replyTo: "office@acme.test" });
       expect(calls[0]).toMatchObject({ auth: "Bearer re_test_123", body: { from: env.EMAIL_FROM, to: ["a@b.test"], subject: "Hi", text: "Body", html: "<p>Body</p>", reply_to: "office@acme.test" } });
       status = 422;
@@ -281,7 +281,7 @@ describe("email delivery", () => {
     await processOutbox({ name: "test", send: async (m) => { sent.push(m); } }, 50);
     const m = sent.find((x) => x.to.startsWith("carl-"))!;
     expect(m.html).toContain("#0e7490");
-    expect(m.html).toContain("Open in FixRelay");
+    expect(m.html).toContain("Open in Resultra");
     expect(m.replyTo).toBe("office@acme.test");
   });
 });

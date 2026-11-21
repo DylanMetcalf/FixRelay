@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* FixRelay brand palette (see BRAND.md). Tenant colour overrides --brand at runtime. */
+/* Resultra brand palette (see BRAND.md). Tenant colour overrides --brand at runtime. */
 @theme {
   --color-navy: #0b1f3a;     /* Relay Navy: app chrome, dark surfaces */
   --color-navy-2: #132b4d;   /* hover on navy */

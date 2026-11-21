@@ -34,7 +34,7 @@ export default async function QrSheet({ params }: { params: Promise<{ id: string
             <figcaption>
               <p className="text-sm font-extrabold leading-tight">{l.title}</p>
               <p className="text-xs text-gray-600">{l.sub}</p>
-              <p className="mt-1 flex items-center justify-center gap-1 text-[10px] text-gray-700"><Mark size={12} /> FixRelay</p>
+              <p className="mt-1 flex items-center justify-center gap-1 text-[10px] text-gray-700"><Mark size={12} /> Resultra</p>
             </figcaption>
           </figure>
         ))}

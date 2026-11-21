@@ -1,10 +1,10 @@
-// FixRelay service worker.
+// Resultra service worker.
 //  - Caches only PUBLIC, versioned static files (app code under /_next/static, icons, brand assets) for speed.
 //  - NEVER caches pages, API responses, attachments or anything tenant-specific, so there is nothing to leak
 //    between users or companies on a shared device.
 //  - Navigations go to the network; if the device is offline, a branded offline page is shown.
 //  - Offline data entry is NOT supported (see BUILD_STATUS.md).
-const VERSION = "fixrelay-v2";
+const VERSION = "resultra-v3";
 const SHELL = ["/offline.html", "/icon-192.png", "/icon.svg", "/apple-touch-icon.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)));

@@ -6,14 +6,14 @@ import { appUrl } from "@/lib/app-url";
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl() || "http://localhost:3000"),
-  title: { default: "FixRelay", template: "%s · FixRelay" },
-  description: "From fault reported to job completed. Every request, quote, approval and repair in one place.",
-  applicationName: "FixRelay",
+  title: { default: "Resultra", template: "%s · Resultra" },
+  description: "From reported to resolved. Maintenance requests, job cards and approvals in one place.",
+  applicationName: "Resultra",
   manifest: "/api/manifest",
   icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }, { url: "/favicon-32.png", sizes: "32x32" }], apple: "/apple-touch-icon.png" },
-  appleWebApp: { capable: true, title: "FixRelay", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "Resultra", statusBarStyle: "black-translucent" },
   formatDetection: { telephone: false },
-  openGraph: { title: "FixRelay", description: "Maintenance jobs from fault to sign-off, in one simple app.", images: ["/brand/og.png"], type: "website" },
+  openGraph: { title: "Resultra – From reported to resolved.", description: "Maintenance requests, job cards and approvals in one place.", images: ["/brand/og.png"], type: "website" },
   robots: { index: false },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#0B1F3A" };

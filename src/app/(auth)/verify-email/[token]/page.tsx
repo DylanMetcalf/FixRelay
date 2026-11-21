@@ -10,7 +10,7 @@ export default async function VerifyEmail({ params }: { params: Promise<{ token:
     <>
       <h1 className="text-xl font-extrabold" data-testid="verified">Email address confirmed</h1>
       <p className="muted mt-2">Thank you. You can now invite your team and send quotes to customers.</p>
-      <Link className="btn btn-primary mt-4 w-full" href="/dashboard">Continue to FixRelay</Link>
+      <Link className="btn btn-primary mt-4 w-full" href="/dashboard">Continue to Resultra</Link>
     </>
   ) : (
     <>

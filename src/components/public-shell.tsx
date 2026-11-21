@@ -20,7 +20,7 @@ export function PublicShell({ org, logoSrc, children }: { org: Org; logoSrc?: st
       <main className="mx-auto max-w-2xl space-y-4 px-4 py-5">{children}</main>
       <footer className="mx-auto max-w-2xl px-4 pb-8 text-center text-xs text-gray-600">
         {org.name}{org.phone && ` · ${org.phone}`}{org.contactEmail && ` · ${org.contactEmail}`}
-        <p className="mt-2 flex items-center justify-center gap-1.5"><Mark size={14} /> Maintenance managed with FixRelay</p>
+        <p className="mt-2 flex items-center justify-center gap-1.5"><Mark size={14} /> Maintenance managed with Resultra</p>
       </footer>
     </div>
   );

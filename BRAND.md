@@ -1,10 +1,19 @@
-# FixRelay brand
+# Resultra brand
 
-**Name:** FixRelay (one word, capital F and R). **Tagline:** "From fault reported to job completed."
+**Name:** Resultra (one word, capital R). **Tagline:** "From reported to resolved." **Descriptor:** "Maintenance requests, job cards and approvals in one place."
+
+Resultra was previously called FixRelay. The colours, typography, layout and voice are unchanged; only the name and the symbol changed. Technical identifiers that would break existing sessions or deployments keep their old names on purpose: the session cookie (`fr_session`), environment variables, database and Render service names, and the JSON export format id (`fixrelay-export/2`).
 
 ## Mark
-The mark is a route that forms an **F**: it starts at a blue dot (*fault reported*), rises and turns, and ends in an amber check (*job completed*): the job being relayed from report to sign-off.
-Files: `public/brand/fixrelay-mark.svg` (rounded tile), `fixrelay-maskable.svg` (Android adaptive icon, safe zone), `fixrelay-square.svg` (iOS), PNGs in `public/`, social image `public/brand/og.png`. React: `src/components/logo.tsx` (`<Logo/>`, `<Mark/>`).
+An **R** whose leg becomes a **check**. It starts at a blue dot (*reported*) at the foot of the stem and finishes in an amber check (*resolved*): one continuous line from report to resolution. Geometric, two strokes on the navy tile, legible down to 16 px.
+Files (editable SVG, 512 × 512 grid, 46 px strokes with round caps):
+- `public/brand/resultra-mark.svg`: rounded tile (rx 112), the master
+- `public/brand/resultra-square.svg`: square tile for iOS
+- `public/brand/resultra-maskable.svg`: Android adaptive icon (symbol inside the 80 % safe zone)
+- PNGs generated from the SVGs: `public/favicon-32.png`, `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png`, `icon-maskable-192/512.png`; `public/icon.svg`; social image `public/brand/og.png` (1200 × 630)
+- React: `src/components/logo.tsx` (`<Logo/>`, `<Mark/>`); PDF documents draw the same paths (`src/server/pdf/brand.tsx`)
+
+Regenerate the PNGs after editing the SVG: `node -e "..."` with sharp (see TECHNICAL notes in RESULTRA_TECHNICAL_HANDOVER.md).
 
 ## Colours
 | Token | Hex | Use |
