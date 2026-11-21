@@ -9,6 +9,7 @@ import * as departments from "@/server/services/departments";
 import * as sites from "@/server/services/sites";
 import { parseRandToCents } from "@/lib/money";
 import * as orgs from "@/server/services/orgs";
+import * as registration from "@/server/services/registration";
 import { type ActionState, bool, fileOf, list, run, str } from "../_lib/action";
 import { getSession, requireCtx, sessionToken } from "../_lib/session";
 import { appUrl } from "@/lib/app-url";
@@ -180,4 +181,32 @@ export async function departmentMemberAction(_: ActionState, fd: FormData) {
     await departments.setDepartmentMember(ctx, str(fd, "departmentId"), { userId: str(fd, "userId"), isManager: bool(fd, "isManager") });
     return { ok: "Department updated." };
   });
+}
+
+export async function createJoinCodeAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const c = await registration.createJoinCode(await requireCtx(), { siteId: str(fd, "siteId") || null, days: Number(str(fd, "days") || 30) });
+    return { ok: `Registration code ${c.code} created.` };
+  });
+}
+
+export async function revokeJoinCodeAction(_: ActionState, fd: FormData) {
+  return run(async () => { await registration.revokeJoinCode(await requireCtx(), str(fd, "id")); return { ok: "Code switched off." }; });
+}
+
+export async function regenerateJoinCodeAction(_: ActionState, fd: FormData) {
+  return run(async () => { const c = await registration.regenerateJoinCode(await requireCtx(), str(fd, "id")); return { ok: `Replaced. New code: ${c.code}` }; });
+}
+
+export async function approveMemberAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    await registration.approveMember(await requireCtx(), str(fd, "membershipId"), {
+      roles: list(fd, "roles") as Role[], departmentId: str(fd, "departmentId") || null, departmentManager: bool(fd, "departmentManager"),
+    });
+    return { ok: "Access approved. They have been emailed." };
+  });
+}
+
+export async function rejectMemberAction(_: ActionState, fd: FormData) {
+  return run(async () => { await registration.rejectMember(await requireCtx(), str(fd, "membershipId"), { reason: str(fd, "reason") }); return { ok: "Request declined." }; });
 }

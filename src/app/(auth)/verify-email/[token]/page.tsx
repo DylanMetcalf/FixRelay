@@ -9,7 +9,7 @@ export default async function VerifyEmail({ params }: { params: Promise<{ token:
   return ok ? (
     <>
       <h1 className="text-xl font-extrabold" data-testid="verified">Email address confirmed</h1>
-      <p className="muted mt-2">Thank you. You can now invite your team and send quotes to customers.</p>
+      <p className="muted mt-2">Thank you. If you are waiting for approval, your administrator can now approve your access.</p>
       <Link className="btn btn-primary mt-4 w-full" href="/dashboard">Continue to Resultra</Link>
     </>
   ) : (

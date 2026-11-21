@@ -11,6 +11,8 @@ import { listSites } from "@/server/services/sites";
 import { listSupportGrants, listTeam } from "@/server/services/orgs";
 import { listDepartments } from "@/server/services/departments";
 import { DepartmentsCard } from "./departments";
+import { ApprovalsCard, JoinCodesCard } from "./registration";
+import { listJoinCodes, listPendingMembers } from "@/server/services/registration";
 
 export const metadata = { title: "Settings" };
 const ROLES = [
@@ -25,10 +27,12 @@ const ROLES = [
 export default async function Settings() {
   const { ctx, subscription: sub } = await requirePage("team.view");
   const owner = can(ctx, "org.manage");
-  const [org, team, rules, grants, used, sites, depts] = await Promise.all([
+  const admin = can(ctx, "team.manage");
+  const [org, team, rules, grants, used, sites, depts, pending, codes] = await Promise.all([
     prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, include: { subscription: { include: { plan: true } } } }),
     listTeam(ctx), prisma.priorityRule.findMany({ where: { orgId: ctx.orgId } }), owner ? listSupportGrants(ctx) : [], usage(prisma, ctx.orgId),
     listSites(ctx), listDepartments(ctx, { withMembers: true }),
+    admin ? listPendingMembers(ctx) : [], admin ? listJoinCodes(ctx) : [],
   ]);
   const people = team.members.filter((m) => m.active).map((m) => ({ userId: m.user.id, name: m.user.name }));
   const plan = org.subscription?.plan;
@@ -62,11 +66,12 @@ export default async function Settings() {
         )}
 
         <div className="space-y-5" id="team">
+          {admin && <div id="approvals"><ApprovalsCard pending={pending} departments={depts.map((d) => ({ id: d.id, name: d.name }))} /></div>}
           <Card title="Team">
             <ul className="divide-y divide-gray-200">
               {team.members.map((m) => (
                 <li key={m.id} className="py-3">
-                  <p className="text-sm font-bold">{m.user.name} {!m.active && <Pill tone="red">Access removed</Pill>}</p>
+                  <p className="text-sm font-bold">{m.user.name}{m.user.jobTitle && <span className="font-normal text-gray-700"> · {m.user.jobTitle}</span>} {!m.active && <Pill tone="red">Access removed</Pill>}</p>
                   <p className="muted">{m.user.email}</p>
                   {owner ? (
                     <Form action={a.updateMemberAction} hidden={{ membershipId: m.id }} className="mt-2 flex flex-wrap items-center gap-3">
@@ -89,6 +94,7 @@ export default async function Settings() {
               </div>
             )}
           </Card>
+          {admin && <JoinCodesCard codes={codes} sites={sites.map((x) => ({ id: x.id, name: x.name }))} />}
           <div id="departments"><DepartmentsCard departments={depts} people={people} canEdit={can(ctx, "team.manage")} /></div>
           {(owner || can(ctx, "sites.manage")) && (
             <Card title="Invite someone">

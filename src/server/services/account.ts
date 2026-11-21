@@ -38,11 +38,11 @@ export async function sendVerificationEmail(tx: Tx, user: { id: string; email: s
   const token = await issue(tx, user.id, "EMAIL_VERIFY", VERIFY_HOURS * 3_600_000);
   await queueEmail(tx, {
     orgId: null, to: user.email, subject: "Confirm your email address for Resultra", dedupeKey: `verify:${hashToken(token)}`,
-    body: `Hi ${user.name},\n\nPlease confirm this is your email address so you can invite your team and send quotes to customers:\n${appUrl()}/verify-email/${token}\n\nThe link expires in ${VERIFY_HOURS} hours. If you did not create a Resultra account, you can ignore this email.`,
+    body: `Hi ${user.name},\n\nPlease confirm this is your email address:\n${appUrl()}/verify-email/${token}\n\nThe link expires in ${VERIFY_HOURS} hours. If you did not create a Resultra account, you can ignore this email.`,
   });
 }
 
-export async function resendVerification(ctx: Ctx) {
+export async function resendVerification(ctx: Pick<Ctx, "userId">) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: ctx.userId } });
   if (user.emailVerifiedAt) throw conflict("Your email address is already confirmed.");
   await prisma.$transaction((tx) => sendVerificationEmail(tx, user));

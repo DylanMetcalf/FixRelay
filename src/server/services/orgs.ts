@@ -166,7 +166,7 @@ const inviteSchema = z.object({
 export const INVITE_DAYS = 7;
 
 const STAFF_ROLES: Role[] = ["OWNER", "MANAGER", "APPROVER", "TECHNICIAN", "STORES"];
-const isSeat = (roles: Role[]) => roles.some((r) => STAFF_ROLES.includes(r));
+export const isSeat = (roles: Role[]) => roles.some((r) => STAFF_ROLES.includes(r));
 
 async function assertSites(tx: Tx, orgId: string, siteIds: string[]) {
   const ids = [...new Set(siteIds)];
@@ -242,7 +242,12 @@ export async function acceptInvitation(token: string, input: { name?: string; pa
     if (claimed.count !== 1) throw conflict("This invitation has already been used.");
     // The invitation link was delivered to this address, which proves ownership.
     user ??= await tx.user.create({ data: { email: inv.email, name: input.name!.trim(), passwordHash: passwordHash!, emailVerifiedAt: new Date() } });
-    await tx.membership.create({ data: { orgId: inv.orgId, userId: user.id, roles: inv.roles, siteIds: inv.siteIds } });
+    // An invitation also settles a pending or declined self-registration request from the same person.
+    await tx.membership.upsert({
+      where: { orgId_userId: { orgId: inv.orgId, userId: user.id } },
+      create: { orgId: inv.orgId, userId: user.id, roles: inv.roles, siteIds: inv.siteIds },
+      update: { roles: inv.roles, siteIds: inv.siteIds, active: true, status: "ACTIVE" },
+    });
     await logEvent(tx, { orgId: inv.orgId, userId: user.id, label: user.name }, null, "team.joined", `${user.name} joined`);
     return { userId: user.id, orgId: inv.orgId, token: await createSession(tx, user.id, inv.orgId) };
   });
@@ -257,8 +262,8 @@ export async function listTeam(ctx: Ctx) {
   requirePerm(ctx, "team.view");
   const [members, invitations] = await Promise.all([
     prisma.membership.findMany({
-      where: { orgId: ctx.orgId },
-      include: { user: { select: { id: true, name: true, email: true } } },
+      where: { orgId: ctx.orgId, status: "ACTIVE" }, // pending / declined requests are listed separately
+      include: { user: { select: { id: true, name: true, email: true, jobTitle: true, photoKey: true } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.invitation.findMany({

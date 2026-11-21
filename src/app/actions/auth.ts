@@ -5,9 +5,10 @@ import { createDemoWorkspace } from "@/server/services/demo";
 import { markAllRead } from "@/server/services/notifications";
 import * as account from "@/server/services/account";
 import * as orgs from "@/server/services/orgs";
+import * as registration from "@/server/services/registration";
 import { invalid } from "@/lib/errors";
 import { type ActionState, run, str } from "../_lib/action";
-import { clientIp, requireSession, sessionToken, setSessionCookie } from "../_lib/session";
+import { clientIp, getSession, requireSession, sessionToken, setSessionCookie } from "../_lib/session";
 
 export async function loginAction(_: ActionState, fd: FormData) {
   return run(async () => {
@@ -95,9 +96,38 @@ export async function resetPasswordAction(_: ActionState, fd: FormData) {
 
 export async function resendVerificationAction(_: ActionState, _fd: FormData) {
   return run(async () => {
-    const s = await requireSession();
+    const s = await getSession(); // also for people still waiting for approval (no company yet)
+    if (!s) throw invalid("Please sign in again.");
     await rateLimit(`verify:user:${s.user.id}`, 5, 60 * 60_000);
-    await account.resendVerification(s.ctx);
+    await account.resendVerification({ userId: s.user.id });
     return { ok: `We sent a new confirmation link to ${s.user.email}.`, data: { sent: "1" } };
+  });
+}
+
+/** Employee asks to join with a site registration code (public, rate limited). */
+export async function joinWithCodeAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const ip = await clientIp();
+    await rateLimit(`join:ip:${ip}`, 8, 60 * 60_000);
+    const photo = fd.get("photo");
+    const bytes = photo instanceof File && photo.size > 0 ? Buffer.from(await photo.arrayBuffer()) : null;
+    const r = await registration.registerWithCode({
+      code: str(fd, "code"), name: str(fd, "name"), email: str(fd, "email"), password: str(fd, "password"),
+      departmentId: str(fd, "departmentId") || null, jobTitle: str(fd, "jobTitle"), phone: str(fd, "phone"),
+    }, bytes);
+    const previous = await sessionToken();
+    await setSessionCookie(r.token);
+    if (previous) await auth.logout(previous);
+    return { redirect: "/no-access" };
+  });
+}
+
+export async function updateProfileAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const s = await requireSession();
+    const photo = fd.get("photo");
+    const bytes = photo instanceof File && photo.size > 0 ? Buffer.from(await photo.arrayBuffer()) : null;
+    await registration.updateMyProfile(s.ctx, { name: str(fd, "name"), jobTitle: str(fd, "jobTitle"), phone: str(fd, "phone") }, bytes);
+    return { ok: "Your details were saved." };
   });
 }
