@@ -26,12 +26,13 @@ export const DEFAULT_PRIORITIES: { priority: Priority; responseHours: number; co
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "company";
 
-export async function createOrganisation(tx: Tx, ownerId: string, companyName: string, isDemo = false) {
+/** Create a company. `ownerId` null: created by the platform owner; the main contact becomes owner by invitation. */
+export async function createOrganisation(tx: Tx, ownerId: string | null, companyName: string, isDemo = false) {
   const base = slugify(companyName);
   let slug = base;
   for (let i = 0; await tx.organisation.findUnique({ where: { slug } }); i++) slug = `${base}-${newToken().slice(0, 5).toLowerCase().replace(/[^a-z0-9]/g, "x")}`;
   const org = await tx.organisation.create({ data: { name: companyName, slug, isDemo } });
-  await tx.membership.create({ data: { orgId: org.id, userId: ownerId, roles: ["OWNER"] } });
+  if (ownerId) await tx.membership.create({ data: { orgId: org.id, userId: ownerId, roles: ["OWNER"] } });
   await tx.priorityRule.createMany({ data: DEFAULT_PRIORITIES.map((p) => ({ ...p, orgId: org.id })) });
   if (!isDemo) {
     await ensureDefaultPlans(tx);

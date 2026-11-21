@@ -44,6 +44,7 @@ export async function notify(tx: Tx, n: NotifyInput): Promise<void> {
     })),
     skipDuplicates: true,
   });
+  if (await isDemoOrg(tx, n.orgId)) return; // demo companies never send email (in-app notifications only)
   await tx.outboxEmail.createMany({
     data: users.map((u) => ({
       orgId: n.orgId, toEmail: u.email, subject: n.title,
@@ -53,7 +54,14 @@ export async function notify(tx: Tx, n: NotifyInput): Promise<void> {
   });
 }
 
+/** Demo companies are sandboxes: nothing they do may reach a real inbox. */
+async function isDemoOrg(tx: Tx, orgId: string | null) {
+  if (!orgId) return false;
+  return !!(await tx.organisation.findUnique({ where: { id: orgId }, select: { isDemo: true } }))?.isDemo;
+}
+
 export async function queueEmail(tx: Tx, e: { orgId: string | null; to: string; subject: string; body: string; dedupeKey: string }) {
+  if (await isDemoOrg(tx, e.orgId)) return;
   await tx.outboxEmail.createMany({
     data: [{ orgId: e.orgId, toEmail: e.to, subject: e.subject, body: e.body, dedupeKey: e.dedupeKey }],
     skipDuplicates: true,

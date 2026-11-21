@@ -47,7 +47,7 @@ export async function login(email: string, password: string): Promise<string> {
   const e = emailSchema.safeParse(email);
   const user = e.success ? await prisma.user.findUnique({ where: { email: e.data } }) : null;
   const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-  if (!user || !ok) throw new AppError("UNAUTHENTICATED", "Incorrect email or password.");
+  if (!user || !ok || user.demoPersona) throw new AppError("UNAUTHENTICATED", "Incorrect email or password.");
   return createSession(prisma, user.id);
 }
 
@@ -76,6 +76,8 @@ export interface SessionView {
   } | null;
   subscription: SubscriptionView | null;
   workspaces: { orgId: string; name: string; isDemo: boolean }[];
+  /** Demo companies only: the demonstrator is viewing as this sample person. */
+  viewAs?: { name: string; jobTitle: string } | null;
 }
 
 /** Resolve a session token into the acting user and tenant context. Returns null if invalid/expired. */
@@ -128,6 +130,17 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
   const membership = m ?? user.memberships[0];
   if (!membership) return { ...base, ctx: null, org: null, subscription: null };
   const sub = subscriptionState(membership.org.subscription, membership.org.isDemo);
+  // "View as" works ONLY inside a demo company, ONLY for its owner, and ONLY as one of its sample people.
+  if (s.actAsUserId && membership.org.isDemo && !membership.org.archivedAt && membership.roles.includes("OWNER")) {
+    const pm = await prisma.membership.findFirst({ where: { orgId: membership.orgId, userId: s.actAsUserId, active: true, user: { demoPersona: true } }, include: { user: true } });
+    if (pm) return {
+      ...base, org: membership.org, subscription: sub, viewAs: { name: pm.user.name, jobTitle: pm.user.jobTitle },
+      ctx: {
+        userId: pm.userId, userName: pm.user.name, userEmail: pm.user.email, orgId: membership.orgId, roles: pm.roles, siteIds: pm.siteIds,
+        support: false, locked: sub.access === "locked", emailVerified: true, ...(await departmentsOf(membership.orgId, pm.userId)),
+      },
+    };
+  }
   const depts = await departmentsOf(membership.orgId, user.id);
   return {
     ...base,
@@ -146,11 +159,23 @@ export async function departmentsOf(orgId: string, userId: string) {
   return { departmentIds: rows.map((r) => r.departmentId), managedDepartmentIds: rows.filter((r) => r.isManager).map((r) => r.departmentId) };
 }
 
+/** Demo only: view the demo company as one of its sample people (null = back to yourself). */
+export async function setViewAs(token: string, personaUserId: string | null): Promise<void> {
+  const s = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (!s) throw new AppError("UNAUTHENTICATED", "Please sign in again.");
+  if (personaUserId) {
+    const me = s.activeOrgId ? await prisma.membership.findFirst({ where: { userId: s.userId, orgId: s.activeOrgId, active: true, roles: { has: "OWNER" }, org: { isDemo: true, archivedAt: null } } }) : null;
+    const persona = me ? await prisma.membership.findFirst({ where: { orgId: me.orgId, userId: personaUserId, active: true, user: { demoPersona: true } } }) : null;
+    if (!persona) throw new AppError("FORBIDDEN", "Viewing as someone else is only available in your demo workspace.");
+  }
+  await prisma.session.update({ where: { id: s.id }, data: { actAsUserId: personaUserId } });
+}
+
 /** Change the session's active company. Only to a company the user belongs to (or, for the platform operator, any — loadSession still demands a live support grant). */
 export async function switchWorkspace(token: string, orgId: string | null): Promise<void> {
   const s = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) }, include: { user: true } });
   if (!s) throw new AppError("UNAUTHENTICATED", "Please sign in again.");
   if (orgId && !s.user.isPlatformAdmin && !(await prisma.membership.findFirst({ where: { userId: s.userId, orgId, active: true } })))
     throw new AppError("FORBIDDEN", "You do not have access to that workspace.");
-  await prisma.session.update({ where: { id: s.id }, data: { activeOrgId: orgId } });
+  await prisma.session.update({ where: { id: s.id }, data: { activeOrgId: orgId, actAsUserId: null } });
 }

@@ -10,6 +10,7 @@ import * as sites from "@/server/services/sites";
 import { parseRandToCents } from "@/lib/money";
 import * as orgs from "@/server/services/orgs";
 import * as registration from "@/server/services/registration";
+import * as platform from "@/server/services/platform";
 import { type ActionState, bool, fileOf, list, run, str } from "../_lib/action";
 import { getSession, requireCtx, sessionToken } from "../_lib/session";
 import { appUrl } from "@/lib/app-url";
@@ -209,4 +210,19 @@ export async function approveMemberAction(_: ActionState, fd: FormData) {
 
 export async function rejectMemberAction(_: ActionState, fd: FormData) {
   return run(async () => { await registration.rejectMember(await requireCtx(), str(fd, "membershipId"), { reason: str(fd, "reason") }); return { ok: "Request declined." }; });
+}
+
+export async function createCustomerAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const r = await platform.createCustomer(await platformUser(), {
+      companyName: str(fd, "companyName"), siteName: str(fd, "siteName"), siteAddress: str(fd, "siteAddress"),
+      contactName: str(fd, "contactName"), contactEmail: str(fd, "contactEmail"), phone: str(fd, "phone"),
+      departments: str(fd, "departments").split(",").map((x) => x.trim()).filter(Boolean), publicReporting: bool(fd, "publicReporting"),
+    });
+    return { ok: "Company created and the main contact invited.", data: { link: r.inviteLink } };
+  });
+}
+
+export async function resendCustomerInviteAction(_: ActionState, fd: FormData) {
+  return run(async () => ({ ok: "Invitation sent again.", data: { link: await platform.resendCustomerInvite(await platformUser(), str(fd, "orgId")) } }));
 }

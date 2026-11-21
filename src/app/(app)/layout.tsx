@@ -8,6 +8,9 @@ import { Form, Submit } from "@/components/form";
 import { readableOn, safeColour } from "@/lib/colour";
 import { can } from "@/server/permissions";
 import { unreadCount } from "@/server/services/notifications";
+import { listPersonas } from "@/server/services/demo";
+import { DemoBar } from "@/components/demo-bar";
+import { prisma } from "@/lib/db";
 import { fmtDate } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +19,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const s = await requireSession();
   const { ctx, org, subscription: sub } = s;
   const unread = await unreadCount(ctx);
+  const demoOwner = org.isDemo && !!(await prisma.membership.findFirst({ where: { orgId: org.id, userId: s.user.id, active: true, roles: { has: "OWNER" } } }));
+  const personas = demoOwner ? await listPersonas(org.id) : [];
   const brand = safeColour(org.brandColour);
   const manager = can(ctx, "job.viewAll");
   const tech = ctx.roles.includes("TECHNICIAN");
@@ -81,7 +86,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </Banner>
         )}
-        {org.isDemo && <Banner tone="amber"><strong>Demo workspace.</strong> This is sample data, kept completely separate from your company. Switch workspace from your profile.</Banner>}
+        {org.isDemo && (demoOwner ? <DemoBar personas={personas} viewAs={s.viewAs} /> : <Banner tone="amber"><strong>Demo workspace.</strong> This is sample data, kept completely separate from your company. Switch workspace from your profile.</Banner>)}
         {ctx.support && <Banner tone="red"><strong>Support session (read-only).</strong> You are viewing {org.name} under a time-limited grant. This visit is recorded in their audit trail.</Banner>}
         {sub?.access === "grace" && <Banner tone="amber"><strong>{sub.message}</strong> Full access continues until {fmtDate(sub.endsAt)}.</Banner>}
         {sub?.access === "locked" && !ctx.support && <Banner tone="red"><strong>Read-only: {sub.message}</strong> You can still view and export all your records. Contact us to reactivate.</Banner>}

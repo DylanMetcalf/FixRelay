@@ -1,7 +1,7 @@
 "use server";
 import { rateLimit } from "@/lib/rate-limit";
 import * as auth from "@/server/auth";
-import { createDemoWorkspace } from "@/server/services/demo";
+import { createDemoWorkspace, resetDemoWorkspace } from "@/server/services/demo";
 import { markAllRead } from "@/server/services/notifications";
 import * as account from "@/server/services/account";
 import * as orgs from "@/server/services/orgs";
@@ -129,5 +129,23 @@ export async function updateProfileAction(_: ActionState, fd: FormData) {
     const bytes = photo instanceof File && photo.size > 0 ? Buffer.from(await photo.arrayBuffer()) : null;
     await registration.updateMyProfile(s.ctx, { name: str(fd, "name"), jobTitle: str(fd, "jobTitle"), phone: str(fd, "phone") }, bytes);
     return { ok: "Your details were saved." };
+  });
+}
+
+/** Demo only: view as a sample person, or return to yourself. */
+export async function viewAsAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    await auth.setViewAs((await sessionToken())!, str(fd, "personaId") || null);
+    return { redirect: "/dashboard" };
+  });
+}
+
+export async function resetDemoAction(_: ActionState, _fd: FormData) {
+  return run(async () => {
+    const s = await getSession();
+    if (!s) throw invalid("Please sign in again.");
+    const orgId = await resetDemoWorkspace(s.user);
+    await auth.switchWorkspace((await sessionToken())!, orgId);
+    return { redirect: "/dashboard", ok: "Demo data reset." };
   });
 }
