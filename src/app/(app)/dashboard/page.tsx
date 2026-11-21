@@ -20,14 +20,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const { ctx } = s;
   const f = await searchParams;
   const manager = can(ctx, "job.viewAll");
-  const [counts, jobs, sites, techs] = await Promise.all([
+  const [counts, jobs, sites, techs, departments] = await Promise.all([
     dashboardCounts(ctx, f),
-    listJobs(ctx, { ...f, view: f.status || f.overdue || f.source || f.spares ? "all" : undefined }, 25),
+    listJobs(ctx, { ...f, view: f.status || f.overdue || f.source || f.spares || f.duplicates || f.reopened || f.unassigned ? "all" : undefined }, 25),
     manager ? listSites(ctx) : [],
     manager ? listAssignable(ctx) : [],
+    manager ? prisma.department.findMany({ where: { orgId: ctx.orgId, archived: false }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [],
   ]);
   const tiles: { label: string; n: number; href: string; alert?: boolean }[] = [
     { label: "New fault reports", n: counts.newRequests, href: "?status=NEW" },
+    { label: "Unassigned – nobody responsible", n: counts.unassigned, href: "?unassigned=true", alert: true },
+    { label: "Possible duplicates to review", n: counts.duplicates, href: "?duplicates=flagged", alert: true },
     { label: "Public reports to screen", n: counts.toScreen, href: "?source=PUBLIC_LINK&status=NEW", alert: true },
     { label: "Awaiting assessment", n: counts.awaitingAssessment, href: "?status=ASSESSING" },
     { label: "Assessed – decide how to fix", n: counts.assessed, href: "?status=ASSESSED" },
@@ -40,6 +43,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     { label: "Awaiting confirmation it's fixed", n: counts.awaitingVerification, href: "?status=AWAITING_VERIFICATION" },
     { label: "Confirmed – ready to close", n: counts.readyToClose, href: "?status=VERIFIED" },
     { label: "Waiting for spares", n: counts.sparesWaiting, href: "?spares=waiting" },
+    { label: "Reopened work", n: counts.reopened, href: "?reopened=true" },
+    { label: "Completed in the last 7 days", n: counts.recentlyClosed, href: "/jobs?tab=history" },
     { label: "Overdue", n: counts.overdue, href: "?overdue=true", alert: true },
   ];
   const setup = can(ctx, "org.manage") && !s.org.isDemo ? await onboarding(ctx.orgId, s.user.emailVerified) : null;
@@ -53,6 +58,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const pendingQuotes = pending.length ? await prisma.quote.findMany({ where: { id: { in: pending.map((p) => p.recommendedQuoteId!).filter(Boolean) } }, select: { id: true, totalCents: true, contractor: { select: { name: true } } } }) : [];
   const toApprove = pending.map((j) => ({ ...j, quote: pendingQuotes.find((q) => q.id === j.recommendedQuoteId) })).filter((j) => j.quote && j.quote.totalCents <= myLimit);
   const toConfirm = await prisma.job.findMany({ where: { orgId: ctx.orgId, requesterId: ctx.userId, status: "AWAITING_VERIFICATION", reporterConfirmation: true }, select: { id: true, reference: true, title: true, site: { select: { name: true } } } });
+  const managed = ctx.managedDepartmentIds ?? [];
+  const deptWork = !manager && managed.length ? (await listJobs(ctx, { view: "all", tab: "open" }, 100)).filter((j) => j.departmentId && managed.includes(j.departmentId)) : [];
   const stores = can(ctx, "spares.manage") && !manager;
   const spares = stores ? await listJobs(ctx, { view: "all", spares: "waiting" }, 100) : [];
   const myReports = !manager ? await listJobs(ctx, { view: "all", reportedByMe: stores || undefined }, 10).then((js) => js.filter((j) => j.status !== "CLOSED" && j.status !== "CANCELLED")) : [];
@@ -85,6 +92,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             ))}
           </ul>
         </Card>
+      )}
+      {managed.length > 0 && !manager && (
+        <section className="mb-6" data-testid="department-queue">
+          <h2 className="mb-3 text-lg font-extrabold">Your department&apos;s open work <span className="tabular-nums text-gray-600">({deptWork.length})</span></h2>
+          <JobList jobs={deptWork} empty={<p className="muted">Nothing open for your department.</p>} />
+        </section>
       )}
       {stores && (
         <div className="mb-6 space-y-5" data-testid="stores-queue">
@@ -129,15 +142,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <>
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {tiles.map((t) => (
-              <Link key={t.label} href={`/dashboard${t.href}`} className={`card !p-3 hover:border-gray-500 ${t.alert && t.n > 0 ? "!border-red-400 !bg-red-50" : ""}`}>
+              <Link key={t.label} href={t.href.startsWith("/") ? t.href : `/dashboard${t.href}`} className={`card !p-3 hover:border-gray-500 ${t.alert && t.n > 0 ? "!border-red-400 !bg-red-50" : ""}`}>
                 <p className={`text-3xl font-extrabold tabular-nums ${t.alert && t.n > 0 ? "text-red-800" : "text-gray-900"}`}>{t.n}</p>
                 <p className="text-xs font-bold text-gray-700">{t.label}</p>
               </Link>
             ))}
           </div>
           <p className="muted mb-4">{counts.unowned} new report{counts.unowned === 1 ? "" : "s"} with no responsible manager yet · {counts.recentlyClosed} closed in the last 7 days.</p>
-          <JobFilterBar base="/dashboard" f={f} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />
-          <h2 className="mb-3 mt-5 text-lg font-extrabold">{f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : f.spares ? "Waiting for spares" : "Latest activity"}</h2>
+          <JobFilterBar base="/dashboard" f={f} departments={departments.map((d) => ({ value: d.id, label: d.name }))} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />
+          <h2 className="mb-3 mt-5 text-lg font-extrabold">{f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : f.spares ? "Waiting for spares" : f.duplicates ? "Possible duplicates" : f.reopened ? "Reopened work" : f.unassigned ? "Unassigned jobs" : "Latest activity"}</h2>
           <JobList jobs={jobs} empty={<Empty title="Nothing here">No jobs match. <Link className="link" href="/requests/new">Report a fault</Link>.</Empty>} />
         </>
       )}

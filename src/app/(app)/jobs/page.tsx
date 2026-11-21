@@ -7,6 +7,7 @@ import { type JobFilters, listJobs, priorityCounts } from "@/server/services/job
 import { listAssignable } from "@/server/services/orgs";
 import { PRIORITY_LABEL, PRIORITY_ORDER } from "@/server/workflow";
 import { JobFilterBar } from "./filters";
+import { prisma } from "@/lib/db";
 
 export const metadata = { title: "Jobs" };
 
@@ -22,8 +23,9 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const view = tab === "history" ? "all" : f.view === "requests" ? "requests" : f.view === "jobs" ? "jobs" : "all";
   const filters: JobFilters = { ...f, view, tab };
   const manager = can(ctx, "job.viewAll");
-  const [jobs, counts, sites, techs] = await Promise.all([
+  const [jobs, counts, sites, techs, departments] = await Promise.all([
     listJobs(ctx, filters), priorityCounts(ctx, filters), manager ? listSites(ctx) : [], manager ? listAssignable(ctx) : [],
+    prisma.department.findMany({ where: { orgId: ctx.orgId, archived: false }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   // Links keep the other filters and change one value.
@@ -59,7 +61,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         ))}
       </div>
 
-      <JobFilterBar base="/jobs" view={viewParam} tab={tab === "history" ? "history" : undefined} f={f} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />
+      <JobFilterBar base="/jobs" departments={departments.map((d) => ({ value: d.id, label: d.name }))} view={viewParam} tab={tab === "history" ? "history" : undefined} f={f} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />
       <div className="mt-4">
         <JobList jobs={jobs} empty={<Empty title={tab === "history" ? "No finished jobs yet" : view === "requests" ? "No open fault reports" : "No open jobs"}>Try clearing the filters, or <Link className="link" href="/requests/new">report a fault</Link>.</Empty>} />
       </div>

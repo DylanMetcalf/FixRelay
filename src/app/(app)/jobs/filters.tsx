@@ -8,15 +8,20 @@ type Opt = { value: string; label: string };
  * GET form: filters live in the URL, so views are shareable and work without JavaScript.
  * Phones get the search box plus a "Filters" fold-out (so jobs show on the first screen); larger screens get one row.
  */
-export function JobFilterBar({ base, f, sites, techs, view, tab }: { base: string; f: JobFilters; sites: Opt[]; techs: Opt[]; view?: string; tab?: string }) {
+export function JobFilterBar({ base, f, sites, techs, view, tab, departments = [] }: { base: string; f: JobFilters; sites: Opt[]; techs: Opt[]; view?: string; tab?: string; departments?: Opt[] }) {
   const finished = (s: string) => s === "CLOSED" || s === "CANCELLED";
   const sel = "input !min-h-10 !py-1 text-sm";
-  const active = [f.status, f.siteId, f.route, f.technicianId, f.from, f.to].filter(Boolean).length;
+  const active = [f.status, f.departmentId, f.siteId, f.route, f.technicianId, f.from, f.to].filter(Boolean).length;
   const controls = (
     <>
       <select name="status" defaultValue={f.status ?? ""} aria-label="Status" className={sel}>
         <option value="">Any status</option>{Object.entries(STATUS_LABEL).filter(([v]) => (tab === "history") === finished(v)).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
+      {departments.length > 0 && (
+        <select name="departmentId" defaultValue={f.departmentId ?? ""} aria-label="Department" className={sel}>
+          <option value="">Any department</option>{departments.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
+      )}
       <select name="siteId" defaultValue={f.siteId ?? ""} aria-label="Site" className={sel}>
         <option value="">Any site</option>{sites.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
       </select>

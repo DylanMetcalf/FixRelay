@@ -12,7 +12,7 @@ import { addContractorFiles } from "./attachments";
 import type { JobStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma, type Tx } from "@/lib/db";
-import { conflict, forbidden, invalid, notFound } from "@/lib/errors";
+import { conflict, forbidden, invalid, isUniqueViolation, notFound } from "@/lib/errors";
 import { can, isManager, isStaff, jobScope, requirePerm, type Ctx } from "../permissions";
 import { issueCompletionLink, revokeJobLinks } from "./contractor-links";
 import { assertTransition, OPEN_STATUSES, REQUEST_STATUSES } from "../workflow";
@@ -20,6 +20,7 @@ import { actorOf, logEvent } from "./activity";
 import { assertWithinPlan } from "./billing";
 import { storesIds, managerIds, notify, queueEmail } from "./notifications";
 import { findSite } from "./sites";
+import { findLikelyDuplicates } from "../duplicates";
 
 const parse = <T extends z.ZodTypeAny>(s: T, v: unknown): z.output<T> => {
   const p = s.safeParse(v);
@@ -71,6 +72,9 @@ const createSchema = z.object({
   priority: priority.default("NORMAL"),
   emergency: z.boolean().default(false),
   isProject: z.boolean().default(false),
+  departmentId: optId, // responsible department, if the company uses departments
+  repeatOfId: optId, // the fault came back after this earlier job
+  submissionKey: z.string().trim().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(), // one per form: a second submit returns the same job
 });
 
 async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>, extra: Partial<Prisma.JobUncheckedCreateInput>) {
@@ -78,6 +82,10 @@ async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>
     throw invalid("That location is not at the selected site.");
   if (d.assetId && !(await tx.asset.findFirst({ where: { id: d.assetId, orgId, siteId: d.siteId } })))
     throw invalid("That equipment is not at the selected site.");
+  if (d.departmentId && !(await tx.department.findFirst({ where: { id: d.departmentId, orgId, archived: false } })))
+    throw invalid("Choose one of your departments.");
+  if (d.repeatOfId && !(await tx.job.findFirst({ where: { id: d.repeatOfId, orgId, siteId: d.siteId } })))
+    throw invalid("The earlier job for this repeat fault was not found at this site.");
   await assertWithinPlan(tx, orgId, "activeJobs");
   // Incrementing the counter locks the organisation row, so references are gap-free and unique.
   const org = await tx.organisation.update({ where: { id: orgId }, data: { jobSeq: { increment: 1 } } });
@@ -93,20 +101,61 @@ async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>
 }
 
 /** Log a fault from inside the app (any member, for a site they belong to). */
+
+export const hasRequestFiles = async (jobId: string) => (await prisma.attachment.count({ where: { jobId, kind: "REQUEST" } })) > 0;
+
+const sameSubmission = (orgId: string, key: string | undefined) => (key ? prisma.job.findFirst({ where: { orgId, submissionKey: key } }) : Promise.resolve(null));
+
+/**
+ * After a new report: link a repeat fault to its earlier job, and flag likely duplicates for a manager to review.
+ * Returns extra text for the managers' notification.
+ */
+async function afterReport(tx: Tx, orgId: string, job: { id: string; reference: string; title: string; description: string; siteId: string; locationId: string | null; assetId: string | null; category: string; reportedAt: Date; repeatOfId: string | null }, actor: Parameters<typeof logEvent>[1]) {
+  let extra = "";
+  if (job.repeatOfId) {
+    const earlier = await tx.job.findFirstOrThrow({ where: { id: job.repeatOfId, orgId }, select: { id: true, reference: true } });
+    await logEvent(tx, actor, job.id, "job.repeat", `Repeat of ${earlier.reference}: the fault came back`, { repeatOfId: earlier.id });
+    await logEvent(tx, actor, earlier.id, "job.repeat_reported", `Repeat fault reported as ${job.reference}`, { repeatJobId: job.id });
+    extra += `\nRepeat of ${earlier.reference}.`;
+  }
+  const since = new Date(Date.now() - 14 * 86_400_000);
+  const candidates = await tx.job.findMany({
+    where: { orgId, siteId: job.siteId, id: { not: job.id }, duplicateOfId: null, status: { not: "CANCELLED" },
+      OR: [{ status: { notIn: ["CLOSED"] } }, { reportedAt: { gte: since } }] },
+    select: { id: true, reference: true, title: true, description: true, locationId: true, assetId: true, category: true, reportedAt: true },
+    orderBy: { reportedAt: "desc" }, take: 200,
+  });
+  const likely = findLikelyDuplicates(job, candidates).filter((x) => x.id !== job.repeatOfId);
+  if (likely.length) {
+    await tx.job.update({ where: { id: job.id }, data: { duplicateStatus: "FLAGGED", possibleDuplicateIds: likely.map((x) => x.id) } });
+    const refs = likely.map((x) => candidates.find((c) => c.id === x.id)!.reference);
+    await logEvent(tx, actor, job.id, "duplicate.flagged", `Possible duplicate of ${refs.join(", ")} – for a manager to review`, { likely });
+    extra += `\nPossible duplicate of ${refs.join(", ")}.`;
+  }
+  return extra;
+}
 export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>, signature?: string | null) {
   requirePerm(ctx, "job.create");
   const d = parse(createSchema, input);
   const site = await findSite(ctx, d.siteId);
   if (!site || site.archived) throw invalid("Choose one of your sites.");
+  const again = await sameSubmission(ctx.orgId, d.submissionKey);
+  if (again) return again;
   return prisma.$transaction(async (tx) => {
     const job = await insertJob(tx, ctx.orgId, d, { requesterId: ctx.userId, source: "APP" });
     await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "REPORTED", name: ctx.userName, userId: ctx.userId, dataUrl: signature });
     await logEvent(tx, actorOf(ctx), job.id, "job.created", `Fault reported: ${job.title}`, { priority: d.priority, emergency: d.emergency });
+    const extra = await afterReport(tx, ctx.orgId, job, actorOf(ctx));
     await notify(tx, {
       orgId: ctx.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, ctx.orgId), exceptUserId: ctx.userId,
-      title: `${d.emergency ? "EMERGENCY: " : d.priority === "CRITICAL" ? "CRITICAL: " : ""}New fault ${job.reference} at ${site.name}`, body: job.title, eventKey: `job-created:${job.id}`,
+      title: `${d.emergency ? "EMERGENCY: " : d.priority === "CRITICAL" ? "CRITICAL: " : ""}New fault ${job.reference} at ${site.name}`, body: `${job.title}${extra}`, eventKey: `job-created:${job.id}`,
     });
     return job;
+  }).catch(async (e) => {
+    // Two submits of the same form at the same moment: the unique key lets only one in; return that one.
+    const winner = isUniqueViolation(e) ? await sameSubmission(ctx.orgId, d.submissionKey) : null;
+    if (winner) return winner;
+    throw e;
   });
 }
 
@@ -211,6 +260,13 @@ export interface JobFilters {
   spares?: string;
   /** Only faults the signed-in person reported. */
   reportedByMe?: boolean;
+  departmentId?: string;
+  /** "flagged": reports that may be duplicates. */
+  duplicates?: string;
+  /** "true": open jobs that were reopened at least once. */
+  reopened?: string;
+  /** "true": open jobs nobody is responsible for yet. */
+  unassigned?: string;
   status?: JobStatus; siteId?: string; technicianId?: string; contractorId?: string; route?: string; source?: string;
   priority?: string; from?: string; to?: string; overdue?: boolean; q?: string;
 }
@@ -225,6 +281,10 @@ function filterWhere(ctx: Ctx, f: JobFilters): Prisma.JobWhereInput {
   if (f.tab === "history") and.push({ status: { in: ["CLOSED", "CANCELLED"] } });
   if (f.spares === "waiting") and.push({ status: { notIn: ["CLOSED", "CANCELLED"] }, sparesStatus: { in: ["ON_HAND", "TO_BUY", "ORDERED"] } });
   if (f.reportedByMe) and.push({ requesterId: ctx.userId });
+  if (uuid(f.departmentId)) and.push({ departmentId: f.departmentId });
+  if (f.duplicates === "flagged") and.push({ duplicateStatus: "FLAGGED", status: { notIn: ["CLOSED", "CANCELLED"] } });
+  if (f.reopened === "true") and.push({ reopenCount: { gt: 0 }, status: { notIn: ["CLOSED", "CANCELLED"] } });
+  if (f.unassigned === "true") and.push(UNASSIGNED);
   if (f.view === "mine") and.push({ status: { in: OPEN_STATUSES }, OR: [{ leadTechnicianId: ctx.userId }, { technicians: { some: { userId: ctx.userId } } }] });
   if (f.status && f.status in { NEW: 1, ASSESSING: 1, ASSESSED: 1, QUOTING: 1, AWAITING_APPROVAL: 1, APPROVED: 1, ASSIGNED: 1, IN_PROGRESS: 1, ON_HOLD: 1, AWAITING_VERIFICATION: 1, VERIFIED: 1, CLOSED: 1, CANCELLED: 1 }) and.push({ status: f.status });
   if (uuid(f.contractorId)) and.push({ contractorId: f.contractorId });
@@ -240,6 +300,8 @@ function filterWhere(ctx: Ctx, f: JobFilters): Prisma.JobWhereInput {
   return { AND: and };
 }
 
+const UNASSIGNED: Prisma.JobWhereInput = { status: { in: OPEN_STATUSES }, ownerId: null, leadTechnicianId: null, contractorId: null };
+
 export async function listJobs(ctx: Ctx, f: JobFilters = {}, take = 100) {
   const jobs = await prisma.job.findMany({
     where: filterWhere(ctx, f),
@@ -247,7 +309,7 @@ export async function listJobs(ctx: Ctx, f: JobFilters = {}, take = 100) {
       id: true, reference: true, title: true, status: true, priority: true, emergency: true, dueAt: true, reportedAt: true,
       reporterConfirmation: true, leadTechnicianId: true, plannedStart: true, closedAt: true, route: true, source: true,
       contractorId: true, contractor: { select: { name: true } }, site: { select: { name: true } }, location: { select: { name: true } },
-      sparesStatus: true,
+      sparesStatus: true, departmentId: true, duplicateStatus: true,
       // First photo from the report, shown as a thumbnail on the job card.
       attachments: { where: { kind: "REQUEST", mimeType: { startsWith: "image/" } }, select: { id: true }, orderBy: { createdAt: "asc" }, take: 1 },
     },
@@ -272,20 +334,23 @@ export async function priorityCounts(ctx: Ctx, f: JobFilters = {}) {
 export async function dashboardCounts(ctx: Ctx, f: JobFilters = {}) {
   const where = filterWhere(ctx, { ...f, view: "all", status: undefined });
   const now = new Date();
-  const [byStatus, overdue, unowned, recentlyClosed, toScreen, sparesWaiting] = await Promise.all([
+  const [byStatus, overdue, unowned, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates] = await Promise.all([
     prisma.job.groupBy({ by: ["status"], where, _count: true }),
     prisma.job.count({ where: { AND: [where, { status: { in: OPEN_STATUSES }, dueAt: { lt: now } }] } }),
     prisma.job.count({ where: { AND: [where, { status: "NEW", ownerId: null }] } }),
     prisma.job.count({ where: { AND: [where, { status: "CLOSED", closedAt: { gte: new Date(now.getTime() - 7 * 86_400_000) } }] } }),
     prisma.job.count({ where: { AND: [where, { status: "NEW", source: "PUBLIC_LINK" }] } }),
     prisma.job.count({ where: { AND: [where, { status: { notIn: ["CLOSED", "CANCELLED"] }, sparesStatus: { in: ["ON_HAND", "TO_BUY", "ORDERED"] } }] } }),
+    prisma.job.count({ where: { AND: [where, UNASSIGNED] } }),
+    prisma.job.count({ where: { AND: [where, { reopenCount: { gt: 0 }, status: { notIn: ["CLOSED", "CANCELLED"] } }] } }),
+    prisma.job.count({ where: { AND: [where, { duplicateStatus: "FLAGGED", status: { notIn: ["CLOSED", "CANCELLED"] } }] } }),
   ]);
   const n = (s: JobStatus) => byStatus.find((x) => x.status === s)?._count ?? 0;
   return {
     newRequests: n("NEW"), unowned, awaitingAssessment: n("ASSESSING"), assessed: n("ASSESSED"), quoting: n("QUOTING"),
     awaitingApproval: n("AWAITING_APPROVAL"), awaitingAssignment: n("APPROVED"), assigned: n("ASSIGNED"),
     inProgress: n("IN_PROGRESS"), onHold: n("ON_HOLD"), awaitingVerification: n("AWAITING_VERIFICATION"),
-    readyToClose: n("VERIFIED"), overdue, recentlyClosed, toScreen, sparesWaiting,
+    readyToClose: n("VERIFIED"), overdue, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates,
   };
 }
 
@@ -531,6 +596,47 @@ export async function resumeJob(ctx: Ctx, jobId: string) {
     const to = job.heldFromStatus === "IN_PROGRESS" ? "IN_PROGRESS" : "ASSIGNED";
     await move(tx, ctx.orgId, job, to, { heldFromStatus: null, holdReason: null });
     await logEvent(tx, actorOf(ctx), job.id, "job.resumed", "Work resumed");
+  });
+}
+
+// ---------- Duplicates ----------
+
+/**
+ * A manager links a report to the job it duplicates. Nothing is deleted: the report, its reporter and its photos
+ * stay on record. A report that has not been worked on yet is closed as cancelled ("Duplicate of …").
+ */
+export async function linkDuplicate(ctx: Ctx, jobId: string, originalId: string) {
+  requirePerm(ctx, "job.manage");
+  if (jobId === originalId) throw invalid("A job cannot be a duplicate of itself.");
+  return prisma.$transaction(async (tx) => {
+    const job = await loadJob(tx, ctx, jobId);
+    const original = await loadJob(tx, ctx, originalId);
+    if (original.duplicateOfId) throw invalid(`${original.reference} is itself linked to another job. Link to the original instead.`);
+    if (job.duplicateStatus === "LINKED") throw conflict("This report is already linked.");
+    const why = `Duplicate of ${original.reference}`;
+    const r = await tx.job.updateMany({ where: { id: job.id, orgId: ctx.orgId, duplicateStatus: job.duplicateStatus }, data: { duplicateOfId: original.id, duplicateStatus: "LINKED" } });
+    if (r.count !== 1) throw conflict("Someone else just changed this job. Refresh and try again.");
+    if (REQUEST_STATUSES.includes(job.status)) {
+      await move(tx, ctx.orgId, job, "CANCELLED", { cancelReason: why });
+      await revokeJobLinks(tx, ctx.orgId, job.id);
+    }
+    await logEvent(tx, actorOf(ctx), job.id, "duplicate.linked", `Linked as a duplicate of ${original.reference}${REQUEST_STATUSES.includes(job.status) ? " and closed" : ""}`, { originalId: original.id });
+    await logEvent(tx, actorOf(ctx), original.id, "duplicate.received", `${job.reference} linked as a duplicate report of this job`, { duplicateId: job.id });
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "duplicate.linked", userIds: [job.requesterId], exceptUserId: ctx.userId,
+      title: `${job.reference} is already being handled as ${original.reference}`, body: `Your report was linked to ${original.reference}: ${original.title}`, eventKey: `dup:${job.id}`,
+    });
+  });
+}
+
+/** "Not a duplicate" – keep the reports separate and clear the warning. */
+export async function dismissDuplicate(ctx: Ctx, jobId: string) {
+  requirePerm(ctx, "job.manage");
+  return prisma.$transaction(async (tx) => {
+    const job = await loadJob(tx, ctx, jobId);
+    if (job.duplicateStatus !== "FLAGGED") throw conflict("There is no duplicate warning on this job.");
+    await tx.job.updateMany({ where: { id: job.id, orgId: ctx.orgId, duplicateStatus: "FLAGGED" }, data: { duplicateStatus: "DISMISSED" } });
+    await logEvent(tx, actorOf(ctx), job.id, "duplicate.dismissed", "Duplicate warning reviewed: kept as a separate job");
   });
 }
 

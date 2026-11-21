@@ -128,6 +128,7 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
   const membership = m ?? user.memberships[0];
   if (!membership) return { ...base, ctx: null, org: null, subscription: null };
   const sub = subscriptionState(membership.org.subscription, membership.org.isDemo);
+  const depts = await departmentsOf(membership.orgId, user.id);
   return {
     ...base,
     org: membership.org,
@@ -135,8 +136,14 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
     ctx: {
       userId: user.id, userName: user.name, userEmail: user.email, orgId: membership.orgId,
       roles: membership.roles, siteIds: membership.siteIds, support: false, locked: sub.access === "locked", emailVerified: !!user.emailVerifiedAt,
+      ...depts,
     },
   };
+}
+
+export async function departmentsOf(orgId: string, userId: string) {
+  const rows = await prisma.departmentMember.findMany({ where: { orgId, userId, department: { archived: false } }, select: { departmentId: true, isManager: true } });
+  return { departmentIds: rows.map((r) => r.departmentId), managedDepartmentIds: rows.filter((r) => r.isManager).map((r) => r.departmentId) };
 }
 
 /** Change the session's active company. Only to a company the user belongs to (or, for the platform operator, any — loadSession still demands a live support grant). */

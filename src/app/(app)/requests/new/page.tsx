@@ -9,10 +9,13 @@ import { Card, Check, Empty, Field, PageHeader, Select, TextArea } from "@/compo
 import { can } from "@/server/permissions";
 import { CATEGORIES } from "@/server/services/jobs";
 import { requestFormOptions } from "@/server/services/sites";
+import { randomUUID } from "node:crypto";
+import { prisma } from "@/lib/db";
+import { jobScope } from "@/server/permissions";
 
 export const metadata = { title: "Report a fault" };
 
-export default async function NewRequest({ searchParams }: { searchParams: Promise<{ site?: string; location?: string; asset?: string }> }) {
+export default async function NewRequest({ searchParams }: { searchParams: Promise<{ site?: string; location?: string; asset?: string; repeatOf?: string }> }) {
   const { ctx, org } = await requirePage("job.create");
   const sp = await searchParams;
   const sites = await requestFormOptions(ctx);
@@ -20,18 +23,25 @@ export default async function NewRequest({ searchParams }: { searchParams: Promi
     return <Empty title="Add a site first">A fault report needs to know where the problem is. {can(ctx, "sites.manage") ? <Link className="link" href="/sites">Add your first site</Link> : "Ask your maintenance manager to set up your site."}</Empty>;
   const fromQr = !!(sp.location || sp.asset);
   const simple = !can(ctx, "job.manage");
+  // "The fault came back": the earlier job (if the person can see it) is linked and its place is filled in.
+  const repeat = sp.repeatOf && /^[0-9a-f-]{36}$/.test(sp.repeatOf)
+    ? await prisma.job.findFirst({ where: { id: sp.repeatOf, ...jobScope(ctx) }, select: { id: true, reference: true, title: true, siteId: true, locationId: true, assetId: true } })
+    : null;
+  const departments = simple ? [] : await prisma.department.findMany({ where: { orgId: ctx.orgId, archived: false }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   return (
     <>
       <PageHeader title="Report a fault" subtitle="Tell the maintenance team what is wrong and where. Add a photo if you can." />
       <Card className="max-w-2xl">
         {/* People who only report faults get the large, simple version; maintenance staff keep the full form. */}
-        <Form action={createJobAction} className={`space-y-4${simple ? " easy" : ""}`}>
+        <Form action={createJobAction} hidden={{ submissionKey: randomUUID(), repeatOfId: repeat?.id ?? "" }} className={`space-y-4${simple ? " easy" : ""}`}>
           <Stepper>
             <Step title="What is wrong?">
-              <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Cold room door not sealing" />
+              {repeat && <p className="rounded-md bg-red-50 p-3 text-sm font-semibold text-red-950" data-testid="repeat-note">Repeat fault: this report will be linked to {repeat.reference} ({repeat.title}).</p>}
+              <Field label="What is the problem?" name="title" required maxLength={160} placeholder="e.g. Cold room door not sealing" defaultValue={repeat ? `Again: ${repeat.title}`.slice(0, 160) : undefined} />
               <TextArea label="Describe it" name="description" required rows={4} placeholder="What happened, when did it start, is anything unsafe?" />
               {!simple && <Select label="Type of problem" name="category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} />}
               {!simple && <Check name="isProject" label="This is a project (planned work, not a breakdown)" />}
+              {departments.length > 0 && <Select label="Responsible department (optional)" name="departmentId" options={[{ value: "", label: "Not set" }, ...departments.map((d) => ({ value: d.id, label: d.name }))]} />}
             </Step>
             <Step title="How urgent is it?">
               <PriorityChoice />
@@ -40,7 +50,7 @@ export default async function NewRequest({ searchParams }: { searchParams: Promi
             </Step>
             <Step title="Where is it?">
               {fromQr && <p className="rounded-md bg-blue-50 p-3 text-sm font-semibold text-blue-950">Filled in from the QR code. Change it if it is wrong.</p>}
-              <RequestPlaceFields sites={sites} initial={{ siteId: sp.site, locationId: sp.location, assetId: sp.asset }} />
+              <RequestPlaceFields sites={sites} initial={{ siteId: sp.site ?? repeat?.siteId, locationId: sp.location ?? repeat?.locationId ?? undefined, assetId: sp.asset ?? repeat?.assetId ?? undefined }} />
             </Step>
             <Step title="Add a photo">
               <p className="text-sm text-gray-700">A photo helps maintenance see the problem before they come out. You can skip this.</p>

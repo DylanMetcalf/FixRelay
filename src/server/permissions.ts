@@ -24,6 +24,9 @@ export interface Ctx {
   locked: boolean;
   /** The user's email address has been confirmed (required before emailing other people). */
   emailVerified: boolean;
+  /** Departments the member belongs to, and those they manage (department managers see and hand over that work). */
+  departmentIds?: string[];
+  managedDepartmentIds?: string[];
 }
 
 const MANAGERS: Role[] = ["OWNER", "MANAGER"];
@@ -70,6 +73,9 @@ export function requirePerm(ctx: Ctx, perm: Permission): void {
 }
 
 export const isManager = (ctx: Ctx) => can(ctx, "job.manage");
+/** Maintenance managers, or the manager of the department currently responsible for the job. */
+export const canHandOver = (ctx: Ctx, job: { departmentId: string | null }) =>
+  !ctx.support && !ctx.locked && (isManager(ctx) || (!!job.departmentId && (ctx.managedDepartmentIds ?? []).includes(job.departmentId)));
 export const isStaff = (ctx: Ctx) => ctx.support || ctx.roles.some((r) => STAFF.includes(r) || r === "APPROVER");
 
 export interface ApprovalRules { managerApprovalLimitCents: number; approverApprovalLimitCents: number | null }
@@ -95,6 +101,8 @@ export const siteFilter = (ctx: Ctx): { siteId?: { in: string[] } } => (ctx.site
  * - Owner / Manager / Approver (and audited support): every job at their sites.
  * - Technicians: jobs they lead, are added to, or reported.
  * - Requesters: jobs they reported.
+ * - Anyone: jobs handed to them as the responsible person (ownerId).
+ * - Department managers: their departments' jobs. Technicians and stores in a department: that department's queue.
  */
 export function jobScope(ctx: Ctx): Prisma.JobWhereInput {
   const base: Prisma.JobWhereInput = { orgId: ctx.orgId, ...siteFilter(ctx) };
@@ -102,5 +110,9 @@ export function jobScope(ctx: Ctx): Prisma.JobWhereInput {
   const or: Prisma.JobWhereInput[] = [{ requesterId: ctx.userId }];
   if (ctx.roles.includes("TECHNICIAN")) or.push({ leadTechnicianId: ctx.userId }, { technicians: { some: { userId: ctx.userId } } });
   if (ctx.roles.includes("STORES")) or.push({ sparesStatus: { not: "NOT_NEEDED" } }); // stores see jobs that need spares
+  or.push({ ownerId: ctx.userId });
+  const depts = new Set(ctx.managedDepartmentIds ?? []);
+  if (ctx.roles.some((r) => r === "TECHNICIAN" || r === "STORES")) for (const d of ctx.departmentIds ?? []) depts.add(d);
+  if (depts.size) or.push({ departmentId: { in: [...depts] } });
   return { ...base, OR: or };
 }

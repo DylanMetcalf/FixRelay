@@ -245,6 +245,9 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigR
       </Form>
     </D>,
   );
+  if (st === "CLOSED" && can(ctx, "job.create")) blocks.push(
+    <a key="repeat" href={`/requests/new?repeatOf=${job.id}`} className="btn btn-secondary" data-testid="report-repeat">The fault came back – report a repeat</a>,
+  );
   if (manage && st === "CLOSED") blocks.push(
     <D key="reopen" label="Reopen job"><Form action={a.reopenAction} hidden={h}><TextArea label="Why is it being reopened?" name="reason" required rows={2} /><Submit>Reopen job</Submit></Form></D>,
   );

@@ -5,6 +5,7 @@ import { switchWorkspace } from "@/server/auth";
 import { setOrgLogo } from "@/server/services/attachments";
 import { setSubscription } from "@/server/services/billing";
 import * as contractors from "@/server/services/contractors";
+import * as departments from "@/server/services/departments";
 import * as sites from "@/server/services/sites";
 import { parseRandToCents } from "@/lib/money";
 import * as orgs from "@/server/services/orgs";
@@ -157,5 +158,26 @@ export async function enterSupportAction(_: ActionState, fd: FormData) {
     await orgs.enterSupportSession(user, str(fd, "orgId"));
     await switchWorkspace((await sessionToken())!, str(fd, "orgId"));
     return { redirect: "/dashboard" };
+  });
+}
+
+export async function createDepartmentAction(_: ActionState, fd: FormData) {
+  return run(async () => { await departments.createDepartment(await requireCtx(), { name: str(fd, "name") }); return { ok: "Department added." }; });
+}
+
+export async function renameDepartmentAction(_: ActionState, fd: FormData) {
+  return run(async () => { await departments.renameDepartment(await requireCtx(), str(fd, "departmentId"), { name: str(fd, "name") }); return { ok: "Department renamed." }; });
+}
+
+export async function archiveDepartmentAction(_: ActionState, fd: FormData) {
+  return run(async () => { await departments.archiveDepartment(await requireCtx(), str(fd, "departmentId")); return { ok: "Department archived." }; });
+}
+
+export async function departmentMemberAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    const ctx = await requireCtx();
+    if (str(fd, "remove") === "1") { await departments.removeDepartmentMember(ctx, str(fd, "departmentId"), str(fd, "userId")); return { ok: "Removed from the department." }; }
+    await departments.setDepartmentMember(ctx, str(fd, "departmentId"), { userId: str(fd, "userId"), isManager: bool(fd, "isManager") });
+    return { ok: "Department updated." };
   });
 }

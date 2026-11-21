@@ -14,6 +14,7 @@ import { nextAction, ROUTE_LABEL } from "@/server/workflow";
 import { ActionsPanel } from "./actions-panel";
 import { SparesCard } from "./spares-card";
 import { DocumentsCard } from "./documents-card";
+import { DuplicatesCard, HandoverCard } from "./job-links";
 import { QuotesCard } from "./quotes-card";
 import { RequisitionCard } from "./requisition-card";
 
@@ -51,6 +52,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         {job.route !== "UNDECIDED" && <Pill tone="blue">{ROUTE_LABEL[job.route]}</Pill>}{job.isProject && <Pill tone="amber">Project</Pill>}
         {isOverdue(job) && <Pill tone="red">Overdue since {fmtDate(job.dueAt)}</Pill>}
         {job.reopenCount > 0 && <Pill tone="amber">Reopened ×{job.reopenCount}</Pill>}
+        {job.duplicateStatus === "FLAGGED" && <Pill tone="amber">Possible duplicate</Pill>}
+        {job.repeatOfId && <Pill tone="red">Repeat fault</Pill>}
+        {job.department && <Pill tone="gray">{job.department.name}</Pill>}
         {job.source === "PUBLIC_LINK" && <Pill tone="amber">Reported without an account</Pill>}
       </div>
 
@@ -67,6 +71,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
           <ActionsPanel sigRequired={!!org?.requireSignatures} job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))}
             contractors={contractors.map((c) => ({ value: c.id, label: `${c.name}${c.trade ? ` – ${c.trade}` : ""}` }))} suggestedScope={assessment?.recommendedWork || job.description} />
 
+          <DuplicatesCard job={job} ctx={ctx} />
           {(staff || can(ctx, "spares.manage")) && <SparesCard job={job} ctx={ctx} />}
 
           {can(ctx, "quote.view") && <QuotesCard ctx={ctx} jobId={job.id} sigRequired={!!org?.requireSignatures} />}
@@ -165,6 +170,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
 
         <div className="space-y-5 self-start">
           <DocumentsCard job={job} ctx={ctx} />
+          {(staff || (ctx.managedDepartmentIds?.length ?? 0) > 0) && <HandoverCard job={job} ctx={ctx} />}
           <RequisitionCard job={job} />
         <Card title="Activity history">
           <ol className="space-y-3" data-testid="timeline">

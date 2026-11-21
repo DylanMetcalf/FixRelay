@@ -5,6 +5,7 @@
  * - `processOutbox` is run by the worker (src/worker.ts). Rows are claimed with FOR UPDATE SKIP LOCKED,
  *   so several workers can run safely. Failures retry with exponential backoff, then become FAILED.
  */
+import { appUrl } from "@/lib/app-url";
 import { prisma, type Tx } from "@/lib/db";
 import { consoleTransport, type EmailTransport, renderEmailHtml } from "../email";
 
@@ -46,7 +47,7 @@ export async function notify(tx: Tx, n: NotifyInput): Promise<void> {
   await tx.outboxEmail.createMany({
     data: users.map((u) => ({
       orgId: n.orgId, toEmail: u.email, subject: n.title,
-      body: `${n.body ?? n.title}\n\nOpen Resultra to view the details.`, dedupeKey: `${n.eventKey}:${u.id}`,
+      body: `${n.body ?? n.title}\n\n${n.jobId ? `Open the job in Resultra (sign in if asked):\n${appUrl()}/jobs/${n.jobId}` : `Open Resultra:\n${appUrl()}/dashboard`}`, dedupeKey: `${n.eventKey}:${u.id}`,
     })),
     skipDuplicates: true,
   });

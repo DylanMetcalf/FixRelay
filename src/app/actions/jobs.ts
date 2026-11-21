@@ -5,6 +5,7 @@ import { parseRandToCents } from "@/lib/money";
 import { rateLimit } from "@/lib/rate-limit";
 import * as approvals from "@/server/services/approvals";
 import { addJobAttachment } from "@/server/services/attachments";
+import * as departments from "@/server/services/departments";
 import * as jobs from "@/server/services/jobs";
 import * as portal from "@/server/services/portal";
 import * as quotes from "@/server/services/quotes";
@@ -33,8 +34,10 @@ export async function createJobAction(_: ActionState, fd: FormData) {
       title: str(fd, "title"), description: str(fd, "description"), siteId: str(fd, "siteId"),
       locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), category: (str(fd, "category") || "General") as "General",
       priority: str(fd, "priority") as "NORMAL", emergency: bool(fd, "emergency"), isProject: bool(fd, "isProject"),
+      departmentId: str(fd, "departmentId"), repeatOfId: str(fd, "repeatOfId"), submissionKey: str(fd, "submissionKey") || undefined,
     }, sig(fd));
-    await attach(ctx, fd, job.id, "REQUEST");
+    // A repeated submit of the same form returns the existing job; don't attach its photos twice.
+    if (Date.now() - job.createdAt.getTime() < 60_000 && !(await jobs.hasRequestFiles(job.id))) await attach(ctx, fd, job.id, "REQUEST");
     return { redirect: `/jobs/${job.id}` };
   });
 }
@@ -127,6 +130,21 @@ export async function holdAction(_: ActionState, fd: FormData) {
 export async function resumeAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.resumeJob(await requireCtx(), id(fd)); return { ok: "Work resumed." }; });
 }
+export async function handoverAction(_: ActionState, fd: FormData) {
+  return run(async () => {
+    await departments.handOverJob(await requireCtx(), id(fd), { toDepartmentId: str(fd, "toDepartmentId") || null, toUserId: str(fd, "toUserId") || null, reason: str(fd, "reason") });
+    return { ok: "Job handed over." };
+  });
+}
+
+export async function linkDuplicateAction(_: ActionState, fd: FormData) {
+  return run(async () => { await jobs.linkDuplicate(await requireCtx(), id(fd), str(fd, "originalId")); return { ok: "Linked as a duplicate." }; });
+}
+
+export async function dismissDuplicateAction(_: ActionState, fd: FormData) {
+  return run(async () => { await jobs.dismissDuplicate(await requireCtx(), id(fd)); return { ok: "Kept as a separate job." }; });
+}
+
 export async function cancelAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.cancelJob(await requireCtx(), id(fd), { reason: str(fd, "reason") }); return { ok: "Job cancelled." }; });
 }

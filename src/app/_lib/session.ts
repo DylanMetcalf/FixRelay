@@ -21,10 +21,16 @@ export const getSession = cache(async (): Promise<SessionView | null> => loadSes
 /** For pages/actions inside the app: a signed-in user with an active company context. */
 export async function requireSession(): Promise<SessionView & { ctx: Ctx; org: NonNullable<SessionView["org"]> }> {
   const s = await getSession();
-  if (!s) redirect("/login");
+  if (!s) redirect(await loginUrl());
   if (!s.ctx || !s.org) redirect(s.user.isPlatformAdmin ? "/platform" : "/no-access");
   return s as SessionView & { ctx: Ctx; org: NonNullable<SessionView["org"]> };
 }
+/** /login, with ?next= pointing back to the page that was asked for (only same-site paths). */
+export async function loginUrl() {
+  const path = (await headers()).get("x-resultra-path") ?? "";
+  return /^\/(?!\/)[\w\-/?=&%.]*$/.test(path) && !path.startsWith("/login") ? `/login?next=${encodeURIComponent(path)}` : "/login";
+}
+
 export const requireCtx = async () => (await requireSession()).ctx;
 
 /** Page-level guard: sends users without the permission to a clear "no permission" screen. */

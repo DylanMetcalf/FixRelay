@@ -9,6 +9,8 @@ import { can } from "@/server/permissions";
 import { usage } from "@/server/services/billing";
 import { listSites } from "@/server/services/sites";
 import { listSupportGrants, listTeam } from "@/server/services/orgs";
+import { listDepartments } from "@/server/services/departments";
+import { DepartmentsCard } from "./departments";
 
 export const metadata = { title: "Settings" };
 const ROLES = [
@@ -23,11 +25,12 @@ const ROLES = [
 export default async function Settings() {
   const { ctx, subscription: sub } = await requirePage("team.view");
   const owner = can(ctx, "org.manage");
-  const [org, team, rules, grants, used, sites] = await Promise.all([
+  const [org, team, rules, grants, used, sites, depts] = await Promise.all([
     prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, include: { subscription: { include: { plan: true } } } }),
     listTeam(ctx), prisma.priorityRule.findMany({ where: { orgId: ctx.orgId } }), owner ? listSupportGrants(ctx) : [], usage(prisma, ctx.orgId),
-    listSites(ctx),
+    listSites(ctx), listDepartments(ctx, { withMembers: true }),
   ]);
+  const people = team.members.filter((m) => m.active).map((m) => ({ userId: m.user.id, name: m.user.name }));
   const plan = org.subscription?.plan;
   const lim = (n: number | null | undefined) => (n == null ? "unlimited" : n);
   return (
@@ -86,6 +89,7 @@ export default async function Settings() {
               </div>
             )}
           </Card>
+          <div id="departments"><DepartmentsCard departments={depts} people={people} canEdit={can(ctx, "team.manage")} /></div>
           {(owner || can(ctx, "sites.manage")) && (
             <Card title="Invite someone">
               <LinkForm action={a.inviteAction} submit="Send invitation" shareLabel="Invitation created">
