@@ -113,3 +113,14 @@ Closed the production gaps (reset/verification, email transports, shared storage
 ## Known issues
 
 Listed in BUILD_STATUS.md under "Known issues / limitations". None are known to break the main workflow.
+
+## Resultra release (2026-11-22) – read this first
+
+- The product is now **Resultra** ("From reported to resolved."). Start with RESULTRA_TECHNICAL_HANDOVER.md, then EXISTING_SYSTEM_AUDIT.md (what existed and why choices were made) and BUILD_STATUS.md (acceptance matrix).
+- Technical names intentionally still say `fixrelay` (cookie `fr_session`, DB names, Render services, export format id). Do not rename them without a migration plan.
+- New services: `departments.ts`, `registration.ts`, `platform.ts`; PDFs in `src/server/pdf/`; duplicate scoring in `src/server/duplicates.ts`; `logError` in `src/server/errors.ts`.
+- **react-pdf gotcha:** never put `lineHeight` on the `<Page>` style: it stops fixed footers from rendering. Put it on text styles.
+- **Sign-in gotcha:** the login page must not redirect while re-rendering for the sign-in server action (`next-action` header); the action's result navigates (full page load in `Form`).
+- **Demo view-as** is enforced in `loadSession`/`setViewAs` only; keep both checks if you touch sessions.
+- E2E tests share one browser and do not close pages, so failure screenshots can show other tests' pages. Re-run a single failing test with `-g` for a clean picture (but `journey.spec.ts` is serial: run the whole file).
+- Guides: `node scripts/guides/capture.cjs` (needs a running server and DB) then `node scripts/guides/build.cjs`.

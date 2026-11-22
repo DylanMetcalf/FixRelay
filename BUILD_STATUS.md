@@ -1,8 +1,59 @@
 # Build status
 
-Last updated: 2026-11-19. Legend: ✅ implemented and tested · 🟡 implemented, partly tested or with known limits · ❌ not started
+Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and verified by executed tests or inspection · **PARTIAL** implemented with a stated limit · **FAIL** not working · **NOT TESTED** not verified.
 
-## Internal site maintenance model (2026-11-17)
+## Resultra final acceptance criteria
+
+| # | Criterion | Status | Evidence |
+|---|---|---|---|
+| 1 | Fix Relay is correctly renamed Resultra | PASS | All customer-facing text, metadata, manifest, emails, PDFs, legal pages and help; e2e features 1–2 (title, manifest), emails in tests. Technical identifiers kept on purpose (cookie, env vars, DB, Render service) – BRAND.md |
+| 2 | The new icon is integrated | PASS | `public/brand/resultra-*.svg` (editable), favicon, Apple touch, PWA and maskable PNGs, social image, `Logo`/`Mark` components, PDF headers/footers, QR signs |
+| 3 | Existing design and functionality preserved | PASS | Colours, typography and layout unchanged; all earlier tests still pass (94 Vitest, 37 earlier e2e) after updating only tests for intended changes (new QR links, optional phone, demo bar) |
+| 4 | QR reporting works without login | PASS | S8, S9, journey 3, R13, R16; `qr.test.ts` |
+| 5 | Correct site and area identification | PASS | Short codes per site/area/machine resolve to the right place (S8, `qr.test.ts`); old links still resolve until replaced |
+| 6 | Employee registration and approval work | PASS | S5, S6, `registration.test.ts` |
+| 7 | Department assignment and handovers work | PASS | S7, S12, `departments.test.ts` |
+| 8 | Email notification links are correct | PASS | S13 (link → sign in → job), `departments.test.ts` (link in body); live delivery: see #22 |
+| 9 | Managers can oversee job progress | PASS | Dashboard tiles incl. unassigned, duplicates, reopened, completed; department filter; board (B1); S10 |
+| 10 | Duplicate reports can be reviewed | PASS | S10, `departments.test.ts` |
+| 11 | Closed jobs can be reopened | PASS | S18, journey 1 |
+| 12 | Active job cards can be viewed, printed and downloaded | PARTIAL | Viewing and downloading are verified (D1, D2, D7). Print: the Print button calls the browser's print on the framed PDF (falls back to opening it in a new tab), and every PDF is print-ready A4; the browser print dialog itself cannot be driven by the headless test browser and was **not tested** |
+| 13 | Job-card PDFs use the correct Resultra design | PASS | Visual inspection of rendered pages; header/footer/brand text asserted in `documents.test.ts`, D2 |
+| 14 | Reported photographs appear correctly | PASS | Image count and proportions (`documents.test.ts`, D3); visual check: no stretching or cropping |
+| 15 | Completed job reports work | PASS | D4, S20, `documents.test.ts` |
+| 16 | Job history is preserved | PASS | Append-only audit tables (trigger tests), handover append-only test, history PDF (S20, `documents.test.ts`) |
+| 17 | Platform administration is functional | PASS | S1, S2, S4, `platform-demo.test.ts`; PLATFORM_ADMIN_GUIDE |
+| 18 | Demo data is isolated | PASS | Separate demo companies, synthetic data, no email (`platform-demo.test.ts`), view-as limited to demo (forged-session test), V1 |
+| 19 | Automated tests are executed | PASS | 94/94 Vitest, 65/65 Playwright (TESTING.md) |
+| 20 | Critical security defects are resolved | PASS | No known critical defects; production `npm audit` 0; isolation tests (S19, security suite); dev-only tool advisories listed in TESTING.md. An independent penetration test is still recommended |
+| 21 | Screenshot-based documentation is created | PASS | `docs/RESULTRA_USER_GUIDE.pdf` (17 pp), `RESULTRA_SITE_ADMIN_GUIDE.pdf` (12 pp), `RESULTRA_PLATFORM_ADMIN_GUIDE.pdf` (6 pp), `RESULTRA_PILOT_TESTING_GUIDE.pdf` (3 pp), screenshots in `docs/screenshots`, rebuilt by `scripts/guides/*` |
+| 22 | Render and Resend setup instructions are complete | PARTIAL | DEPLOYMENT.md has the full steps (Render Blueprint, PDFs without a browser, files in Postgres, custom domain/HTTPS, backups, monitoring, Resend domain/DNS/key/sender). Not done from here: buying the Resultra domain, verifying it in Resend, and a live delivery test on it |
+| 23 | Deployed and smoke-tested | see release notes in TESTING.md | The Render demo was redeployed from this branch at release time |
+
+## Resultra features delivered
+
+| Area | Status | Notes |
+|---|---|---|
+| Existing system audit + checkpoint | PASS | EXISTING_SYSTEM_AUDIT.md; checkpoint commit `f3da29a` |
+| Branded PDF documents (job card, completion report, history, QR signs) | PASS | PDF_DOCUMENTATION.md |
+| Departments, department managers, handovers | PASS | |
+| Employee self-registration with codes and approval | PASS | Profile photo optional; stored privately |
+| QR: short codes, optional contact, double-submit guard, spam trap, safety notice | PASS | |
+| Duplicate review and repeat faults | PASS | Rule-based, never automatic merging |
+| Dashboard additions and department filter | PASS | |
+| Email links and return after sign-in | PASS | |
+| Platform admin | PASS | Account metadata only; companies list limited to newest 50 + search |
+| Demo personas, view as, reset, no email | PASS | Reset archives (append-only audit rows are never deleted) |
+| Pilot environment | PARTIAL | Pilot companies are created in Platform admin; a separate staging service is documented but was not provisioned from here |
+
+## Deferred features and next priorities
+1. Provision the paid Render Blueprint (the free demo database expires 2026-12-17), buy and connect the domain, verify Resend, live email test.
+2. Usability sessions with real site staff using the pilot guide; fix wording and flow issues found.
+3. Independent security review / penetration test; nonce-based CSP.
+4. Upgrade vitest (dev-only advisories) and build the Docker image once.
+5. Possible next features (only if pilot feedback asks): scheduled preventive maintenance, push notifications, offline data entry, customer-specific document logos on PDFs.
+
+## Earlier: internal site maintenance model (2026-11-17)
 
 Resultra was changed from a tool for maintenance *contractors serving customers* into an **internal maintenance system for a company's own sites**. Defaults chosen (the plan's recommendations): several sites per subscriber; spending limits by amount with optional PO numbers; three quotes above a limit the company sets (or a written reason); the reporter confirms the fix and the manager closes; reporting without an account behind a setting (off by default); this replaces the contractor-facing version.
 

@@ -1,4 +1,4 @@
-# One-click deployment on Render (render.com): Blueprint → New → connect this repository.
+# Resultra (formerly FixRelay). One-click deployment on Render (render.com): Blueprint → New → connect this repository.
 # Uses one web service with the background worker running in-process (WORKER_IN_PROCESS=true) and a Postgres
 # database. Files are stored in Postgres (STORAGE_DRIVER=db), so no extra storage service is needed to start.
 # Set the "sync: false" values in the Render dashboard. Antivirus: add a ClamAV private service and set CLAMAV_HOST.

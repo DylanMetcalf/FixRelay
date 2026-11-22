@@ -182,6 +182,8 @@ async function pdfToPng(url, p, name, pages = "1") {
   await el(admin, '[data-testid="department-card"]', "handover-form");
   await h.getByRole("button", { name: "Hand over" }).click();
   await admin.waitForLoadState("networkidle"); await admin.waitForTimeout(800);
+  const opsPage = await signIn(opsEmail);
+  await go(opsPage, "/dashboard"); await shot(opsPage, "department-queue");
   await (await panel(admin, "Fix it in-house")).getByRole("button", { name: "Give to the in-house team" }).click();
   await admin.waitForLoadState("networkidle"); await admin.waitForTimeout(800);
   const as = await panel(admin, "Assign a technician");
@@ -223,8 +225,6 @@ async function pdfToPng(url, p, name, pages = "1") {
   await go(admin, "/dashboard"); await shot(admin, "dashboard");
   await go(admin, "/jobs"); await shot(admin, "jobs-board");
   await go(admin, dupUrl); await shot(admin, "duplicate-job");
-  const opsPage = await signIn(opsEmail);
-  await go(opsPage, "/dashboard"); await shot(opsPage, "department-queue");
   await go(op, "/platform"); await shot(op, "platform-overview");
   await go(op, `/platform/${org.id}`); await shot(op, "platform-customer", { fullPage: true });
   await go(admin, "/sites"); await go(admin, `/sites/${site.id}/qr`); await shot(admin, "qr-stickers");

@@ -44,5 +44,6 @@ The paper-style **requisition form** (`/jobs/:id/report`) remains as a browser p
 
 ## Known limits
 - The QR code inside the PDF is verified through its link annotation (same URL), not by decoding the image.
+- The browser print dialog (Print button) is not covered by automated tests: headless Chromium has no PDF viewer. The PDFs themselves are A4 and print-ready.
 - Up to 4 photos on the job card and 6 after photos on the completion report; the rest are counted and remain in the digital record.
 - Right-to-left scripts are not supported by the bundled font set.

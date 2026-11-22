@@ -24,17 +24,43 @@ npm run build && npm run test:e2e # starts `next start -p 3100` against the test
 npm run typecheck
 ```
 
-## Results (last run: 2026-11-19, after adding priority, the Open/History board and spares/stores; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
+## Results (last run: 2026-11-22, Resultra release; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
 
 - `npm run typecheck`: **pass**
-- `npm test` (with `CLAMAV_TEST_PORT=3310`): **76 / 76 passed**, 8 files (incl. `spares.test.ts`: priority kept on QR reports and critical alerts, board order/counts/history/photo, spares notify stores of that site and managers, stores see only jobs needing spares, order → receive and issue transitions, permissions, mid-job requests; and `requisition.test.ts`: every signature line enforced when required, root cause, food-area check, numbering that never goes backwards, append-only signatures, contractor and public signatures)
-- `npm run test:e2e`: **37 / 37 passed** (4 journeys, 15 feature tests, 16 requisition tests in `e2e/requisition.spec.ts`, 2 board/spares tests in `e2e/board.spec.ts`), about 3.8 minutes
+- `npm test` (with `CLAMAV_TEST_PORT=3310`): **94 / 94 passed**, 13 files. New: `documents.test.ts` (5: job card content, A4, multi-page, photos, footer link, completion rules, history and price permissions, isolation), `departments.test.ts` (5: departments, department scope, handover record and notifications, duplicate scoring, flag/link/dismiss, repeat faults, double submit), `registration.test.ts` (2: codes, pending requests, email confirmation, approval, decline, expiry, replacement), `qr.test.ts` (3: short codes, legacy links, rotation, name-only and idempotent QR reports, QR sign PDF), `platform-demo.test.ts` (3: customer creation and invitation, account-metadata overview, demo personas, no demo email, view-as restrictions, reset).
+- `npm run test:e2e`: **65 / 65 passed** (15 features, 4 journeys, 16 requisition, 2 board/spares, **28 in `e2e/resultra.spec.ts`**). In the last complete run 62 passed, 2 failed because they still used the pre-upgrade QR link format, and 1 did not run because it depends on an earlier test in the same serial file; after updating the two tests, those 3 were re-run and passed (`journey.spec.ts` 4/4, R16).
 - `npm run build`: **pass**
-- `npm audit --omit=dev`: **0 vulnerabilities**
-- Broad audit (30 screens × desktop/phone, WCAG 2.1 AA, sideways scroll, console and HTTP errors, cross-company and signed-out security probes): **no findings** in rounds 4 and 5 – see AUDITS.md
+- `npm audit --omit=dev`: **0 vulnerabilities**. `npm audit` (including dev tools) lists advisories in `vitest`/`tinypool`/`@vitest/mocker` and `s3rver` (`busboy`/`dicer`, `fast-xml-parser`): these are test-only tools that never ship to production; fixing them needs a vitest major upgrade (follow-up). `effect` (Prisma CLI) is pinned to 3.22.4 for GHSA-7589-6fvf-x4pw.
 - `prisma migrate diff` (migrations vs schema): **no drift**
-- axe-core WCAG 2.1 AA: **0 violations** on the main screens at desktop and phone sizes (e2e test 14)
-- **Live demo** (https://fixrelay-demo.onrender.com, commit `ae1a87a`): smoke test passed: landing, manifest and service worker, CSP/HSTS, sign-up (`__Host-` cookie, confirmation email sent through Resend), demo workspace, the contractor job with its quote comparison, site report link, QR sheet, and an anonymous phone report through the QR link (reference shown). Note: in the build sandbox the browser could not load page scripts whose path contains `(app)` plus an ID (the sandbox's network re-encoded the path); fetched from outside the sandbox the same file returns 200, so the smoke test routes static files through Playwright's own network stack. One React hydration warning (#418) was seen once on the live jobs list and did not reproduce in five later runs or locally with a different timezone/language.
+- PDFs: generated documents were checked with pdf.js in tests and rendered to images with `pdftoppm` for visual inspection (layout, page breaks, photo proportions, footer on every page).
+
+### The 20 required pilot scenarios (e2e/resultra.spec.ts)
+
+| # | Scenario | Test | Result |
+|---|---|---|---|
+| 1 | Platform administrator login | S1 (lands on /platform; others are refused) | Pass |
+| 2 | Customer company creation | S2 (trial, site, departments, listed) | Pass |
+| 3 | Site creation | S3 (short QR link, QR signs PDF) + journey 1 | Pass |
+| 4 | Site administrator invitation | S4 (invitation email → accept → administrator tools; platform shows contact joined) | Pass |
+| 5 | Employee registration | S5 (code → pending; no company pages; bad code refused) | Pass |
+| 6 | Employee approval | S6 (approval blocked until email confirmed; role + department; profile prefilled) | Pass |
+| 7 | Department permissions | S7 (department manager sees own department's job, 404 on another's) | Pass |
+| 8 | Public QR reporting | S8 (area code, name only, photo) + journey 3, R13, R16 | Pass |
+| 9 | Incorrect or abusive public submissions | S9 (bad link, empty description, short phone, disguised file, spam trap, HTML shown as text) | Pass |
+| 10 | Duplicate report handling | S10 (flag, dashboard tile, link, original keeps the record) | Pass |
+| 11 | Maintenance request triage | S11 (urgency change, send for assessment) | Pass |
+| 12 | Department handover | S12 (reason, department change, timeline, record) | Pass |
+| 13 | Email notification link behaviour | S13 (email link → sign in → same job; external `next` refused) | Pass |
+| 14 | Quotation workflow | S14 (capture quote, approve within limit, contractor appointed, VAT) + journey 2 | Pass |
+| 15 | Technician job execution | S15 (phone: start work, progress note) | Pass |
+| 16 | Completion evidence submission | S16 (after photo, root cause) | Pass |
+| 17 | Verification and closure | S17 (reporter confirms, manager closes) | Pass |
+| 18 | Reopening a closed job | S18 (reason, closure kept, repeat fault linked) | Pass |
+| 19 | Cross-customer data isolation | S19 (pages, PDFs, files, photos, QR signs) + journey 4 | Pass |
+| 20 | Full maintenance lifecycle | S20 (report with photo → close → all three PDFs) + journey 1 | Pass |
+
+### Job document tests
+D1 document buttons and in-app viewer (frame source is a same-origin PDF) · D2 downloaded job card: A4, file name, headers, company/site/job data, status, generation time · D3 photo rendering and multi-page flow with footers · D4 completion report after closure · D5 permissions (401/403/404/409) · D6 the QR/link on a card opens the job only after sign-in · D7 phone layout. V1 covers the demo "view as" flow.
 
 ### What the browser journeys cover (e2e/journey.spec.ts)
 1. **In-house, with the digital requisition**: register → confirm email → add a site with locations → set requisition numbering to 12600 and require signatures → invite a technician and a fault reporter (phone) → the reporter reports a fault with a photo → the manager sends it for assessment → the technician assesses on a phone (no prices shown) → "Fix it in-house" → assign → start, log time → finishing without an after-photo is refused → the reporter answers "Is it fixed?" from their dashboard → the manager cannot close before that → every step signed on screen (submitted by, received by maintenance, completed by with a root cause, confirmed by originator, signed off by the manager) → the filled-in requisition shows number 12600, each line, the ticked root cause and all five signature images → Insights count → reopen with a reason.
@@ -61,6 +87,11 @@ R1 guided report: steps checked, Back keeps answers, Edit from the review · R2 
 1 landing page → sign-up, signed-in users skip it, legal pages · 2 PWA manifest, icons, shortcuts, screenshots, active service worker · 3 offline page; nothing tenant-specific cached; first visit does not reload · 4 email confirmation gate and unlock · 5 forgot password (no enumeration, single use, input kept on error, old password rejected) · 6 bogus/expired links explained · 7 show/hide password · 8 photo GPS stripped and PDF scripts refused through the UI · 9 three-quote rule: approving with fewer quotes above the threshold needs a written reason, which is kept in the history (quote captured from an email) · 10 technician on a phone: bottom nav, alert badge, opening the job clears it · 11 report metrics with definitions; CSV formula-injection safe · 12 company data export (no secrets; others refused; audited) · 13 rate limiting · 14 axe WCAG 2.1 AA on main screens (desktop and phone) · 15 security headers, `__Host-` cookie, minimal health, session rotation, forms never GET
 
 ## Known gaps in testing (honest list)
+
+- Automated tests do not replace real usability testing with site staff or an independent security review.
+- The QR image inside PDFs is checked through its link annotation, not by decoding the image.
+- Live email delivery through Resend was not exercised from the sandbox in this release (transport tested against an HTTP stand-in; the earlier demo deployment delivered through Resend).
+- Docker images were not built (no Docker in the sandbox).
 
 - No load or performance tests. Reports aggregate in application code (capped at 5,000 rows per query).
 - PWA installability was verified by manifest, icon and service-worker checks in Chromium, not by installing on a physical iOS/Android device. **Offline data entry is not supported**: the service worker shows an offline page.
