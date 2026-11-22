@@ -42,7 +42,7 @@ export function PriorityChoice({ defaultValue = "NORMAL" }: { defaultValue?: str
   return (
     <fieldset data-testid="priority-choice">
       {/* The step title already asks the question; the legend names the group for screen readers. */}
-      <legend className="sr-only">How urgent is it?</legend>
+      <legend className="sr-only">Urgency</legend>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {PRIORITY_ORDER.map((p) => (
           <label key={p} className="choice" data-summary={`${PRIORITY_LABEL[p]} – ${PRIORITY_HELP[p].toLowerCase()}`}>

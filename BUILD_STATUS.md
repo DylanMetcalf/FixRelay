@@ -28,7 +28,7 @@ Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and ve
 | 20 | Critical security defects are resolved | PASS | No known critical defects; production `npm audit` 0; isolation tests (S19, security suite); dev-only tool advisories listed in TESTING.md. An independent penetration test is still recommended |
 | 21 | Screenshot-based documentation is created | PASS | `docs/RESULTRA_USER_GUIDE.pdf` (17 pp), `RESULTRA_SITE_ADMIN_GUIDE.pdf` (12 pp), `RESULTRA_PLATFORM_ADMIN_GUIDE.pdf` (6 pp), `RESULTRA_PILOT_TESTING_GUIDE.pdf` (3 pp), screenshots in `docs/screenshots`, rebuilt by `scripts/guides/*` |
 | 22 | Render and Resend setup instructions are complete | PARTIAL | DEPLOYMENT.md has the full steps (Render Blueprint, PDFs without a browser, files in Postgres, custom domain/HTTPS, backups, monitoring, Resend domain/DNS/key/sender). Not done from here: buying the Resultra domain, verifying it in Resend, and a live delivery test on it |
-| 23 | Deployed and smoke-tested | see release notes in TESTING.md | The Render demo was redeployed from this branch at release time |
+| 23 | Deployed and smoke-tested | PASS | Render demo redeployed from this branch (commit `7150ac2`); live smoke test passed (TESTING.md). The demo runs on Render's free tier; move to the paid Blueprint for the pilot |
 
 ## Resultra features delivered
 

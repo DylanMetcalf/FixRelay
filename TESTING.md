@@ -32,6 +32,7 @@ npm run typecheck
 - `npm run build`: **pass**
 - `npm audit --omit=dev`: **0 vulnerabilities**. `npm audit` (including dev tools) lists advisories in `vitest`/`tinypool`/`@vitest/mocker` and `s3rver` (`busboy`/`dicer`, `fast-xml-parser`): these are test-only tools that never ship to production; fixing them needs a vitest major upgrade (follow-up). `effect` (Prisma CLI) is pinned to 3.22.4 for GHSA-7589-6fvf-x4pw.
 - `prisma migrate diff` (migrations vs schema): **no drift**
+- **Live smoke test** (https://fixrelay-demo.onrender.com, commit `7150ac2`, 2026-11-22): title and heading "Resultra – From reported to resolved.", manifest and icon, sign-up, demo workspace with demo bar, job card PDF download (`RESULTRA_JobCard_12602.pdf`, application/pdf), history PDF, short site link `/r/<code>`, QR signs PDF, "view as" the finance approver, and an anonymous phone report through the QR link with the demo's required signature (report number shown). Static files were routed through Playwright's network stack because of a sandbox network quirk (see earlier notes).
 - PDFs: generated documents were checked with pdf.js in tests and rendered to images with `pdftoppm` for visual inspection (layout, page breaks, photo proportions, footer on every page).
 
 ### The 20 required pilot scenarios (e2e/resultra.spec.ts)
