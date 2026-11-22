@@ -4,8 +4,8 @@ import { defineConfig } from "vitest/config";
 const TEST_DB = process.env.TEST_DATABASE_URL ?? "postgresql://fixrelay:fixrelay@localhost:5432/fixrelay_test";
 
 export default defineConfig({
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
-  esbuild: { jsx: "automatic" }, // same JSX runtime as Next.js (used by the PDF documents)
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+  oxc: { jsx: { runtime: "automatic" } }, // same JSX runtime as Next.js (used by the PDF documents)
   test: {
     include: ["tests/**/*.test.ts"],
     fileParallelism: false,

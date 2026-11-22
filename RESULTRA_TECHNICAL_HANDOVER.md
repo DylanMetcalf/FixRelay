@@ -113,5 +113,5 @@ See BUILD_STATUS.md for the PASS/PARTIAL table. Main items:
 2. Docker image not built in the sandbox (no Docker there).
 3. Real-user usability testing and an independent security review / penetration test before general release.
 4. Content-Security-Policy still allows inline scripts (nonce-based CSP is a roadmap item).
-5. Dev-only npm advisories (vitest mocker, s3rver/dicer) affect test tooling only; production dependencies report 0.
+5. `npm audit` reports 0 vulnerabilities for all dependencies, dev tools included (vitest upgraded to 5.1 and `s3rver` replaced by `tests/s3-mock.ts` on 2026-11-22).
 6. Push notifications, offline data entry and native apps are out of scope.

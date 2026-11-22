@@ -25,7 +25,7 @@ Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and ve
 | 17 | Platform administration is functional | PASS | S1, S2, S4, `platform-demo.test.ts`; PLATFORM_ADMIN_GUIDE |
 | 18 | Demo data is isolated | PASS | Separate demo companies, synthetic data, no email (`platform-demo.test.ts`), view-as limited to demo (forged-session test), V1 |
 | 19 | Automated tests are executed | PASS | 94/94 Vitest, 65/65 Playwright (TESTING.md) |
-| 20 | Critical security defects are resolved | PASS | No known critical defects; production `npm audit` 0; isolation tests (S19, security suite); dev-only tool advisories listed in TESTING.md. An independent penetration test is still recommended |
+| 20 | Critical security defects are resolved | PASS | No known critical defects; full `npm audit` 0 (production and dev tools); isolation tests (S19, security suite). An independent penetration test is still recommended |
 | 21 | Screenshot-based documentation is created | PASS | `docs/RESULTRA_USER_GUIDE.pdf` (17 pp), `RESULTRA_SITE_ADMIN_GUIDE.pdf` (12 pp), `RESULTRA_PLATFORM_ADMIN_GUIDE.pdf` (6 pp), `RESULTRA_PILOT_TESTING_GUIDE.pdf` (3 pp), screenshots in `docs/screenshots`, rebuilt by `scripts/guides/*` |
 | 22 | Render and Resend setup instructions are complete | PARTIAL | DEPLOYMENT.md has the full steps (Render Blueprint, PDFs without a browser, files in Postgres, custom domain/HTTPS, backups, monitoring, Resend domain/DNS/key/sender). Not done from here: buying the Resultra domain, verifying it in Resend, and a live delivery test on it |
 | 23 | Deployed and smoke-tested | PASS | Render demo redeployed from this branch (commit `7150ac2`); live smoke test passed (TESTING.md). The demo runs on Render's free tier; move to the paid Blueprint for the pilot |
@@ -50,7 +50,7 @@ Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and ve
 1. Provision the paid Render Blueprint (the free demo database expires 2026-12-17), buy and connect the domain, verify Resend, live email test.
 2. Usability sessions with real site staff using the pilot guide; fix wording and flow issues found.
 3. Independent security review / penetration test; nonce-based CSP.
-4. Upgrade vitest (dev-only advisories) and build the Docker image once.
+4. Build the Docker image once. (Done 2026-11-22: vitest upgraded 3.2 → 5.1 and `s3rver` replaced by an in-process S3 stand-in that checks request signatures; full `npm audit` now reports 0 vulnerabilities, 94/94 Vitest tests pass. See TESTING.md.)
 5. Possible next features (only if pilot feedback asks): scheduled preventive maintenance, push notifications, offline data entry, customer-specific document logos on PDFs.
 
 ## Earlier: internal site maintenance model (2026-11-17)

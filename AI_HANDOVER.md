@@ -91,7 +91,7 @@ npm install && cp .env.example .env && npx prisma migrate deploy
 npm run dev
 ```
 
-Test DB: `fixrelay_test` (see `vitest.config.ts`, `playwright.config.ts`). In the original build environment Postgres was started with `service postgresql start`, with a role `fixrelay`/`fixrelay` owning `fixrelay_dev` and `fixrelay_test`.
+Test DB: `fixrelay_test` (see `vitest.config.mts`, `playwright.config.ts`). In the original build environment Postgres was started with `service postgresql start`, with a role `fixrelay`/`fixrelay` owning `fixrelay_dev` and `fixrelay_test`.
 Prisma refuses `migrate reset` when driven by an AI agent without explicit user consent. That is intentional: tests use `migrate deploy` and unique data instead of resets.
 
 ## Completed work

@@ -4,7 +4,6 @@ import type { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { SMTPServer } from "smtp-server";
-import S3rver from "s3rver";
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
@@ -19,6 +18,7 @@ import { addJobAttachment, readAttachment } from "@/server/services/attachments"
 import { processOutbox, purgeRetention } from "@/server/services/notifications";
 import * as orgs from "@/server/services/orgs";
 import { assessedJob, code, newJob, PNG, tenant, uniq } from "../helpers";
+import { type MockS3, startMockS3 } from "../s3-mock";
 import * as quotes from "@/server/services/quotes";
 
 const PASSWORD = "correct-horse-battery";
@@ -147,19 +147,44 @@ describe("file storage drivers", () => {
     await expect(s.put("../../etc/passwd", PNG, "image/png")).rejects.toThrow(/Invalid storage key/);
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let s3: any;
+  let s3: MockS3 | undefined;
   afterAll(async () => { await s3?.close(); });
-  it("s3 driver works against an S3-compatible server (s3rver)", async () => {
-    s3 = new S3rver({ port: 0, address: "127.0.0.1", silent: true, directory: `./.storage-test/s3-${uniq()}`, configureBuckets: [{ name: "fixrelay-test", configs: [] }] });
-    const { port } = (await s3.run()) as AddressInfo;
-    const st = new S3Storage("fixrelay-test", { region: "us-east-1", endpoint: `http://127.0.0.1:${port}`, accessKeyId: "S3RVER", secretAccessKey: "S3RVER", forcePathStyle: true });
+  it("s3 driver signs, stores and reads objects against an S3-compatible endpoint (in-process mock)", async () => {
+    const creds = { accessKeyId: "TESTKEY", secretAccessKey: "test-secret-key" };
+    s3 = await startMockS3({ buckets: ["fixrelay-test"], ...creds });
+    const cfg = { region: "us-east-1", endpoint: s3.endpoint, forcePathStyle: true, ...creds };
+    const st = new S3Storage("fixrelay-test", cfg);
+    const k = key();
+    const big = Buffer.concat([PNG, Buffer.alloc(3 * 1024 * 1024, 7)]);
+    process.env.S3_SSE = "AES256";
+    try { await st.put(k, big, "image/png"); } finally { delete process.env.S3_SSE; }
+    expect(s3.objects.get(`fixrelay-test/${k}`)).toMatchObject({ contentType: "image/png", sse: "AES256" });
+    expect((await st.get(k)).equals(big)).toBe(true);
+    await expect(st.get(key())).rejects.toThrow(/NoSuchKey|does not exist/);
+    // Wrong secret, unknown bucket and unsafe keys are refused.
+    await expect(new S3Storage("fixrelay-test", { ...cfg, secretAccessKey: "wrong" }).put(key(), PNG, "image/png")).rejects.toThrow(/SignatureDoesNotMatch|signature/i);
+    await expect(new S3Storage("other-bucket", cfg).put(key(), PNG, "image/png")).rejects.toThrow(/NoSuchBucket|does not exist/);
+    await expect(st.put("../x", PNG, "image/png")).rejects.toThrow(/Invalid storage key/);
+    expect(s3.objects.size).toBe(1);
+    // Configured through the environment, as in production.
+    const fromEnv = createStorage({ STORAGE_DRIVER: "s3", S3_BUCKET: "fixrelay-test", S3_REGION: "us-east-1", S3_ENDPOINT: s3.endpoint, S3_ACCESS_KEY_ID: creds.accessKeyId, S3_SECRET_ACCESS_KEY: creds.secretAccessKey, S3_FORCE_PATH_STYLE: "true" } as unknown as NodeJS.ProcessEnv);
+    expect((await fromEnv.get(k)).equals(big)).toBe(true);
+    expect(() => createStorage({ STORAGE_DRIVER: "s3" } as unknown as NodeJS.ProcessEnv)).toThrow(/S3_BUCKET/);
+  });
+
+  // Optional: the same round trip against a real S3-compatible service (e.g. `docker run -p 9000:9000 minio/minio server /data`
+  // with a bucket created), enabled by S3_TEST_ENDPOINT, S3_TEST_BUCKET, S3_TEST_ACCESS_KEY_ID and S3_TEST_SECRET_ACCESS_KEY.
+  const real = process.env.S3_TEST_ENDPOINT;
+  it.skipIf(!real)("s3 driver round-trips against a real S3-compatible service (S3_TEST_ENDPOINT)", async () => {
+    const st = new S3Storage(process.env.S3_TEST_BUCKET ?? "fixrelay-test", {
+      region: process.env.S3_TEST_REGION ?? "us-east-1", endpoint: real, forcePathStyle: true,
+      accessKeyId: process.env.S3_TEST_ACCESS_KEY_ID, secretAccessKey: process.env.S3_TEST_SECRET_ACCESS_KEY,
+    });
     const k = key();
     const big = Buffer.concat([PNG, Buffer.alloc(3 * 1024 * 1024, 7)]);
     await st.put(k, big, "image/png");
     expect((await st.get(k)).equals(big)).toBe(true);
     await expect(st.get(key())).rejects.toThrow();
-    expect(() => createStorage({ STORAGE_DRIVER: "s3" } as unknown as NodeJS.ProcessEnv)).toThrow(/S3_BUCKET/);
   });
 });
 
