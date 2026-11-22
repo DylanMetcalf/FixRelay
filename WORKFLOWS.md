@@ -2,7 +2,7 @@
 
 Source of truth: `src/server/workflow.ts` (`TRANSITIONS`, `nextAction`). Enforcement: `jobs.ts → move()` (a guarded `UPDATE … WHERE status = <status read>`) plus a permission check on every action.
 
-FixRelay is an **internal** maintenance system for a company with one or more sites. Someone on site reports a fault; the maintenance team either fixes it **in-house** or gets **contractor quotes**; the job is tracked until the person who reported it confirms it is fixed.
+Resultra is an **internal** maintenance system for a company with one or more sites. Someone on site reports a fault; the maintenance team either fixes it **in-house** or gets **contractor quotes**; the job is tracked until the person who reported it confirms it is fixed.
 
 ## The two routes
 
@@ -97,6 +97,34 @@ Quote sign-off is also signed (`APPROVAL`) and shown on page 2 with the quotes, 
   - While an in-house job is approved, assigned, in progress or on hold and its spares are not ready, "What happens next" says Stores is responsible (issue, order, or waiting for delivery).
 - **Jobs board**: Open now (anything not closed or cancelled, most urgent first) and History (closed and cancelled, newest first), filtered by priority with counts.
 
+## Departments and handovers
+
+- A **department** (Maintenance, Operations, Management, Finance …) groups people. It is separate from the **role** (what someone may do), the **job status** (stage of work) and the **job owner** (who is responsible right now).
+- A job may belong to a department (chosen when reporting, by maintenance staff, or by handover).
+- **Hand over** (job page → Department → *Hand over this job*): choose a department and/or a person and give the reason or next action. Allowed for maintenance managers and the manager of the department currently responsible. It records who passed it on, from/to department and person, the reason and the time (append-only `JobHandover`), updates the job's department and responsible person, adds a timeline entry, and notifies **only the receiver** (the person, or that department's managers; all its members if it has no manager).
+- Department managers see their department's open work on the dashboard; technicians and stores in a department see its jobs.
+
+## Duplicates, repeat faults and reopening
+
+- Every new report (app or QR) is compared with open or recent (14 days) jobs at the same site: different area or machine means "not a duplicate"; otherwise word overlap of title and description, same machine/area, same category and reporting within 48 hours add up to a score. At 0.4 or more (with similar wording), the report is **flagged** (`duplicateStatus = FLAGGED`) and up to three likely originals are listed. Managers are told in the new-report notification.
+- A manager reviews it on the job page (*Related reports*), comparing the original submissions, then either **links it** to the original (the report stays on record with its reporter and photos; if no work has started it is closed as cancelled "Duplicate of …") or marks **"Not a duplicate – keep separate"**. Nothing is merged or deleted automatically.
+- **Repeat fault:** on a closed job, *The fault came back – report a repeat* opens the report form linked to it (`repeatOfId`); both jobs show the link and the earlier job's closure record is untouched.
+- **Reopen** (managers): needs a reason; the original completion, verification and closure stay in the history.
+
+## Public QR reporting
+
+- Each site, area and machine has a short random code: `/r/{code}`. Old `/r/{token}?l=…` links keep working until the site's link is replaced (which replaces every code for that site).
+- The reporter gives a description (an optional "kind of problem" tap), confirms the place, may add up to three photos, and gives a name; phone and email are optional. They get a reference number on screen (and by email if given).
+- Protection: rate limits per IP and per site, a hidden spam-trap field, one-time submission keys (double taps never create two reports), images-only uploads that are decoded, re-encoded and virus-scanned.
+- Signed-in members who scan a code go to the full report form with the place filled in. When public reporting is off, people are asked to sign in.
+
+## Employee registration and approval
+
+1. The site administrator creates a **registration code** (Settings → Registration codes) for the company or one site, valid for 1–365 days. Codes can be switched off or replaced at any time.
+2. Employees open `/join`, enter the code, and give name, work email, password, department and optionally job title, phone and photo.
+3. This creates an account (email not yet confirmed) and a **pending** request; administrators are notified. The person sees "Waiting for approval" and nothing from the company.
+4. After the person confirms their email, the administrator approves (choosing roles, department and whether they manage it) or declines. The person is emailed either way. A code never grants access by itself.
+
 ## Who decides what
 
 | Decision | Channel | Recorded as |
@@ -111,11 +139,18 @@ Decisions are append-only (trigger) and unique per quote / completion version.
 
 ## Notifications
 
+Every job email links to the job (`APP_URL/jobs/<id>`); a signed-out person is sent to sign in and then returned to that job. Demo companies never send email.
+
 | Event | Who |
 |---|---|
 | Fault reported | Managers; public reports also send the reporter an acknowledgement email if given |
 | Sent for assessment | Named assessor |
 | Assessed / quote received | Managers |
+| Possible duplicate | Managers (in the new-report message) |
+| Job handed over | The receiving person, or the receiving department's managers |
+| Registration request | Administrators (owners) |
+| Access approved / declined | The person who registered (email) |
+| Duplicate linked | The reporter (if they have an account) |
 | Spares needed (at assessment or mid-job) | Stores covering that site, and managers |
 | Spares ordered / issued / received | Lead technician, helpers and managers |
 | Sent for approval | Approvers whose limit covers the amount (and who cover that site) |

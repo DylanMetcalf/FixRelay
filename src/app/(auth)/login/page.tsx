@@ -1,5 +1,6 @@
 import Link from "@/components/link";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { loginAction } from "@/app/actions/auth";
 import { getSession } from "@/app/_lib/session";
 import { PasswordField } from "@/components/client";
@@ -10,7 +11,11 @@ export const metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const { next } = await searchParams;
-  if (await getSession()) redirect(next && /^\/(?!\/)/.test(next) ? next : "/dashboard");
+  const s = await getSession();
+  // Already signed in: go to the right home. Not while re-rendering for the sign-in action itself – the action's
+  // result decides where to go (a redirect thrown here would race it and leave the browser on a blank page).
+  const duringAction = !!(await headers()).get("next-action");
+  if (s && !duringAction) redirect(!s.ctx ? (s.user.isPlatformAdmin ? "/platform" : "/no-access") : next && /^\/(?!\/)/.test(next) ? next : "/dashboard");
   return (
     <>
       <h1 className="mb-4 text-xl font-extrabold">Sign in</h1>

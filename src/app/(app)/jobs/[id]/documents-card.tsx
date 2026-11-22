@@ -19,7 +19,7 @@ export function DocumentsCard({ job, ctx }: { job: JobView; ctx: Ctx }) {
           ? <a href={`${base}/completion?download=1`} className="btn btn-secondary btn-sm w-full" download>Download completion report</a>
           : <p className="text-xs text-gray-600">The completion report becomes available once the work is completed.</p>}
         {isStaff(ctx) && <a href={`${base}/history?download=1`} className="btn btn-secondary btn-sm w-full" download>Export job history (PDF)</a>}
-        <Link href={`/jobs/${job.id}/report`} className="link block text-sm">Paper-style requisition form</Link>
+        <Link href={`/jobs/${job.id}/report`} className="link block text-sm">Open the paper-style requisition</Link>
         <p className="text-xs text-gray-600">Each PDF is a snapshot of the job when you open it.</p>
       </div>
     </Card>

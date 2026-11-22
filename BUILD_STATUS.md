@@ -4,7 +4,7 @@ Last updated: 2026-11-19. Legend: ✅ implemented and tested · 🟡 implemented
 
 ## Internal site maintenance model (2026-11-17)
 
-FixRelay was changed from a tool for maintenance *contractors serving customers* into an **internal maintenance system for a company's own sites**. Defaults chosen (the plan's recommendations): several sites per subscriber; spending limits by amount with optional PO numbers; three quotes above a limit the company sets (or a written reason); the reporter confirms the fix and the manager closes; reporting without an account behind a setting (off by default); this replaces the contractor-facing version.
+Resultra was changed from a tool for maintenance *contractors serving customers* into an **internal maintenance system for a company's own sites**. Defaults chosen (the plan's recommendations): several sites per subscriber; spending limits by amount with optional PO numbers; three quotes above a limit the company sets (or a written reason); the reporter confirms the fix and the manager closes; reporting without an account behind a setting (off by default); this replaces the contractor-facing version.
 
 | # | Criterion (internal model) | Status | Evidence |
 |---|---|---|---|

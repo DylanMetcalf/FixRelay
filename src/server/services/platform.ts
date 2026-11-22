@@ -78,10 +78,12 @@ export async function resendCustomerInvite(admin: Admin, orgId: string) {
 }
 
 /** Every customer company with the account facts the platform owner needs. */
-export async function platformOverview(admin: Admin) {
+export async function platformOverview(admin: Admin, opts: { q?: string; take?: number } = {}) {
   requireAdmin(admin);
+  const q = opts.q?.trim().slice(0, 80);
   const orgs = await prisma.organisation.findMany({
-    where: { isDemo: false, archivedAt: null }, orderBy: { createdAt: "desc" },
+    where: { isDemo: false, archivedAt: null, ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}) },
+    orderBy: { createdAt: "desc" }, take: opts.take ?? 50,
     select: { id: true, name: true, createdAt: true, contactEmail: true, phone: true, publicReportingEnabled: true, subscription: { include: { plan: true } } },
   });
   const ids = orgs.map((o) => o.id);

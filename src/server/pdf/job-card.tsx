@@ -113,7 +113,7 @@ export function JobCardDoc({ d, photos }: { d: JobDocumentData; photos: { photos
           </Section>
         )}
 
-        <DocFooter reference={`Job card ${job.reference}`} generatedAt={d.generatedAt} qr={d.qr} />
+        <DocFooter reference={`Job card ${job.reference}`} generatedAt={d.generatedAt} qr={d.qr} href={d.link} />
       </Page>
     </Document>
   );

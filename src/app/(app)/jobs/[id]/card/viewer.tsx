@@ -12,10 +12,10 @@ export function CardViewer({ src, autoPrint }: { src: string; autoPrint: boolean
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2" data-testid="card-controls">
-        <button type="button" className="btn btn-primary hidden md:inline-flex" onClick={print} disabled={state !== "ready"}>Print</button>
+        <button type="button" className="btn btn-primary hidden md:inline-flex" onClick={print}>Print</button>
         <a href={`${src}?download=1`} className="btn btn-secondary" download>Download PDF</a>
         <a href={src} target="_blank" rel="noopener" className="btn btn-secondary">Open in a new tab</a>
-        <span className="text-sm text-gray-600" role="status">{state === "loading" ? "Preparing the job card…" : state === "error" ? "The job card could not be loaded. Try Download PDF." : "Snapshot of the job as it is now."}</span>
+        <span className="text-sm text-gray-600" role="status">{state === "loading" ? "Preparing the job card… (Download PDF always works)" : state === "error" ? "The job card could not be loaded. Try Download PDF." : "Snapshot of the job as it is now."}</span>
       </div>
       <iframe ref={frame} src={src} title="Job card PDF" data-testid="card-frame"
         className="hidden h-[80vh] w-full rounded-lg border border-gray-300 bg-white md:block"

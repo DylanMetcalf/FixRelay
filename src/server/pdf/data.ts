@@ -40,7 +40,8 @@ async function loadPhotos(job: JobView, kinds: string[], limit: number): Promise
 export async function loadJobDocument(ctx: Ctx, jobId: string) {
   const job = await getJob(ctx, jobId); // 404 if out of scope
   const org = await prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true, address: true, phone: true } });
-  const qr = await QRCode.toDataURL(`${appUrl() || "http://localhost:3000"}/jobs/${job.id}`, { margin: 0, width: 160, errorCorrectionLevel: "M", color: { dark: "#0B1F3A", light: "#FFFFFF" } });
+  const link = `${appUrl() || "http://localhost:3000"}/jobs/${job.id}`;
+  const qr = await QRCode.toDataURL(link, { margin: 0, width: 160, errorCorrectionLevel: "M", color: { dark: "#0B1F3A", light: "#FFFFFF" } });
   const signatures: { step: string; name: string; signedAt: Date; image: Buffer | null }[] = [];
   for (const sig of job.signatures) {
     const att = job.attachments.find((a) => a.id === sig.attachmentId);
@@ -52,7 +53,7 @@ export async function loadJobDocument(ctx: Ctx, jobId: string) {
     ? Object.fromEntries((await prisma.department.findMany({ where: { orgId: ctx.orgId }, select: { id: true, name: true } })).map((d) => [d.id, d.name]))
     : {};
   return {
-    job, org, qr, signatures, name, departments,
+    job, org, qr, link, signatures, name, departments,
     staff: isStaff(ctx), seePrices: can(ctx, "quote.view"),
     loadPhotos: (kinds: string[], limit: number) => loadPhotos(job, kinds, limit),
     generatedAt: new Date(),

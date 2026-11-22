@@ -228,7 +228,7 @@ test("12 · owners can export all company data; other roles and visitors cannot"
   await logRequest(p, "Export me");
   const res = await p.request.get("/api/export");
   expect(res.status()).toBe(200);
-  expect(res.headers()["content-disposition"]).toContain("fixrelay-company-export");
+  expect(res.headers()["content-disposition"]).toContain("resultra-company-export");
   const body = await res.text();
   const data = JSON.parse(body);
   expect(data.format).toBe("fixrelay-export/2");

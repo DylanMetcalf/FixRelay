@@ -327,7 +327,7 @@ test("QR reporting without an account: off by default; when on, the scanned loca
 
   await gotoReady(page, sitePath);
   const link = new URL(await page.getByTestId("site-report-link").inputValue()).pathname;
-  expect(link).toMatch(/^\/r\/[A-Za-z0-9_-]{20,}$/);
+  expect(link).toMatch(/^\/r\/[a-z2-9]{10}$/); // short code, no database ids
   const anon = await newPage(browser, { mobile: true });
   await gotoReady(anon, link);
   await expect(anon).toHaveURL(/login/); // public reporting is off: staff are asked to sign in
@@ -340,9 +340,9 @@ test("QR reporting without an account: off by default; when on, the scanned loca
   // The QR sheet has one label for the site and one per location.
   await gotoReady(page, `${sitePath}/qr`);
   await expect(page.getByText("Scan to report a fault")).toHaveCount(3);
-  const loc = await db.location.findFirstOrThrow({ where: { name: "Packing Hall", site: { publicToken: link.slice(3) } } });
+  const loc = await db.location.findFirstOrThrow({ where: { name: "Packing Hall", site: { publicCode: link.slice(3) } } });
 
-  await gotoReady(anon, `${link}?l=${loc.id}`);
+  await gotoReady(anon, `/r/${loc.publicCode}`); // the area's own QR code
   await expect(anon.getByRole("heading", { name: "Report a problem" })).toBeVisible();
   await anon.getByText("Unsafe", { exact: true }).click();
   await f(anon, "description").fill("Conveyor guard loose – rattles when the belt runs.");

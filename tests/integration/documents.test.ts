@@ -33,6 +33,7 @@ describe("branded job documents (PDF)", () => {
       "High", "Start capacitor degraded", "Replace capacitor", "Lock out before opening the panel.", "Assigned", "Reported photo", "Work performed",
       "Technician name", "Manager verification", "SAST", "Resultra"]) has(pdf.text, want);
     expect(pdf.text).toMatch(/Page 1 of \d/);
+    expect(pdf.pages[0]!.links).toEqual([`http://test.local/jobs/${job.id}`]); // the QR code / link opens the job (sign-in required)
     expect(pdf.pages.reduce((n, p) => n + p.images, 0)).toBeGreaterThanOrEqual(2); // the photo and the footer QR code
     for (const p of pdf.pages) expect(p.text.replace(/Resultra|Page \d+ of \d+|Snapshot generated.*$/g, "").trim().length).toBeGreaterThan(20); // no empty pages
   });

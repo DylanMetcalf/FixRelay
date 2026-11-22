@@ -17,12 +17,13 @@ export const dynamic = "force-dynamic";
  * Resultra platform administration: create and configure customer companies, follow onboarding, subscriptions,
  * email delivery and platform errors. Account metadata only – company business data needs the company's grant.
  */
-export default async function Platform() {
+export default async function Platform({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
   const s = await getSession();
   if (!s) redirect("/login?next=/platform");
   if (!s.user.isPlatformAdmin) redirect("/forbidden");
   const [tenants, plans, health] = await Promise.all([
-    platformOverview(s.user), prisma.plan.findMany({ where: { active: true }, orderBy: { name: "asc" } }), platformHealth(s.user),
+    platformOverview(s.user, { q }), prisma.plan.findMany({ where: { active: true }, orderBy: { name: "asc" } }), platformHealth(s.user),
   ]);
   const d = (x: Date | null | undefined) => x?.toISOString().slice(0, 10) ?? "";
   return (
@@ -63,7 +64,14 @@ export default async function Platform() {
           </Card>
         </div>
 
-        <h2 className="text-lg font-extrabold">Customer companies ({tenants.length})</h2>
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <h2 className="text-lg font-extrabold">Customer companies ({tenants.length}{tenants.length === 50 ? "+" : ""})</h2>
+          <form method="get" action="/platform" className="flex gap-2">
+            <input name="q" defaultValue={q} placeholder="Find a company" aria-label="Find a company" className="input !min-h-9 text-sm" />
+            <button className="btn btn-secondary btn-sm">Search</button>
+          </form>
+        </div>
+        <p className="muted -mt-3 text-xs">Newest first; up to 50 shown. Search to find others.</p>
         <ul className="space-y-3" data-testid="customers">
           {tenants.map((t) => {
             const st = subscriptionState(t.subscription);

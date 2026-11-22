@@ -41,7 +41,9 @@ All checks are server-side in the service layer. The UI only hides controls.
 \*Platform support is read-only and needs a grant from the tenant (see below). "Reports faults only" members are free (not counted as seats).
 
 **Row-level job visibility (`jobScope`)**, which every job query uses:
-- Owner / Manager / Approver: all jobs in the tenant, limited to `Membership.siteIds` when set. Technician: jobs they lead, are added to, or reported. Stores: jobs that need spares (any spares status other than "none"), within their sites, plus jobs they reported. Fault reporters: only the jobs they reported.
+- Owner / Manager / Approver: all jobs in the tenant, limited to `Membership.siteIds` when set. Technician: jobs they lead, are added to, or reported. Stores: jobs that need spares (any spares status other than "none"), within their sites, plus jobs they reported. Fault reporters: only the jobs they reported. **Everyone** also sees jobs handed to them as the responsible person (`ownerId`). **Department managers** see their departments' jobs; technicians and stores in a department see that department's jobs.
+- **Handover** is allowed for maintenance managers and the manager of the department currently responsible (`canHandOver`); handovers are append-only (database trigger).
+- **Pending registrations** (`Membership.status = PENDING`, `active = false`) give no company context at all: the session loads with no access until an administrator approves, and approval requires a confirmed email address. Registration codes only create requests; they are short-lived, revocable and rate-limited (8 registrations per IP per hour).
 - Approvals are offered only to members whose limit covers the amount and who cover that site (`approverIdsFor`).
 - Fault reporters see the fault, the progress status and the work evidence (after photos, test documents, signature), not assessments, quotes, prices, internal notes or internal photos. Technicians never receive pricing.
 - Cross-tenant and out-of-scope IDs return **404 Not Found** (never 403), so they don't reveal that records exist.
@@ -57,7 +59,8 @@ All checks are server-side in the service layer. The UI only hides controls.
 
 ## Platform operator vs tenant administrator
 
-- `User.isPlatformAdmin` (the SaaS operator) is **not** a tenant role. The platform console (`/platform`) shows only account and subscription metadata.
+- `User.isPlatformAdmin` (the SaaS operator) is **not** a tenant role. Platform admin (`/platform`) shows **account metadata only**: companies, sites, main contacts, users with roles and status, departments, onboarding progress, subscription, email delivery counts and failures (recipient and error, never subjects or bodies) and server errors. It never shows jobs, quotes, photos, reports or documents.
+- The platform owner can create customer companies (company, first site, departments, and a secure administrator invitation). Creation is written to the company's audit trail.
 - To view a tenant, the tenant's **Owner must grant support access** (with a reason; 4h, 24h or 72h maximum; revocable). The operator then enters a **read-only** session, and the entry is written to the tenant's audit trail. Expired or revoked grants end access immediately.
 
 ## Contractor links (`/c/<token>`)
@@ -68,11 +71,28 @@ All checks are server-side in the service layer. The UI only hides controls.
 - Link pages show only that job's fault details, location, the site's fault photos and (after appointment) the PO and approved value. File reads via a link are checked against that job and kind.
 - Quotes or completions submitted via a link are recorded as "<contractor> (contractor, via secure link)" with time and IP. **Possession of the link is the credential**; the page says the link is personal to the contractor.
 
-## Site report links and QR codes (`/r/<siteToken>`)
+## Demo companies and "view as"
 
-- Each site has a random public token used in its QR codes. When reporting without an account is **off** (default), the page only sends people to sign in. When on, anyone with the link can submit a fault for that site and nothing else: they cannot see any job, and the job is marked as a public report for a manager to screen.
-- Abuse controls: rate limits per IP (10/hour) and per site (200/day); name and phone required; uploads go through the same scanning as everywhere else. "Replace link" rotates the token so printed codes stop working.
+- Demo companies are separate organisations flagged `isDemo`, built from synthetic data. Sample people have reserved `.invalid` addresses, an unknown random password and are refused at sign-in.
+- "View as" (`Session.actAsUserId`) is honoured by `loadSession` **only** when the session's company is a live demo company, the real user is an **owner** of it, and the target is one of its sample people. In any other company the value is ignored, and `setViewAs` refuses it (tested with forged session values).
+- Demo companies never queue email; "reset demo" archives the old demo company (no deletes of append-only audit rows) and builds a new one.
+
+## Site report links and QR codes (`/r/<code>`)
+
+- Each site, area and machine has a short random code (10 characters from a 31-character alphabet, about 50 bits, not sequential) used in its QR codes; no database ids appear in public links. Older `/r/<siteToken>` links still resolve until the site link is replaced. When reporting without an account is **off** (default), the page only sends people to sign in. When on, anyone with the link can submit a fault for that site and nothing else: they cannot see any job, and the job is marked as a public report for a manager to screen.
+- Abuse controls: rate limits per IP (10/hour) and per site (200/day); a name is required (contact details optional); a hidden spam-trap field (bots get a fake "thank you" and nothing is stored); one-time submission keys so repeated submits create one report; images only, decoded, re-encoded and virus-scanned; text is always rendered as text (HTML is not interpreted, tested). "Replace link" rotates the token so printed codes stop working.
 - `Referrer-Policy: no-referrer` site-wide so tokens do not leak to other sites. Email bodies containing links are cleared from the outbox once sent.
+
+## Job documents (PDF)
+
+- Generated per request from the permission-checked job loader; never stored; `Cache-Control: private, no-store`; 401/403/404 as for pages. Prices only for people with price access; history refused to people who only report faults.
+- Photos are read from private storage on the server and embedded; no public URLs.
+- The QR code / link on documents points to the job page, which requires signing in with access. It carries no token.
+- Only Resultra's own viewer page may frame the PDF (`X-Frame-Options: SAMEORIGIN` on that route only; `DENY` everywhere else).
+
+## Error logging
+
+Unexpected server errors are stored in `ErrorLog` (source, message, path, company and user ids) for the platform owner; request bodies, tokens and passwords are never logged.
 
 ## Signatures
 

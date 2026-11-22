@@ -1,10 +1,10 @@
 # POPIA review (engineering self-assessment)
 
-> This is an engineering review of how FixRelay handles personal information, mapped to the eight conditions for lawful processing in the Protection of Personal Information Act 4 of 2013. **It is not legal advice and not a compliance certificate.** Have a South African privacy practitioner review it together with the privacy notice (`/privacy`) before launch.
+> This is an engineering review of how Resultra handles personal information, mapped to the eight conditions for lawful processing in the Protection of Personal Information Act 4 of 2013. **It is not legal advice and not a compliance certificate.** Have a South African privacy practitioner review it together with the privacy notice (`/privacy`) before launch.
 
 ## Roles
-- The **subscribing company** (tenant) is the *responsible party* for the staff, contractor, site, job and fault-reporter data it enters or collects. **FixRelay's operator** is its *operator* (s21: needs a written operator agreement).
-- For sign-up account data, FixRelay's operator is the responsible party.
+- The **subscribing company** (tenant) is the *responsible party* for the staff, contractor, site, job and fault-reporter data it enters or collects. **Resultra's operator** is its *operator* (s21: needs a written operator agreement).
+- For sign-up account data, Resultra's operator is the responsible party.
 
 ## Personal information processed
 Names, emails and phone numbers of staff, contractor contacts and (when public QR reporting is on) people who report faults without an account; site addresses; job descriptions and photos (which may show people or places); drawn signatures; IP address and time of contractor link submissions; sign-in sessions. **No special personal information** (s26) is required by the product. Users are told not to upload it. **No children's information.**

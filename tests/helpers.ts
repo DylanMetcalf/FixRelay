@@ -108,14 +108,15 @@ export async function photo(width = 1200, height = 800, colour = "#3b82f6") {
 export async function readPdf(bytes: Buffer) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: true }).promise;
-  const pages: { text: string; width: number; height: number; images: number }[] = [];
+  const pages: { text: string; width: number; height: number; images: number; links: string[] }[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const vp = page.getViewport({ scale: 1 });
     const content = await page.getTextContent();
     const ops = await page.getOperatorList();
     const images = ops.fnArray.filter((f: number) => f === pdfjs.OPS.paintImageXObject || f === pdfjs.OPS.paintInlineImageXObject).length;
-    pages.push({ text: content.items.map((it) => ("str" in it ? it.str : "")).join(" ").replace(/\s+/g, " "), width: vp.width, height: vp.height, images });
+    const links = (await page.getAnnotations()).map((a: { url?: string }) => a.url).filter((u: string | undefined): u is string => !!u);
+    pages.push({ text: content.items.map((it) => ("str" in it ? it.str : "")).join(" ").replace(/\s+/g, " "), width: vp.width, height: vp.height, images, links });
   }
   const info = (await doc.getMetadata()).info as Record<string, unknown>;
   return { pages, text: pages.map((p) => p.text).join(" \n "), title: String(info.Title ?? "") };

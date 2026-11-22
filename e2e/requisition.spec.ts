@@ -254,7 +254,7 @@ test("R12 · Insights can be narrowed to one area of a site", async ({ browser }
   await expect(p.getByRole("link", { name: "Area report" })).toBeVisible();
 });
 
-test("R13 · no-account QR report: the details step is checked, the review shows it, and the requisition records the reporter", async ({ browser }) => {
+test("R13 · no-account QR report: a name is required, contact details are optional, the review shows them, and the requisition records the reporter", async ({ browser }) => {
   const { p, sitePath, email } = await company(browser);
   await gotoReady(p, "/settings");
   await f(p, "publicReportingEnabled").check();
@@ -266,10 +266,10 @@ test("R13 · no-account QR report: the details step is checked, the review shows
   await gotoReady(anon, link);
   await f(anon, "description").fill("Broken window in canteen, glass on the floor.");
   await next(anon); await next(anon); await next(anon); await next(anon);
-  await f(anon, "reporterName").fill("Grace Visitor");
   await next(anon);
-  await expect(anon.getByTestId("step-label")).toContainText("Step 5 of 6"); // phone number is required
-  await f(anon, "reporterPhone").fill("082 123 4567");
+  await expect(anon.getByTestId("step-label")).toContainText("Step 5 of 6"); // a name is required
+  await f(anon, "reporterName").fill("Grace Visitor");
+  await f(anon, "reporterPhone").fill("082 123 4567"); // optional
   await next(anon);
   await expect(anon.getByTestId("review")).toContainText("Grace Visitor");
   await expect(anon.getByTestId("review")).toContainText("082 123 4567");
@@ -285,7 +285,7 @@ test("R14 · demo workspace: a fully signed requisition, history per area, and n
   const { register } = await import("./helpers");
   await register(p, { email: `demo-${uid()}@e2e.example`, company: `Demo Check ${uid()}` });
   await p.getByRole("button", { name: "Explore a demo workspace" }).click();
-  await expect(p.getByText("Demo workspace.")).toBeVisible({ timeout: 60_000 });
+  await expect(p.getByTestId("demo-bar")).toBeVisible({ timeout: 60_000 });
   await gotoReady(p, "/jobs?tab=history"); // finished jobs live under History
   await p.getByText("Staff kitchen extractor fan very noisy").filter({ visible: true }).first().click();
   await p.getByRole("link", { name: "Requisition form" }).click();
@@ -337,7 +337,7 @@ test("R16 · anyone with a phone: the QR report is simple, big and steady – no
   const loc = await db.location.findFirstOrThrow({ where: { name: "Cold Room 2", orgId: await orgOf(email) } });
   const { devices } = await import("@playwright/test");
   const phone = await (await browser.newContext({ ...devices["iPhone 13"], extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${Math.floor(Math.random() * 250)}` } })).newPage();
-  await gotoReady(phone, `${link}?l=${loc.id}`);
+  await gotoReady(phone, `/r/${loc.publicCode}`); // the area's own QR code
 
   // The page never blocks pinch-zoom (people with poor eyesight need it), but nothing makes it zoom on its own.
   const vp = await phone.locator('meta[name="viewport"]').getAttribute("content");
@@ -355,7 +355,7 @@ test("R16 · anyone with a phone: the QR report is simple, big and steady – no
   };
 
   await expect(phone.getByRole("heading", { name: "Report a problem" })).toBeVisible();
-  await expect(phone.getByText("If someone is hurt or in danger, call your supervisor first.")).toBeVisible();
+  await expect(phone.getByRole("note")).toContainText("Urgent safety issue?"); // the emergency procedure comes first
   await steady("what's wrong");
   await next(phone);
   await expect(phone.getByTestId("step-label")).toContainText("Step 1 of 6"); // a description is needed

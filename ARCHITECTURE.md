@@ -28,7 +28,8 @@ Worker ── src/worker.ts              email outbox (SKIP LOCKED), overdue ale
 | Language | TypeScript, `strict` + `noUncheckedIndexedAccess` | Safety for future maintainers and AI models |
 | Web | Next.js 15.5 App Router, React 19 | Server rendering, server actions, one deployable |
 | DB | PostgreSQL 16 + Prisma 6.19 | Relational integrity, migrations, typed client |
-| Validation | Zod 3 | Every service input is parsed |
+| Validation | Zod 4 | Every service input is parsed |
+| PDFs | `@react-pdf/renderer` + bundled Inter fonts (`src/server/pdf`) | Server-generated A4 documents with no browser dependency, identical output on Render and locally |
 | Styling | Tailwind CSS 4, small in-house component set (`src/components/ui.tsx`) | No heavy UI library. Components are simple and accessible (labels, focus rings, 44px targets) |
 | Auth | Own email/password with bcrypt and opaque DB sessions (see SECURITY.md) | A small, fully understood surface. Sessions are revocable instantly. No third-party identity dependency. Can be swapped for Auth.js or a provider later |
 | Files | `Storage` interface; Postgres, local-disk or S3 drivers | Chosen by `STORAGE_DRIVER` |
@@ -54,7 +55,13 @@ Worker ── src/worker.ts              email outbox (SKIP LOCKED), overdue ale
 | `activity.ts` | Append-only audit events |
 | `billing.ts` | Subscription state machine, entitlements, provider-neutral interface |
 | `reports.ts` | Metric computation and definitions |
-| `demo.ts` | Builds a demo workspace by driving the real services |
+| `demo.ts` | Builds a demo workspace by driving the real services: departments, sample people (personas), jobs at every stage; reset; persona list for "view as" |
+| `departments.ts` | Departments, department members and managers, job handovers |
+| `registration.ts` | Site registration codes, self-registration (pending requests), approval/decline, own profile |
+| `platform.ts` | Platform owner: create customer companies, overview (account metadata), customer detail, platform health |
+| `src/server/pdf/*` | Job card, completion report, job history, QR signs (see PDF_DOCUMENTATION.md) |
+| `src/server/duplicates.ts` | Rule-based duplicate scoring (pure functions) |
+| `src/server/errors.ts` | `logError` → `ErrorLog` |
 
 Shared foundations: `src/server/permissions.ts` (permission matrix and `jobScope`), `src/server/workflow.ts` (state machine, labels, next action), `src/lib/*` (db client, errors, money, tokens, rate limiting, colour).
 
@@ -71,5 +78,12 @@ Shared foundations: `src/server/permissions.ts` (permission matrix and `jobScope
 - Server components fetch through services. Forms use `<Form action={serverAction}>` (`src/components/form.tsx`).
 - After a successful action the page **reloads** (or navigates to `redirectTo`) and shows a flash message. See the "Next.js caveat" in AI_HANDOVER.md for why this is used instead of `router.refresh()`.
 - Desktop: a sidebar (Dashboard, Reports, Jobs, Quotes, Sites, Equipment, Contractors, Insights, Settings; technicians also get My jobs). Phone: a bottom bar (My jobs/Home, Report fault, Alerts, Profile).
-- Public pages (`/r/<siteToken>` fault report, `/c/<linkToken>` contractor portal) use `PublicShell` with the company's branding and no app navigation.
+- Public pages (`/r/<code>` fault report, `/c/<linkToken>` contractor portal) use `PublicShell` with the company's branding and no app navigation.
 - Every job page shows **what happens next and who is responsible** (`nextAction()` in workflow.ts).
+
+## Resultra additions (2026-11)
+
+- **Sign-in return path:** `src/middleware.ts` adds the requested path as a request header; `requireSession` redirects signed-out people to `/login?next=<path>` (same-site paths only), so links in emails land on the job after sign-in. The login page skips its own "already signed in" redirect while re-rendering for the sign-in action, so the action's result decides where to go (dashboard, `/platform`, or the waiting-for-approval page).
+- **Demo "view as":** `loadSession` builds the context from a sample person when the session carries `actAsUserId` and every safety condition holds (see SECURITY.md).
+- **Documents:** `GET /api/jobs/:id/documents/:kind` and `GET /api/sites/:id/signs` stream PDFs; `/jobs/:id/card` is the in-app viewer.
+- **Platform admin:** `/platform` and `/platform/[orgId]` are outside the tenant app layout and require `isPlatformAdmin`.

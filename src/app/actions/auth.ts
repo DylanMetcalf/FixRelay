@@ -16,9 +16,12 @@ export async function loginAction(_: ActionState, fd: FormData) {
     await rateLimit(`login:ip:${ip}`, 20, 10 * 60_000);
     await rateLimit(`login:email:${str(fd, "email").toLowerCase()}`, 8, 10 * 60_000);
     const previous = await sessionToken();
-    await setSessionCookie(await auth.login(str(fd, "email"), str(fd, "password")));
+    const token = await auth.login(str(fd, "email"), str(fd, "password"));
+    await setSessionCookie(token);
     if (previous) await auth.logout(previous); // never keep a session from before sign-in
     const next = str(fd, "next");
+    const view = await auth.loadSession(token);
+    if (!next && view?.user.isPlatformAdmin && !view.ctx) return { redirect: "/platform" }; // the platform owner's home
     // Only same-site paths (e.g. from a QR code); never an external URL.
     return { redirect: /^\/(?!\/)[\w\-/?=&%.]*$/.test(next) ? next : "/dashboard" };
   });

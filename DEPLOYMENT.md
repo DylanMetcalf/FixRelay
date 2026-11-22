@@ -1,77 +1,101 @@
 # Deployment
 
-Three supported ways to run FixRelay. All use the same code and environment variables. A fresh clone was installed, migrated, seeded, built and started from these docs against an empty database on 2026-11-17 (see TESTING.md). **Live demo:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**, so move to the paid `render.yaml` before real use. Demo email is sent through Resend from `dylan@meacreo.co.za` with a sending-only key restricted to that domain, stored only in Render's environment.
+Resultra (formerly FixRelay) runs as one Node.js web service plus PostgreSQL. All options below use the same code and environment variables. Service, database and cookie names keep their earlier `fixrelay` identifiers on purpose, so existing deployments and sessions keep working.
 
-## Option A: Render (simplest; `render.yaml` is included)
-1. Push the repository to GitHub. In Render: **New → Blueprint**, then select the repository.
-2. Render creates a Postgres database and one web service. The worker runs inside the web service (`WORKER_IN_PROCESS=true`) and files are stored in Postgres (`STORAGE_DRIVER=db`), so nothing else is needed to start.
-3. Set the secret values in the dashboard: `APP_URL` (your Render URL or custom domain), `EMAIL_TRANSPORT=resend` or `smtp`, `EMAIL_FROM`, and `RESEND_API_KEY` or the `SMTP_*` values. Add `HEALTH_TOKEN` if you want detailed health output.
-4. After the first deploy, open Render's shell and create the operator account:
-   `PLATFORM_ADMIN_EMAIL=you@yourco.co.za PLATFORM_ADMIN_PASSWORD='long-random-password' npm run db:seed`
-5. Antivirus (recommended): add a private service from the `clamav/clamav:stable` image and set `CLAMAV_HOST` to its internal hostname.
+**Current demo:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**. Move to the paid `render.yaml` before the pilot. The Resultra domain is **not** assumed: everything uses `APP_URL`, so the domain can be added later.
+
+## Option A: Render (recommended for the pilot)
+
+1. Push the repository to GitHub. In Render: **New → Blueprint** and select the repository (`render.yaml`).
+2. Render creates a Postgres database and one web service. The background worker runs inside the web service (`WORKER_IN_PROCESS=true`), and **all files (photos, signatures, logos, profile photos) are stored in Postgres** (`STORAGE_DRIVER=db`). Nothing is written to Render's local disk, which is wiped on every deploy, so no extra storage service is needed. Database backups include the files.
+3. Build: `npm ci --include=dev && npm run build`. Start: `npx prisma migrate deploy && npx next start -p $PORT`. Migrations are additive (new tables and nullable or defaulted columns), so they are safe on every deploy.
+4. Health check path: `/api/health` (returns `{"ok":true}` when the database is reachable).
+5. Set the secret values in the dashboard: `APP_URL`, `EMAIL_TRANSPORT=resend`, `EMAIL_FROM`, `RESEND_API_KEY` (see "Resend" below). Optional: `HEALTH_TOKEN`.
+6. After the first deploy, open Render's **Shell** and create the platform owner's account:
+   `PLATFORM_ADMIN_EMAIL=you@yourco.co.za PLATFORM_ADMIN_PASSWORD='a long random password' npm run db:seed`
+   Sign in at `/login`; the platform owner lands on `/platform` (Platform admin), where customer companies are created.
+7. Antivirus (recommended): add a private service from the `clamav/clamav:stable` image and set `CLAMAV_HOST` to its internal host name. When it is set and unreachable, uploads are refused (fail closed).
+
+### PDF generation on Render
+Job cards, completion reports, history reports and QR signs are generated on the server with `@react-pdf/renderer`, which is pure JavaScript: **no Chromium or other browser is needed** on the server. The Inter fonts are bundled in `assets/fonts/` (SIL Open Font License, see `LICENSE-Inter-OFL.txt`), so output is identical on every machine. PDFs are generated on request and streamed; they are never written to disk or stored, so there is nothing stale to clean up or leak. Memory: a job card with four photos peaks well under 100 MB; the Starter instance (512 MB) is enough, the free 512 MB instance works but is slower on its first request.
+
+### Custom domain and HTTPS
+1. In the web service: **Settings → Custom Domains → Add**, e.g. `app.resultra.co.za` (once the domain is owned).
+2. Add the DNS record Render shows (CNAME to the `onrender.com` host, or the A/ALIAS record for an apex domain). Render issues and renews the TLS certificate automatically; HTTP redirects to HTTPS.
+3. Change `APP_URL` to `https://app.resultra.co.za` and redeploy. Emailed links, QR codes and PDF links use it. **Print QR signs after this change**: signs printed with the old address will still point to the old address.
+4. HTTPS is required in production: session cookies are `Secure` with the `__Host-` prefix, HSTS is sent, and the installable app needs HTTPS.
+
+### Staging / pilot environment
+Use a second Blueprint from `render.demo.yaml` (or a copy of `render.yaml` with a different service name) for a staging environment with its own database. Testers can also use an isolated pilot company on production: the platform owner creates it in Platform admin; companies never see each other's data. Demo workspaces (sample data) are separate companies flagged as demos and never send email.
 
 ## Option B: One server with Docker Compose (includes ClamAV)
 ```bash
-cp .env.example .env    # set APP_URL, EMAIL_*, POSTGRES_PASSWORD
+cp .env.example .env
 ```
+
+Set `APP_URL`, `EMAIL_*` and `POSTGRES_PASSWORD` in `.env`, then:
 
 ```bash
 docker compose up -d --build
 ```
 
 ```bash
-docker compose exec web sh -c "PLATFORM_ADMIN_EMAIL=you@yourco.co.za PLATFORM_ADMIN_PASSWORD='long-random-password' npm run db:seed"
+docker compose exec web sh -c "PLATFORM_ADMIN_EMAIL=you@yourco.co.za PLATFORM_ADMIN_PASSWORD='a long random password' npm run db:seed"
 ```
 
-Put Caddy or nginx in front for HTTPS (required: cookies are `Secure`/`__Host-` and PWAs need HTTPS). The `Dockerfile` and `docker-compose.yml` follow standard patterns but **were not built in the development sandbox (no Docker available there)**. Build them once before relying on them.
+Put Caddy or nginx in front for HTTPS. The image copies the whole repository (including `assets/fonts`). The `Dockerfile` and `docker-compose.yml` follow standard patterns but **were not built in the development sandbox (no Docker there)**. Build them once before relying on them.
 
 ## Option C: Plain Node.js (any VM or PaaS)
 ```bash
 npm ci && npm run db:migrate && npm run build
 ```
 
-Then run `npm start` (web) and `npm run worker` (background), or only `npm start` with `WORKER_IN_PROCESS=true`.
+Then run `npm start` (web) and `npm run worker` (background), or only `npm start` with `WORKER_IN_PROCESS=true`. Keep the `assets/` folder next to the app (fonts for PDFs).
 
 ## Environment variables
 
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | yes | PostgreSQL 14+ (tested on 16). Add `?sslmode=require` for managed databases |
-| `APP_URL` | yes | Public HTTPS URL. Used in emailed links |
+| `APP_URL` | yes | Public HTTPS URL, e.g. `https://app.resultra.co.za`. Used in emails, QR codes and PDF links. On Render, `RENDER_EXTERNAL_URL` is used if it is not set |
 | `NODE_ENV` | yes | `production` |
-| `STORAGE_DRIVER` | no | `db` (default; files in Postgres, multi-instance, included in DB backups), `s3`, or `local` |
-| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_SSE` | if `s3` | Any S3-compatible store (AWS S3 af-south-1, Cloudflare R2, Backblaze B2, MinIO). Bucket must be **private** |
-| `EMAIL_TRANSPORT` | no | `console` (default, logs only), `smtp`, `resend` |
-| `EMAIL_FROM` | if not console | e.g. `FixRelay <no-reply@yourdomain.co.za>` on a domain with SPF and DKIM |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | if `smtp` | Port 587 uses STARTTLS (required by default); 465 uses TLS |
-| `RESEND_API_KEY` | if `resend` | |
-| `CLAMAV_HOST`, `CLAMAV_PORT` or `CLAMAV_SOCKET` | recommended | When set, every upload is scanned. **If ClamAV is unreachable, uploads are refused** (fail closed) |
-| `TRUSTED_PROXY_HOPS` | no | Number of proxies in front of the app (default 1). Used to read the real client IP for rate limiting. Set 0 if the app is reached directly |
-| `WORKER_IN_PROCESS` | no | `true` runs the background loop inside the web process |
-| `HEALTH_TOKEN` | no | Enables `/api/health?token=…` details (email backlog) |
+| `STORAGE_DRIVER` | no | `db` (default; files in Postgres, works with several instances, included in database backups), `s3`, or `local` (development only: not for Render, whose disk is temporary) |
+| `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_SSE` | if `s3` | Any S3-compatible store (AWS S3 af-south-1, Cloudflare R2, Backblaze B2). Bucket must be **private** |
+| `EMAIL_TRANSPORT` | no | `console` (default, logs a one-line summary only), `smtp`, `resend` |
+| `EMAIL_FROM` | if not console | e.g. `Resultra <notifications@mail.resultra.co.za>` on a verified domain |
+| `RESEND_API_KEY` | if `resend` | A **sending-only** key, restricted to the sending domain |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | if `smtp` | 587 uses STARTTLS; 465 uses TLS |
+| `CLAMAV_HOST`, `CLAMAV_PORT` or `CLAMAV_SOCKET` | recommended | Every upload is scanned; unreachable = uploads refused |
+| `TRUSTED_PROXY_HOPS` | no | Proxies in front of the app (default 1, correct for Render). Used to read the real client IP for rate limiting |
+| `WORKER_IN_PROCESS` | no | `true` runs the background loop (emails, overdue alerts, retention) inside the web process |
+| `HEALTH_TOKEN` | no | Enables `/api/health?token=…` details (email backlog, failures) |
 | `BCRYPT_COST`, `WORKER_INTERVAL_MS` | no | Defaults 12 and 15000 |
 
-## Email setup checklist
-1. Verify your sending domain with the provider (SPF, DKIM, ideally DMARC).
-2. Set `EMAIL_TRANSPORT`, `EMAIL_FROM` and credentials.
-3. Register a test company: the confirmation email must arrive. Then use "Forgot password?".
-4. Watch `/api/health?token=…`: `emailBacklogMinutes` should stay near 0.
-The SMTP transport was verified against a real SMTP server and the Resend transport against an HTTP stand-in, both in automated tests. Neither has been run against a live provider account.
+Secrets are never committed. `.env.example` lists the names only.
+
+## Resend (email)
+
+1. **Account and domain.** In Resend: **Domains → Add domain**. Use a sub-domain you own for sending, e.g. `mail.resultra.co.za` (keeps your main domain's reputation separate). Choose a region close to your users (EU / Ireland is closest to South Africa).
+2. **DNS.** Add the records Resend shows at your DNS provider: the SPF `TXT` record and the DKIM `CNAME`/`TXT` records (and the optional MX record for bounces). Add a DMARC record for the parent domain, starting with `v=DMARC1; p=none; rua=mailto:dmarc@resultra.co.za`, and tighten it to `quarantine` once mail flows. Wait until Resend shows the domain as **Verified**.
+3. **API key.** **API Keys → Create**: permission **Sending access**, restricted to the verified domain. Copy it once; store it only in Render (`RESEND_API_KEY`). Never commit it or paste it into a ticket.
+4. **Sender.** Set `EMAIL_FROM=Resultra <notifications@mail.resultra.co.za>` and `EMAIL_TRANSPORT=resend`. Company-specific emails show the customer's company name and colour in the message, but are sent from this address.
+5. **Development and tests.** Leave `EMAIL_TRANSPORT=console` (the default) in development: emails are written to the database outbox and only a one-line summary is logged. Automated tests never send email (they read the outbox), and addresses on reserved domains (`example.com`, `.test`, `.invalid`, …) are never delivered. Demo companies never queue email at all. To try real delivery safely, Resend accepts `delivered@resend.dev`.
+6. **Production check.** Register a test company with a real inbox: the confirmation email must arrive. Then try "Forgot password?" and an invitation. Platform admin → Platform health shows sent / waiting / failed counts and the last errors.
+7. **Delivery tracking.** Each email is stored in the outbox with its status (`PENDING`, `SENT`, `FAILED`), attempts and the last error; failures are retried with back-off (5 attempts) and duplicates are suppressed by a unique key per event and recipient.
 
 ## Backups and restore
-- Database: daily snapshots plus point-in-time recovery; keep ≥ 30 days; encrypted. With `STORAGE_DRIVER=db` the files are inside these backups. With `s3`, enable bucket versioning and lifecycle rules.
-- **Test a restore** before launch and every quarter.
+- Render Postgres (paid plans) takes daily snapshots with point-in-time recovery; keep at least 30 days. With `STORAGE_DRIVER=db`, photos and signatures are inside these backups.
+- Restore: Render dashboard → database → **Recovery** → choose a point in time → restore to a new database, then point `DATABASE_URL` at it and redeploy. **Test a restore before the pilot starts** and quarterly after that.
+- Manual export: `pg_dump --format=custom "$DATABASE_URL" > resultra.dump`; restore with `pg_restore --clean --no-owner -d "$NEW_DATABASE_URL" resultra.dump`.
+- Each company's owner can also download a full JSON export of their data from Settings.
 
-## Monitoring
-- `GET /api/health` → `{ ok: true }` (database reachable). With the token: `emailBacklogMinutes`, `emailsFailedLast24h`.
-- Alert on 5xx rate, health failures, growing email backlog, and `[scan] ClamAV unavailable` log lines.
-- Logs contain no passwords, tokens or email bodies.
+## Monitoring and error logging
+- `GET /api/health` → `{"ok":true}`; with `?token=` the email backlog and failures. Use it for Render's health check and an external uptime monitor (e.g. UptimeRobot every 5 minutes).
+- Unexpected server errors are written to the `ErrorLog` table (message, path, company and user ids; no request bodies or personal data) and shown in **Platform admin → Platform health**, as well as in Render's logs.
+- Alert on: health check failures, 5xx responses, growing email backlog, failed emails, and `[scan] ClamAV unavailable` log lines.
 
 ## Releases
-Back up → `npm ci && npm run db:migrate && npm run build` → restart. Migrations are additive and non-destructive (see DATABASE.md).
+Back up → deploy (Render runs `prisma migrate deploy` on start) → smoke test (sign in, open a job, download a job card, submit a QR report). Rollback: redeploy the previous commit. Migrations only add tables and columns, so the previous release runs on the newer database.
 
 ## Small instances (free / 512 MB)
-
-`next build` runs ESLint and a TypeScript check inside the build, which can run out of memory on a 512 MB machine ("JavaScript heap out of memory"). `render.demo.yaml` therefore runs `tsc --noEmit` on its own under a heap cap and sets `SKIP_BUILD_CHECKS=1` (read by `next.config.ts`) plus `NODE_OPTIONS=--max-old-space-size=400`. On the live demo these two are also set as service environment variables. Paid instances (`render.yaml`) build normally.
-
-If pushes do not start a deploy, the service's GitHub connection is missing: use "Manual Deploy" in the Render dashboard (or reconnect the repository).
+`next build` runs ESLint and a TypeScript check inside the build, which can run out of memory on a 512 MB machine. `render.demo.yaml` therefore runs `tsc --noEmit` separately under a heap cap and sets `SKIP_BUILD_CHECKS=1` plus `NODE_OPTIONS=--max-old-space-size=400`. Paid instances (`render.yaml`) build normally. If pushes do not start a deploy, use **Manual Deploy** in the Render dashboard (the GitHub connection is not set for automatic deploys).

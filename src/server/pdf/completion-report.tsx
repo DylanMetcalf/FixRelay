@@ -99,7 +99,7 @@ export function CompletionReportDoc({ d, before, after }: { d: JobDocumentData; 
           </View>
         </Section>
 
-        <DocFooter reference={`Completed job report ${job.reference}`} generatedAt={d.generatedAt} qr={d.qr} />
+        <DocFooter reference={`Completed job report ${job.reference}`} generatedAt={d.generatedAt} qr={d.qr} href={d.link} />
       </Page>
     </Document>
   );

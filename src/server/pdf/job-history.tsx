@@ -89,7 +89,7 @@ export function JobHistoryDoc({ d }: { d: JobDocumentData }) {
           <Text style={[s.small, s.muted, { marginTop: 4 }]}>Files are kept in the digital record; open the job in Resultra to view them.</Text>
         </Section>
 
-        <DocFooter reference={`Job history ${job.reference}`} generatedAt={d.generatedAt} qr={d.qr} />
+        <DocFooter reference={`Job history ${job.reference}`} generatedAt={d.generatedAt} qr={d.qr} href={d.link} />
       </Page>
     </Document>
   );

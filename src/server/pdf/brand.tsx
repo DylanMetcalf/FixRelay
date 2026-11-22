@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/alt-text -- react-pdf <Image> has no alt attribute */
-import { Circle, Image, Path, Rect, Svg, Text, View } from "@react-pdf/renderer";
+import { Circle, Image, Link, Path, Rect, Svg, Text, View } from "@react-pdf/renderer";
 import { C, fmtDT, s } from "./theme";
 
 /** The Resultra mark (same geometry as public/brand/resultra-mark.svg). */
@@ -64,7 +64,7 @@ export function DocHeader({ h }: { h: HeaderInfo }) {
  * Fixed footer on every page: brand, reference, page x of y, generation time, and an optional QR code that opens
  * the digital record. The QR code only links to the job page, which still requires signing in with access to it.
  */
-export function DocFooter({ reference, generatedAt, qr, note }: { reference: string; generatedAt: Date; qr?: string; note?: string }) {
+export function DocFooter({ reference, generatedAt, qr, href, note }: { reference: string; generatedAt: Date; qr?: string; href?: string; note?: string }) {
   return (
     <View fixed style={{ position: "absolute", left: 36, right: 36, bottom: 18, flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderColor: C.line, paddingTop: 6 }}>
       <Mark size={14} />
@@ -74,9 +74,10 @@ export function DocFooter({ reference, generatedAt, qr, note }: { reference: str
       </View>
       <Text style={{ fontSize: 7.5, color: C.muted, marginRight: qr ? 8 : 0 }} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
       {qr && (
-        <View style={{ alignItems: "center" }}>
+        // Also a clickable link in the digital PDF. It opens the job page, which still requires signing in.
+        <Link src={href ?? ""} style={{ alignItems: "center" }}>
           <Image src={qr} style={{ width: 34, height: 34 }} />
-        </View>
+        </Link>
       )}
     </View>
   );

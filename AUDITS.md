@@ -41,7 +41,7 @@ Method: axe-core (WCAG 2.0/2.1 A and AA rules) on 19 pages at desktop (1280px) *
 | 3.2 | Assessment card used invalid `<dl>` content | Low | Badges moved outside the list |
 | 3.3 | Small grey text on the landing page below contrast ratio | Low | Darker text, 11px minimum |
 | 3.4 | On desktop, only the job reference was clickable; clicking the title (the natural target) did nothing | Medium | Title is a link as well |
-| 3.5 | No product identity (generic icon, slate palette) | Medium | FixRelay mark, palette, logo component, branded auth/landing/offline pages, social image (BRAND.md) |
+| 3.5 | No product identity (generic icon, slate palette) | Medium | Resultra mark, palette, logo component, branded auth/landing/offline pages, social image (BRAND.md) |
 
 Result after fixes: **0 axe violations on all 19 pages at both sizes.**
 
@@ -77,7 +77,7 @@ Result after fixes: **0 axe violations on all 19 pages at both sizes.**
 
 ## Internal site model: review pass (2026-11-17)
 
-After FixRelay was changed to an internal site maintenance system, the new screens were reviewed by screenshot (desktop and phone) and every browser journey was rewritten. Earlier findings that mention customers refer to the previous, contractor-facing version.
+After Resultra was changed to an internal site maintenance system, the new screens were reviewed by screenshot (desktop and phone) and every browser journey was rewritten. Earlier findings that mention customers refer to the previous, contractor-facing version.
 
 | # | Finding | Sev. | Fix | Evidence |
 |---|---|---|---|---|
