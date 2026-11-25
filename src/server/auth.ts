@@ -47,7 +47,7 @@ export async function login(email: string, password: string): Promise<string> {
   const e = emailSchema.safeParse(email);
   const user = e.success ? await prisma.user.findUnique({ where: { email: e.data } }) : null;
   const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-  if (!user || !ok || user.demoPersona) throw new AppError("UNAUTHENTICATED", "Incorrect email or password.");
+  if (!user || !ok || user.demoPersona || user.guestExpiresAt) throw new AppError("UNAUTHENTICATED", "Incorrect email or password.");
   return createSession(prisma, user.id);
 }
 
@@ -98,6 +98,7 @@ export async function loadSession(token: string | undefined): Promise<SessionVie
     },
   });
   if (!s || s.expiresAt < new Date()) return null;
+  if (s.user.guestExpiresAt && s.user.guestExpiresAt < new Date()) return null; // the public sandbox has expired
   const { user } = s;
   const base = {
     user: { id: user.id, name: user.name, email: user.email, isPlatformAdmin: user.isPlatformAdmin, emailVerified: !!user.emailVerifiedAt },

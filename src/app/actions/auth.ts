@@ -1,7 +1,7 @@
 "use server";
 import { rateLimit } from "@/lib/rate-limit";
 import * as auth from "@/server/auth";
-import { createDemoWorkspace, resetDemoWorkspace } from "@/server/services/demo";
+import { createDemoWorkspace, resetDemoWorkspace, startSandbox } from "@/server/services/demo";
 import { markAllRead } from "@/server/services/notifications";
 import * as account from "@/server/services/account";
 import * as orgs from "@/server/services/orgs";
@@ -150,5 +150,19 @@ export async function resetDemoAction(_: ActionState, _fd: FormData) {
     const orgId = await resetDemoWorkspace(s.user);
     await auth.switchWorkspace((await sessionToken())!, orgId);
     return { redirect: "/dashboard", ok: "Demo data reset." };
+  });
+}
+
+/** Public: open a private sandbox (guest account + demo company). Rate limited per visitor and overall. */
+export async function startSandboxAction(_: ActionState, _fd: FormData) {
+  return run(async () => {
+    const ip = await clientIp();
+    await rateLimit(`sandbox:ip:${ip}`, 5, 60 * 60_000);
+    await rateLimit("sandbox:all", 300, 24 * 60 * 60_000);
+    const { token } = await startSandbox();
+    const previous = await sessionToken();
+    await setSessionCookie(token);
+    if (previous) await auth.logout(previous);
+    return { redirect: "/dashboard?tour=start" };
   });
 }

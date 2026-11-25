@@ -27,7 +27,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <Submit className="btn btn-primary w-full">Sign in</Submit>
       </Form>
       <p className="muted mt-4 text-center">Have a registration code from your site? <Link className="link" href="/join">Join your company</Link></p>
-      <p className="muted mt-1 text-center">New company? <Link className="link" href="/register">Start a free trial</Link></p>
+      <p className="muted mt-1 text-center">New company? <Link className="link" href="/register">Start a free trial</Link> or <Link className="link" href="/demo">try the live demo</Link></p>
     </>
   );
 }

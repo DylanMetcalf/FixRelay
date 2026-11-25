@@ -16,7 +16,7 @@ import * as sites from "./sites";
 import sharp from "sharp";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
-import { departmentsOf } from "../auth";
+import { createSession, departmentsOf } from "../auth";
 import * as departments from "./departments";
 import { addJobAttachment } from "./attachments";
 
@@ -207,3 +207,39 @@ export async function resetDemoWorkspace(user: { id: string; name: string; email
 /** The sample people a demonstrator can view as (demo companies only). */
 export const listPersonas = (orgId: string) =>
   prisma.membership.findMany({ where: { orgId, active: true, org: { isDemo: true }, user: { demoPersona: true } }, select: { userId: true, roles: true, user: { select: { name: true, jobTitle: true } } }, orderBy: { createdAt: "asc" } });
+
+// ---------- Public sandbox ----------
+
+export const SANDBOX_HOURS = 24;
+
+/**
+ * "Try ManOp" without signing up: a throw-away guest account owning its own demo company (the same sample data,
+ * sample people and "view as"). Nothing is shared between visitors, no email is ever sent, and after
+ * SANDBOX_HOURS the guest can no longer sign in and the sandbox is archived by the background worker.
+ * Returns a session token for the guest.
+ */
+export async function startSandbox(): Promise<{ token: string; orgId: string }> {
+  const id = randomBytes(6).toString("hex");
+  const user = await prisma.user.create({ data: {
+    email: `guest-${id}@sandbox.manop.invalid`, name: "Sandbox visitor", jobTitle: "Trying ManOp",
+    passwordHash: await bcrypt.hash(randomBytes(32).toString("hex"), 4), emailVerifiedAt: new Date(),
+    guestExpiresAt: new Date(Date.now() + SANDBOX_HOURS * 3_600_000),
+  } });
+  const orgId = await createDemoWorkspace(user);
+  await prisma.organisation.update({ where: { id: orgId }, data: { name: "Demo Foods – your sandbox" } });
+  return { token: await createSession(prisma, user.id, orgId), orgId };
+}
+
+/** Background clean-up: archive sandboxes whose guests have expired and end their sessions. Returns how many. */
+export async function cleanupSandboxes(now = new Date()): Promise<number> {
+  const guests = await prisma.user.findMany({ where: { guestExpiresAt: { lt: now }, memberships: { some: { active: true } } }, select: { id: true }, take: 200 });
+  for (const g of guests) {
+    await prisma.$transaction(async (tx) => {
+      const orgs = (await tx.membership.findMany({ where: { userId: g.id }, select: { orgId: true } })).map((m) => m.orgId);
+      await tx.organisation.updateMany({ where: { id: { in: orgs }, isDemo: true, archivedAt: null }, data: { archivedAt: now } });
+      await tx.membership.updateMany({ where: { orgId: { in: orgs } }, data: { active: false } });
+      await tx.session.deleteMany({ where: { userId: g.id } });
+    });
+  }
+  return guests.length;
+}

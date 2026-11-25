@@ -5,6 +5,7 @@
  */
 import { transportFromEnv } from "./email";
 import { processOutbox, purgeRetention, scanOverdue } from "./services/notifications";
+import { cleanupSandboxes } from "./services/demo";
 
 export function startBackgroundLoop(opts: { intervalMs?: number; log?: (m: string) => void } = {}) {
   const intervalMs = opts.intervalMs ?? Number(process.env.WORKER_INTERVAL_MS ?? 15_000);
@@ -22,6 +23,8 @@ export function startBackgroundLoop(opts: { intervalMs?: number; log?: (m: strin
         if (tick++ % 20 === 0) {
           const n = await scanOverdue();
           if (n) log(`overdue alerts=${n}`);
+          const g = await cleanupSandboxes();
+          if (g) log(`expired sandboxes archived=${g}`);
         }
         if (Date.now() - lastPurge > 6 * 3_600_000) {
           lastPurge = Date.now();

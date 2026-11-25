@@ -48,10 +48,11 @@ export default async function Landing() {
             <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl">From reported to resolved.</h1>
             <p className="mt-4 max-w-xl text-lg text-slate-300">The maintenance system for your own sites. Every fault, contractor quote, approval and repair in one place – for factories, warehouses, retail centres, schools and estates.</p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link href="/register" className="btn bg-signal px-6 text-base text-navy hover:brightness-105">Start your free 14-day trial</Link>
-              <Link href="#how" className="btn border border-navy-3 px-6 text-base text-white hover:bg-navy-2">See how it works</Link>
+              <Link href="/demo" className="btn bg-signal px-6 text-base text-navy hover:brightness-105" data-testid="try-demo">Try the live demo – no sign-up</Link>
+              <Link href="/register" className="btn border border-navy-3 px-6 text-base text-white hover:bg-navy-2">Start your free 14-day trial</Link>
+              <Link href="/how-it-works" className="btn px-6 text-base text-white underline hover:bg-navy-2">How it works</Link>
             </div>
-            <p className="mt-3 text-sm text-slate-400">No card needed. Add a site, print QR codes, and start taking fault reports today. Try it with sample data first.</p>
+            <p className="mt-3 text-sm text-slate-400">The demo opens a private sandbox with sample sites, people and jobs, and a guided tour. The trial needs no card.</p>
           </div>
           <PhoneMock />
         </section>

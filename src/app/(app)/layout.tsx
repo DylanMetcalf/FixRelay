@@ -21,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const unread = await unreadCount(ctx);
   const demoOwner = org.isDemo && !!(await prisma.membership.findFirst({ where: { orgId: org.id, userId: s.user.id, active: true, roles: { has: "OWNER" } } }));
   const personas = demoOwner ? await listPersonas(org.id) : [];
+  const guestUntil = demoOwner ? (await prisma.user.findUnique({ where: { id: s.user.id }, select: { guestExpiresAt: true } }))?.guestExpiresAt ?? null : null;
   const brand = safeColour(org.brandColour);
   const manager = can(ctx, "job.viewAll");
   const tech = ctx.roles.includes("TECHNICIAN");
@@ -86,7 +87,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </Banner>
         )}
-        {org.isDemo && (demoOwner ? <DemoBar personas={personas} viewAs={s.viewAs} /> : <Banner tone="amber"><strong>Demo workspace.</strong> This is sample data, kept completely separate from your company. Switch workspace from your profile.</Banner>)}
+        {org.isDemo && (demoOwner ? <DemoBar personas={personas} viewAs={s.viewAs} guestUntil={guestUntil} /> : <Banner tone="amber"><strong>Demo workspace.</strong> This is sample data, kept completely separate from your company. Switch workspace from your profile.</Banner>)}
         {ctx.support && <Banner tone="red"><strong>Support session (read-only).</strong> You are viewing {org.name} under a time-limited grant. This visit is recorded in their audit trail.</Banner>}
         {sub?.access === "grace" && <Banner tone="amber"><strong>{sub.message}</strong> Full access continues until {fmtDate(sub.endsAt)}.</Banner>}
         {sub?.access === "locked" && !ctx.support && <Banner tone="red"><strong>Read-only: {sub.message}</strong> You can still view and export all your records. Contact us to reactivate.</Banner>}

@@ -89,3 +89,28 @@ describe("demo environment", () => {
     await expect(createDemoWorkspace(me)).rejects.toEqual(code("CONFLICT")); // one live demo per person
   });
 });
+
+describe("public sandbox (no sign-up)", () => {
+  it("gives each visitor a private demo company that expires; guests cannot sign in with a password; clean-up archives it", async () => {
+    const { startSandbox, cleanupSandboxes } = await import("@/server/services/demo");
+    const a = await startSandbox();
+    const b = await startSandbox();
+    expect(a.orgId).not.toBe(b.orgId); // never shared between visitors
+    const s = await loadSession(a.token);
+    expect(s?.ctx?.roles).toEqual(["OWNER", "MANAGER", "TECHNICIAN"]);
+    expect(s?.org).toMatchObject({ isDemo: true, name: "Demo Foods – your sandbox" });
+    expect(await prisma.job.count({ where: { orgId: a.orgId } })).toBeGreaterThan(10);
+    expect(await prisma.job.count({ where: { orgId: a.orgId, mode: "SELF" } })).toBe(2);
+    const guest = await prisma.user.findUniqueOrThrow({ where: { id: s!.user.id } });
+    expect(guest.email).toMatch(/@sandbox\.manop\.invalid$/);
+    await expect(login(guest.email, "anything at all")).rejects.toEqual(code("UNAUTHENTICATED"));
+    expect(await prisma.outboxEmail.count({ where: { orgId: a.orgId } })).toBe(0);
+
+    await prisma.user.update({ where: { id: guest.id }, data: { guestExpiresAt: new Date(Date.now() - 1000) } });
+    expect(await loadSession(a.token)).toBeNull(); // expired: the session no longer works
+    expect(await cleanupSandboxes()).toBeGreaterThanOrEqual(1);
+    expect((await prisma.organisation.findUniqueOrThrow({ where: { id: a.orgId } })).archivedAt).not.toBeNull();
+    expect(await prisma.session.count({ where: { userId: guest.id } })).toBe(0);
+    expect((await loadSession(b.token))?.ctx).toBeTruthy(); // other visitors unaffected
+  });
+});
