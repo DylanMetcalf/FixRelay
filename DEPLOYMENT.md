@@ -2,7 +2,7 @@
 
 ManOp (formerly FixRelay) runs as one Node.js web service plus PostgreSQL. All options below use the same code and environment variables. Service, database and cookie names keep their earlier `fixrelay` identifiers on purpose, so existing deployments and sessions keep working.
 
-**Current demo:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**. Move to the paid `render.yaml` before the pilot. The ManOp domain is **not** assumed: everything uses `APP_URL`, so the domain can be added later.
+**Current demo:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**. Move to the paid `render.yaml` before the pilot. The domain `www.manop.co.za` is being connected (see "Custom domain" below); everything uses `APP_URL`, so nothing else changes.
 
 ## Option A: Render (recommended for the pilot)
 
@@ -19,11 +19,18 @@ ManOp (formerly FixRelay) runs as one Node.js web service plus PostgreSQL. All o
 ### PDF generation on Render
 Job cards, completion reports, history reports and QR signs are generated on the server with `@react-pdf/renderer`, which is pure JavaScript: **no Chromium or other browser is needed** on the server. The Inter fonts are bundled in `assets/fonts/` (SIL Open Font License, see `LICENSE-Inter-OFL.txt`), so output is identical on every machine. PDFs are generated on request and streamed; they are never written to disk or stored, so there is nothing stale to clean up or leak. Memory: a job card with four photos peaks well under 100 MB; the Starter instance (512 MB) is enough, the free 512 MB instance works but is slower on its first request.
 
-### Custom domain and HTTPS
-1. In the web service: **Settings → Custom Domains → Add**, e.g. `app.manop.co.za` (once the domain is owned).
-2. Add the DNS record Render shows (CNAME to the `onrender.com` host, or the A/ALIAS record for an apex domain). Render issues and renews the TLS certificate automatically; HTTP redirects to HTTPS.
-3. Change `APP_URL` to `https://app.manop.co.za` and redeploy. Emailed links, QR codes and PDF links use it. **Print QR signs after this change**: signs printed with the old address will still point to the old address.
-4. HTTPS is required in production: session cookies are `Secure` with the `__Host-` prefix, HSTS is sent, and the installable app needs HTTPS.
+### Custom domain and HTTPS (www.manop.co.za)
+The domain is `manop.co.za`; the app runs on **`www.manop.co.za`**, and the bare `manop.co.za` redirects to it. Render's API tools cannot add domains, so steps 1 and 2 are done by hand.
+1. Render dashboard → web service **fixrelay-demo** → **Settings → Custom Domains → Add Custom Domain** → `www.manop.co.za`. Render offers to add `manop.co.za` as well; accept, so one redirects to the other.
+2. At the registrar or DNS host for `manop.co.za` (the .co.za registrar, or Cloudflare if the nameservers point there):
+   - `CNAME`, name `www`, value `fixrelay-demo.onrender.com`
+   - `A`, name `@` (the bare domain), value `216.24.57.1` (check the IP Render shows; it is Render's documented load balancer address)
+   - Delete any older `A`, `AAAA` or `CNAME` records for `@` or `www` (registrar parking pages). Leave `MX` and `TXT` records alone: they carry email.
+   - On Cloudflare, set both records to **DNS only** (grey cloud) until Render shows the domain as verified.
+3. Back in Render, click **Verify**. DNS usually takes minutes, occasionally a few hours. Render then issues and renews the TLS certificate itself; HTTP redirects to HTTPS.
+4. Set `APP_URL=https://www.manop.co.za` and redeploy. Emailed links, QR codes and PDF links use it. **Print QR signs after this change**: signs printed earlier still point to `fixrelay-demo.onrender.com` (which keeps working while the service exists).
+5. Optional: verify `manop.co.za` in Resend (DNS records it shows) and set `EMAIL_FROM` to e.g. `ManOp <noreply@manop.co.za>`.
+6. HTTPS is required in production: session cookies are `Secure` with the `__Host-` prefix, HSTS is sent, and the installable app needs HTTPS.
 
 ### Staging / pilot environment
 Use a second Blueprint from `render.demo.yaml` (or a copy of `render.yaml` with a different service name) for a staging environment with its own database. Testers can also use an isolated pilot company on production: the platform owner creates it in Platform admin; companies never see each other's data. Demo workspaces (sample data) are separate companies flagged as demos and never send email.
@@ -57,7 +64,7 @@ Then run `npm start` (web) and `npm run worker` (background), or only `npm start
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | yes | PostgreSQL 14+ (tested on 16). Add `?sslmode=require` for managed databases |
-| `APP_URL` | yes | Public HTTPS URL, e.g. `https://app.manop.co.za`. Used in emails, QR codes and PDF links. On Render, `RENDER_EXTERNAL_URL` is used if it is not set |
+| `APP_URL` | yes | Public HTTPS URL, e.g. `https://www.manop.co.za`. Used in emails, QR codes and PDF links. On Render, `RENDER_EXTERNAL_URL` is used if it is not set |
 | `NODE_ENV` | yes | `production` |
 | `STORAGE_DRIVER` | no | `db` (default; files in Postgres, works with several instances, included in database backups), `s3`, or `local` (development only: not for Render, whose disk is temporary) |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_SSE` | if `s3` | Any S3-compatible store (AWS S3 af-south-1, Cloudflare R2, Backblaze B2). Bucket must be **private** |
