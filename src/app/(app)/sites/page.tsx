@@ -17,7 +17,7 @@ export default async function Sites() {
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
           {sites.length === 0 ? <Empty title="No sites yet">Add your first site to start logging faults.</Empty> : (
-            <ul className="space-y-2">
+            <ul className="space-y-2" data-tour="sites">
               {sites.map((s) => (
                 <li key={s.id}><Link href={`/sites/${s.id}`} className="card flex items-center justify-between gap-3 !p-4 hover:border-gray-500">
                   <span><span className="block font-bold text-gray-900">{s.name}</span><span className="muted">{s.address || "No address"}</span></span>

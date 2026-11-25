@@ -142,7 +142,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
       {manager && (
         <>
-          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-tour="tiles">
             {tiles.map((t) => (
               <Link key={t.label} href={t.href.startsWith("/") ? t.href : `/dashboard${t.href}`} className={`card !p-3 hover:border-gray-500 ${t.alert && t.n > 0 ? "!border-red-400 !bg-red-50" : ""}`}>
                 <p className={`text-3xl font-extrabold tabular-nums ${t.alert && t.n > 0 ? "text-red-800" : "text-gray-900"}`}>{t.n}</p>

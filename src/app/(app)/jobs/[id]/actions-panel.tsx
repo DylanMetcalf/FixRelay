@@ -287,5 +287,5 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigR
     );
   }
   if (blocks.length === 0) return null;
-  return <Card title="Actions" className="no-print"><div className="flex flex-wrap items-start gap-2" data-testid="actions">{blocks}</div></Card>;
+  return <Card title="Actions" className="no-print"><div className="flex flex-wrap items-start gap-2" data-testid="actions" data-tour="actions">{blocks}</div></Card>;
 }

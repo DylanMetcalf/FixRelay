@@ -246,6 +246,34 @@ async function pdfToPng(url, p, name, pages = "1") {
   await demoUser.getByTestId("viewing-as").waitFor(); await demoUser.waitForLoadState("networkidle");
   await shot(demoUser, "demo-view-as");
 
+  // ---------- One-person job (technician reports and fixes it)
+  await go(tech, "/requests/new");
+  await f(tech, "title").fill("Loose handrail on mezzanine stairs");
+  await f(tech, "description").fill("Two brackets loose on the handrail.");
+  for (let n = 0; n < 4; n++) await next(tech);
+  await tech.getByTestId("who-fixes").getByText("I'll fix it myself").click();
+  await el(tech, '[data-testid="who-fixes"]', "self-choice");
+  await tech.getByRole("button", { name: "Send report" }).click();
+  await tech.waitForURL(/jobs\/[0-9a-f-]{36}$/); await tech.waitForLoadState("networkidle");
+  await shot(tech, "self-job");
+  await go(admin, "/how-it-works"); await shot(admin, "how-it-works", { fullPage: true });
+
+  // ---------- Public sandbox with the guided tour
+  const visitor = await page();
+  await go(visitor, "/demo"); await shot(visitor, "sandbox-start");
+  await visitor.getByRole("button", { name: "Open my sandbox" }).click();
+  await visitor.waitForURL(/dashboard/, { timeout: 90_000 }); await visitor.waitForLoadState("networkidle");
+  await visitor.getByTestId("tour").locator('[role="dialog"]').waitFor();
+  await shot(visitor, "tour-1-welcome");
+  await visitor.getByTestId("tour-next").click(); await visitor.waitForTimeout(700);
+  await shot(visitor, "tour-2-tiles");
+  for (let n = 0; n < 5; n++) { await visitor.getByTestId("tour-next").click(); await visitor.waitForLoadState("networkidle"); await visitor.waitForTimeout(600); }
+  await shot(visitor, "tour-job-next"); // step 7: what happens next
+  await visitor.getByTestId("tour-next").click(); await visitor.waitForTimeout(700);
+  await visitor.getByTestId("tour-next").click(); await visitor.waitForTimeout(700);
+  await shot(visitor, "tour-documents");
+  await visitor.getByRole("button", { name: "End tour" }).click();
+
   fs.unlinkSync(sample);
   for (const c2 of ctxs) await c2.close();
   await browser.close(); await db.$disconnect();

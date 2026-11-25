@@ -1,0 +1,91 @@
+<!doctype html><html lang="en-ZA"><head><meta charset="utf-8"><title>ManOp – Platform administrator guide</title><style>
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  body { font-family: Inter, "Segoe UI", Arial, sans-serif; color: #111827; font-size: 10.5pt; line-height: 1.45; }
+  .cover { background: #0B1F3A; color: #fff; border-radius: 10px; padding: 26px 28px; margin-bottom: 18px; }
+  .cover .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18pt; }
+  .cover h1 { font-size: 24pt; margin: 18px 0 4px; }
+  .cover .tag { color: #F5A524; font-weight: 800; }
+  .cover .aud { color: #CBD5E1; margin-top: 10px; }
+  h2 { color: #0B1F3A; font-size: 14pt; margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 3px solid #F5A524; display: inline-block; }
+  section { break-inside: auto; }
+  section.break { break-before: page; }
+  p, li { margin: 4px 0; }
+  code { background: #F3F5F8; padding: 1px 4px; border-radius: 3px; font-size: 9.5pt; }
+  .pics { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .pics figure { margin: 0; flex: 1 1 100%; break-inside: avoid; }
+  .pics.phone figure { flex: 0 0 31%; }
+  .pics img { width: 100%; border: 1px solid #D1D5DB; border-radius: 6px; }
+  figcaption { font-size: 8.5pt; color: #4B5563; margin-top: 2px; }
+  table.check { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  table.check th, table.check td { border: 1px solid #D1D5DB; padding: 5px 6px; vertical-align: top; text-align: left; }
+  table.check th { background: #F3F5F8; }
+  td.box { width: 30px; text-align: center; font-size: 13pt; }
+  table.check td:last-child { width: 22%; }
+  .note { background: #FFFBEB; border-left: 4px solid #F5A524; padding: 6px 10px; }
+  </style></head><body>
+  <div class="cover"><div class="brand"><svg viewBox="0 0 512 512" width="36" height="36"><rect width="512" height="512" rx="112" fill="#0B1F3A"/><path d="M140 372V150l70 96" fill="none" stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M210 246l52 70 110-176" fill="none" stroke="#F5A524" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M372 140v232" fill="none" stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><circle cx="140" cy="372" r="25" fill="#5B8DEF"/></svg> ManOp</div><h1>ManOp – Platform administrator guide</h1><div class="tag">From reported to resolved.</div><div class="aud">For the ManOp team (the SaaS owner).</div><div class="aud">Screenshots are taken from the running application with synthetic sample data. Version of 2026-11-25.</div></div>
+  <section class="">
+      <h2>1. Signing in</h2>
+      <p>The platform owner account is created on the server with <code>PLATFORM_ADMIN_EMAIL=… PLATFORM_ADMIN_PASSWORD=… npm run db:seed</code>. Sign in at <code>/login</code>: you land on <strong>Platform admin</strong> (<code>/platform</code>).</p>
+      
+      
+      
+      
+    </section>
+<section class="">
+      <h2>2. Creating a customer company</h2>
+      
+      <ol><li>Fill in <strong>Create a customer company</strong>: company name, first site and address, phone, the main contact's name and work email, the starting departments, and whether QR reporting without an account is on.</li><li><strong>Create company and invite contact</strong>. The company starts on a trial with the site (with QR codes) and departments ready.</li><li>The main contact receives a secure invitation (you can also copy the link shown). Accepting it makes them the site administrator.</li></ol>
+      
+      
+      <div class="pics"><figure><img src="../screenshots/platform-create.png" alt="2. Creating a customer company"><figcaption>Creating a customer company</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>3. Customer overview</h2>
+      <p>Each company shows its main contact (and whether the invitation was accepted), sites, users, people waiting for approval, departments, jobs, email delivery, subscription and an <strong>onboarding checklist</strong> (administrator joined, site, departments, team, first job). Search finds a company by name.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/platform-overview.png" alt="3. Customer overview"><figcaption>Platform admin</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>4. Customer profile</h2>
+      <p>Open a company to see its users (roles, status, departments, email confirmed), sites, departments and email delivery failures. <strong>Re-send the administrator invitation</strong> if it expired. This is <strong>account information only</strong>: jobs, quotes, photos and reports are never shown here.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/platform-customer.png" alt="4. Customer profile"><figcaption>Customer profile</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>5. Subscriptions and account status</h2>
+      <p>Under <strong>Subscription and support</strong> set the plan, status (trial, active, past due, suspended, cancelled) and dates. Suspended or expired accounts become read-only: customers keep access to their records and exports.</p>
+      
+      
+      
+      
+    </section>
+<section class="">
+      <h2>6. Authorised support access</h2>
+      <p>There is no other way to see a company's business data.</p>
+      <ol><li>The customer's administrator grants support access in their Settings (reason and 4, 24 or 72 hours).</li><li><strong>Open read-only support session (recorded)</strong> appears for that company.</li><li>The visit is written to the company's history; you cannot change anything; access ends when the grant expires or is revoked.</li></ol>
+      
+      
+      
+    </section>
+<section class="">
+      <h2>7. Platform health</h2>
+      <p><strong>Platform health</strong> shows emails sent, waiting and failed over the last 7 days (recipient and error for failures), and recent unexpected server errors (message and page, no personal data). Check it daily during the pilot.</p>
+      
+      
+      
+      
+    </section>
+<section class="">
+      <h2>8. Demo, sandbox and pilot companies</h2>
+      
+      
+      <ul><li><strong>Public sandbox</strong>: anyone can open <code>/demo</code> without signing up and gets a private sample company with a guided tour; it expires after 24 hours and the background worker archives it. Rate limits: 5 per visitor per hour, 300 per day overall.</li><li><strong>Demo</strong>: signed-in users can open a separate demo workspace with sample data and switch roles with <strong>View as</strong>; demo companies never send email and can be reset.</li><li><strong>Pilot</strong>: create a normal customer company for the pilot customer (or a separate staging deployment); testers register with a code and are approved by the pilot's administrator.</li></ul>
+      
+      <div class="pics"><figure><img src="../screenshots/demo-dashboard.png" alt="8. Demo, sandbox and pilot companies"><figcaption>Demo workspace with View as</figcaption></figure><figure><img src="../screenshots/demo-view-as.png" alt="8. Demo, sandbox and pilot companies"><figcaption>Viewing as the finance approver</figcaption></figure></div>
+    </section>
+  </body></html>

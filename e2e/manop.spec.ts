@@ -632,3 +632,105 @@ test("V1 · demo: view as a sample technician and approver, then return to yours
   await p.getByRole("button", { name: "View as" }).click();
   await expect(p.getByTestId("viewing-as")).toHaveCount(0);
 });
+
+// ---------------------------------------------------------------- ManOp: sandbox, tour, one-person jobs
+
+test("X1 · anyone opens a private sandbox from the home page, takes the guided tour and ends on How it works", async ({ browser }) => {
+  const p = await newPage(browser);
+  await gotoReady(p, "/");
+  await expect(p).toHaveTitle(/ManOp/);
+  await p.getByTestId("try-demo").click();
+  await expect(p).toHaveURL(/\/demo$/);
+  await p.getByRole("button", { name: "Open my sandbox" }).click();
+  await expect(p).toHaveURL(/\/dashboard/, { timeout: 60_000 });
+  await expect(p.getByTestId("demo-bar")).toContainText("Your sandbox");
+  const tour = p.getByTestId("tour");
+  await expect(tour).toContainText("Welcome to ManOp");
+  const titles: string[] = [];
+  for (let n = 0; n < 12; n++) {
+    titles.push((await tour.locator("h2").textContent())!);
+    await tour.getByTestId("tour-next").click();
+    await p.waitForLoadState("networkidle");
+    await expect(tour.getByRole("dialog")).toBeVisible();
+  }
+  expect(titles).toEqual(expect.arrayContaining(["Your control room", "Open now and History", "What happens next", "The job card", "Sites, areas and QR codes", "Your team and rules"]));
+  await expect(p).toHaveURL(/how-it-works/);
+  await expect(tour).toContainText("Two ways a job runs");
+  await tour.getByTestId("tour-next").click(); // Finish
+  await expect(tour).toHaveCount(0);
+  await expect(p.getByTestId("flow-managed")).toBeVisible();
+  await expect(p.getByTestId("flow-self")).toBeVisible();
+  // The sandbox is private to this visitor and sends nothing.
+  await gotoReady(p, "/jobs");
+  await expect(p.getByText("Workshop air line hissing at lathe drop").filter({ visible: true }).first()).toBeVisible();
+});
+
+test("X2 · one-person job in the app: 'I'll fix it myself' → in progress at once → complete → manager signs off → closed", async ({ browser }) => {
+  const { p } = await company(browser);
+  await gotoReady(p, "/requests/new");
+  await f(p, "title").fill("Office door closer loose");
+  await f(p, "description").fill("Door slams; closer arm screws loose.");
+  await next(p); await next(p); await next(p); await next(p);
+  await expect(p.getByTestId("who-fixes")).toBeVisible();
+  await p.getByTestId("who-fixes").getByText("I'll fix it myself").click();
+  await p.getByRole("button", { name: "Send report" }).click();
+  await expect(p).toHaveURL(/jobs\/[0-9a-f-]{36}$/);
+  await expect(p.getByText("One-person job").first()).toBeVisible();
+  await expect(status(p)).toHaveText("In progress");
+  await expect(p.getByTestId("next-action")).toContainText("one-person job");
+  const done = await openPanel(p, "Work finished – submit evidence");
+  await done.locator('[name="workPerformed"]').fill("Re-fixed the closer arm and adjusted the speed.");
+  await next(done);
+  await done.locator('[name="after"]').setInputFiles(PHOTO);
+  await next(done);
+  await done.getByTestId("root-causes").getByLabel("Wear and tear", { exact: true }).check();
+  await next(done);
+  await done.getByRole("button", { name: "Submit for confirmation" }).click();
+  await expect(status(p)).toHaveText("Awaiting confirmation");
+  await expect(p.getByTestId("next-action")).toContainText("Sign off the one-person job");
+  await gotoReady(p, "/dashboard");
+  await expect(p.locator("a.card", { hasText: "One-person jobs to sign off" })).toContainText("1");
+  await p.locator("a.card", { hasText: "One-person jobs to sign off" }).click();
+  await p.getByText("Office door closer loose").filter({ visible: true }).first().click();
+  await (await openPanel(p, "Confirm fixed, sign off and close")).getByRole("button", { name: "Sign off and close" }).click();
+  await expect(status(p)).toHaveText("Closed");
+});
+
+test("X3 · without manager sign-off a one-person job closes on completion; a manager can take a report as a one-person job", async ({ browser }) => {
+  const { p } = await company(browser);
+  await gotoReady(p, "/settings");
+  await p.getByTestId("self-job-settings").getByLabel(/signs off one-person jobs/).uncheck();
+  await p.getByRole("button", { name: "Save company settings" }).click();
+  await expect(p.getByText("Company settings saved.")).toBeVisible();
+  const url = await logRequest(p, "Canteen light flickering");
+  const take = await openPanel(p, "I'll fix it myself (one-person job)");
+  await take.getByRole("button", { name: "Take it and start now" }).click();
+  await expect(status(p)).toHaveText("In progress");
+  const done = await openPanel(p, "Work finished – submit evidence");
+  await done.locator('[name="workPerformed"]').fill("Replaced the starter.");
+  await next(done);
+  await done.locator('[name="after"]').setInputFiles(PHOTO);
+  await next(done);
+  await done.getByTestId("root-causes").getByLabel("Wear and tear", { exact: true }).check();
+  await next(done);
+  await done.getByRole("button", { name: "Submit for confirmation" }).click();
+  await expect(status(p)).toHaveText("Closed");
+  const job = await db.job.findUniqueOrThrow({ where: { id: jobIdOf(url) } });
+  expect(job).toMatchObject({ mode: "SELF", status: "CLOSED" });
+  const { pdf } = await pdfOf(p, `/api/jobs/${job.id}/documents/card`);
+  expect(pdf.text).toContain("one-person job");
+});
+
+test("X4 · How it works is public, accessible and explains both workflows", async ({ browser }) => {
+  const p = await newPage(browser);
+  await gotoReady(p, "/how-it-works");
+  await expect(p.getByRole("heading", { level: 1 })).toHaveText("How ManOp works");
+  await expect(p.getByTestId("flow-managed")).toContainText("Assigned");
+  await expect(p.getByTestId("flow-self")).toContainText("I’ll fix it myself");
+  const a11y = await new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(a11y.violations.map((v) => v.id)).toEqual([]);
+  const phone = await newPage(browser, { mobile: true });
+  await gotoReady(phone, "/demo");
+  await expect(phone.getByRole("button", { name: "Open my sandbox" })).toBeVisible();
+  expect(await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+});

@@ -10,6 +10,7 @@ import { can } from "@/server/permissions";
 import { unreadCount } from "@/server/services/notifications";
 import { listPersonas } from "@/server/services/demo";
 import { DemoBar } from "@/components/demo-bar";
+import { Tour } from "@/components/tour";
 import { prisma } from "@/lib/db";
 import { fmtDate } from "@/components/ui";
 
@@ -71,7 +72,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/requests/new" className="btn btn-primary btn-sm hidden md:inline-flex">+ Report a fault</Link>
+            <Link href="/requests/new" className="btn btn-primary btn-sm hidden md:inline-flex" data-tour="report-button">+ Report a fault</Link>
             {/* The accessible name starts with the visible words ("Alerts 1"), so voice control matches what people see. */}
             <Link href="/notifications" className="btn btn-secondary btn-sm relative">
               Alerts{unread > 0 && <> <span className="ml-1 rounded-full bg-red-700 px-1.5 text-[11px] text-white" data-testid="unread">{unread}</span><span className="sr-only"> unread</span></>}
@@ -104,6 +105,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/profile" className={tab} activeClass="!text-signal"><Icon d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0" />Profile</NavLink>
         </Suspense>
       </nav>
+      <Tour />
     </div>
   );
 }

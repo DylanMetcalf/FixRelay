@@ -1,0 +1,131 @@
+<!doctype html><html lang="en-ZA"><head><meta charset="utf-8"><title>ManOp – User guide</title><style>
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  body { font-family: Inter, "Segoe UI", Arial, sans-serif; color: #111827; font-size: 10.5pt; line-height: 1.45; }
+  .cover { background: #0B1F3A; color: #fff; border-radius: 10px; padding: 26px 28px; margin-bottom: 18px; }
+  .cover .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18pt; }
+  .cover h1 { font-size: 24pt; margin: 18px 0 4px; }
+  .cover .tag { color: #F5A524; font-weight: 800; }
+  .cover .aud { color: #CBD5E1; margin-top: 10px; }
+  h2 { color: #0B1F3A; font-size: 14pt; margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 3px solid #F5A524; display: inline-block; }
+  section { break-inside: auto; }
+  section.break { break-before: page; }
+  p, li { margin: 4px 0; }
+  code { background: #F3F5F8; padding: 1px 4px; border-radius: 3px; font-size: 9.5pt; }
+  .pics { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .pics figure { margin: 0; flex: 1 1 100%; break-inside: avoid; }
+  .pics.phone figure { flex: 0 0 31%; }
+  .pics img { width: 100%; border: 1px solid #D1D5DB; border-radius: 6px; }
+  figcaption { font-size: 8.5pt; color: #4B5563; margin-top: 2px; }
+  table.check { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  table.check th, table.check td { border: 1px solid #D1D5DB; padding: 5px 6px; vertical-align: top; text-align: left; }
+  table.check th { background: #F3F5F8; }
+  td.box { width: 30px; text-align: center; font-size: 13pt; }
+  table.check td:last-child { width: 22%; }
+  .note { background: #FFFBEB; border-left: 4px solid #F5A524; padding: 6px 10px; }
+  </style></head><body>
+  <div class="cover"><div class="brand"><svg viewBox="0 0 512 512" width="36" height="36"><rect width="512" height="512" rx="112" fill="#0B1F3A"/><path d="M140 372V150l70 96" fill="none" stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M210 246l52 70 110-176" fill="none" stroke="#F5A524" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M372 140v232" fill="none" stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><circle cx="140" cy="372" r="25" fill="#5B8DEF"/></svg> ManOp</div><h1>ManOp – User guide</h1><div class="tag">From reported to resolved.</div><div class="aud">For everyone who reports faults, technicians and maintenance managers.</div><div class="aud">Screenshots are taken from the running application with synthetic sample data. Version of 2026-11-25.</div></div>
+  <section class="">
+      <h2>1. What ManOp does</h2>
+      <p>ManOp takes a maintenance problem from the moment someone reports it to the moment it is fixed and signed off. Every job shows what happened, where, who reported it, how urgent it is, who is responsible, its status, <strong>what happens next</strong>, photos, approvals and the full history. Every job is also a branded <strong>job card</strong> you can print or download.</p>
+      
+      
+      
+      
+    </section>
+<section class="">
+      <h2>Try it first: the live demo and tour</h2>
+      <p>Open <code>/demo</code> (or <strong>Try the live demo</strong> on the home page) and click <strong>Open my sandbox</strong>. You get your own private sample company with sites, people in every role and jobs at every stage, and a short <strong>guided tour</strong> that shows each area. Use <strong>View as</strong> in the yellow bar to see ManOp as a technician, approver or operator. Nothing is emailed, and the sandbox disappears after 24 hours. Restart the tour any time with <strong>Take the tour</strong>.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/sandbox-start.png" alt="Try it first: the live demo and tour"><figcaption>Opening a sandbox</figcaption></figure><figure><img src="../screenshots/tour-2-tiles.png" alt="Try it first: the live demo and tour"><figcaption>The tour: the dashboard</figcaption></figure><figure><img src="../screenshots/tour-job-next.png" alt="Try it first: the live demo and tour"><figcaption>The tour: what happens next on a job</figcaption></figure><figure><img src="../screenshots/tour-documents.png" alt="Try it first: the live demo and tour"><figcaption>The tour: the job card</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>2. Joining and signing in</h2>
+      
+      <ol><li>Your site administrator gives you a <strong>registration code</strong> (for example <code>ABCD-1234</code>) or a link with it.</li><li>Open the link, or go to <code>/join</code> and type the code.</li><li>Enter your name, work email, a password (at least 10 characters) and your department. Job title, phone number and photo are optional.</li><li>Open the confirmation email and tap the link.</li><li>Wait for your administrator to approve you. You get an email when it is done. Then sign in at <code>/login</code>.</li></ol>
+      
+      
+      <div class="pics phone"><figure><img src="../screenshots/join-form.png" alt="2. Joining and signing in"><figcaption>Asking for access with a code</figcaption></figure><figure><img src="../screenshots/join-pending.png" alt="2. Joining and signing in"><figcaption>Waiting for approval</figcaption></figure><figure><img src="../screenshots/login-phone.png" alt="2. Joining and signing in"><figcaption>Signing in</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>3. Finding your way around</h2>
+      <p>On a computer the menu is on the left: <strong>Dashboard</strong>, <strong>My jobs</strong> (technicians), <strong>Reports</strong>, <strong>Jobs</strong>, and more depending on your role. On a phone the menu is at the bottom. The <strong>dashboard</strong> shows live counts of jobs at every stage; tap a tile to see those jobs. The <strong>Jobs</strong> page has <strong>Open now</strong> and <strong>History</strong> tabs and priority buttons.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/dashboard.png" alt="3. Finding your way around"><figcaption>Dashboard</figcaption></figure><figure><img src="../screenshots/jobs-board.png" alt="3. Finding your way around"><figcaption>Jobs board: Open now / History, priority buttons, photos</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>4. Reporting a problem with a QR code (no account)</h2>
+      <p>Every site, area and machine can have its own QR sign. Scan it with your phone camera. The place is filled in for you. If someone is hurt or in danger, follow your site's emergency procedure first.</p>
+      <ol><li>Tap what kind of problem it is (optional) and describe it.</li><li>Choose how urgent it is: Critical, High, Medium or Low.</li><li>Check the place.</li><li>Add a photo if you can.</li><li>Enter your name. Phone and email are optional.</li><li>Check and send. You get a report number.</li></ol>
+      
+      
+      <div class="pics phone"><figure><img src="../screenshots/qr-1-start.png" alt="4. Reporting a problem with a QR code (no account)"><figcaption>Describe the problem</figcaption></figure><figure><img src="../screenshots/qr-2-urgency.png" alt="4. Reporting a problem with a QR code (no account)"><figcaption>How urgent</figcaption></figure><figure><img src="../screenshots/qr-3-place.png" alt="4. Reporting a problem with a QR code (no account)"><figcaption>The place from the QR code</figcaption></figure><figure><img src="../screenshots/qr-5-review.png" alt="4. Reporting a problem with a QR code (no account)"><figcaption>Check and send</figcaption></figure><figure><img src="../screenshots/qr-6-done.png" alt="4. Reporting a problem with a QR code (no account)"><figcaption>Thank you + report number</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>5. Reporting a problem in the app</h2>
+      <p>Signed in, tap <strong>+ Report a fault</strong>. The form goes one step at a time: what is wrong, how urgent, where, photo, then a review. Maintenance staff can also choose the category and the responsible department. ManOp warns the maintenance manager if the report looks like one already open.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/report-step1.png" alt="5. Reporting a problem in the app"><figcaption>Reporting in the app</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>Two ways a job runs: managed or one-person</h2>
+      <p><strong>Managed</strong> jobs go through maintenance management: they assess, approve any spend and assign someone. <strong>One-person</strong> jobs are for small jobs you can fix on the spot: when reporting, choose <strong>I'll fix it myself</strong> (maintenance staff only). The job is assigned to you and started at once; you complete it with evidence, then a manager signs it off (or it closes, if your company switched sign-off off). Managers can also take a new report with <strong>I'll fix it myself (one-person job)</strong>. Both kinds are on the dashboard, in history and on the job card.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/self-choice.png" alt="Two ways a job runs: managed or one-person"><figcaption>Choosing who fixes it</figcaption></figure><figure><img src="../screenshots/self-job.png" alt="Two ways a job runs: managed or one-person"><figcaption>A one-person job in progress</figcaption></figure><figure><img src="../screenshots/how-it-works.png" alt="Two ways a job runs: managed or one-person"><figcaption>How it works: both workflows</figcaption></figure></div>
+    </section>
+<section class="break">
+      <h2>6. The job page</h2>
+      <p>Everything about a job is on one page: status and priority, <strong>What happens next</strong> with the responsible person, the actions you may take, photos, the assessment, quotes, the work log, completion, signatures, related reports and the full activity history.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/job-page.png" alt="6. The job page"><figcaption>A job page</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>7. Assessment, quotations and approvals</h2>
+      
+      
+      <ul><li><strong>Assess</strong>: findings, likely cause, recommended work, whether spares are needed, and whether a contractor is needed.</li><li><strong>In-house</strong>: give the job to the in-house team and assign a technician with instructions and dates.</li><li><strong>Contractor</strong>: send quote requests by secure link or capture a quote received by email; compare quotes; approve within your limit (with a PO if your company requires it) or send it for approval to someone with enough authority.</li><li>Approvers see <strong>Needs your approval</strong> on their dashboard and approve or decline with a comment.</li></ul>
+      
+      
+    </section>
+<section class="">
+      <h2>8. Work updates and completion (technicians)</h2>
+      <p>Open the job (from <strong>My jobs</strong> or the alert), tap <strong>Start work</strong>, add progress notes, then <strong>Work finished – submit evidence</strong>: what was done, an after photo or document, the root cause, and (in food-handling areas) the tools/clean check. Review and submit.</p>
+      
+      
+      
+      <div class="pics phone"><figure><img src="../screenshots/tech-job.png" alt="8. Work updates and completion (technicians)"><figcaption>A technician's job on a phone</figcaption></figure><figure><img src="../screenshots/tech-completion-review.png" alt="8. Work updates and completion (technicians)"><figcaption>Completion review before submitting</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>9. Job cards: view, print, download</h2>
+      <p>On the job page, <strong>Job card and documents</strong>: <strong>View job card</strong> opens the branded PDF inside ManOp with <strong>Print</strong> and <strong>Download PDF</strong>. On a phone, use <strong>Open in a new tab</strong> or <strong>Download PDF</strong>. Every PDF shows when it was generated and the status at that moment: it is a snapshot, not the live record. The QR code on a printed card opens the job after signing in.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/documents-card.png" alt="9. Job cards: view, print, download"><figcaption>Document buttons on the job page</figcaption></figure><figure><img src="../screenshots/jobcard-p1.png" alt="9. Job cards: view, print, download"><figcaption>Job card page 1</figcaption></figure><figure><img src="../screenshots/jobcard-p2.png" alt="9. Job cards: view, print, download"><figcaption>Job card page 2 (handwriting area for printed cards)</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>10. Completion, verification and closing</h2>
+      <p>The person who reported the fault answers <strong>Is it fixed?</strong> (or signs on the technician's phone). If it is not fixed, the job goes back with a reason. Then the maintenance manager <strong>signs off and closes</strong> it. The <strong>completion report</strong> (PDF) then shows before and after photos, the work done, the verification and recorded signatures.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/completion-p1.png" alt="10. Completion, verification and closing"><figcaption>Completed job report</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>11. Job history</h2>
+      <p>The activity history on the job page lists every step with time and person. Maintenance staff can export the <strong>full job history</strong> as a PDF (timeline, handovers, quotes, approvals, reopenings, comments and an attachment index). If the fault comes back after a job is closed, use <strong>The fault came back – report a repeat</strong>: the new job is linked to the old one.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/history-p1.png" alt="11. Job history"><figcaption>Job history report</figcaption></figure></div>
+    </section>
+  </body></html>

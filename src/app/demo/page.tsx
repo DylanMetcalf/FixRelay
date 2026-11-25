@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { startSandboxAction } from "@/app/actions/auth";
 import { getSession } from "@/app/_lib/session";
 import { Form, Submit } from "@/components/form";
@@ -19,7 +20,10 @@ const ROLES = [
 /** Public sandbox entry: one click, a private demo company, a guided tour. */
 export default async function DemoPage() {
   const s = await getSession();
-  const signedIn = !!s?.ctx && !s.ctx.support;
+  // While re-rendering for the "Open my sandbox" action the new guest cookie is already set: keep the form mounted
+  // so it can follow the action's redirect (otherwise the "signed in" view would replace it mid-flight).
+  const duringAction = !!(await headers()).get("next-action");
+  const signedIn = !!s?.ctx && !s.ctx.support && !duringAction;
   return (
     <main className="min-h-dvh bg-navy text-white">
       <div className="mx-auto max-w-4xl px-4 py-8">

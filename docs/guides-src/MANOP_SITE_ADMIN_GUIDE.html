@@ -1,0 +1,115 @@
+<!doctype html><html lang="en-ZA"><head><meta charset="utf-8"><title>ManOp – Site administrator guide</title><style>
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  body { font-family: Inter, "Segoe UI", Arial, sans-serif; color: #111827; font-size: 10.5pt; line-height: 1.45; }
+  .cover { background: #0B1F3A; color: #fff; border-radius: 10px; padding: 26px 28px; margin-bottom: 18px; }
+  .cover .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18pt; }
+  .cover h1 { font-size: 24pt; margin: 18px 0 4px; }
+  .cover .tag { color: #F5A524; font-weight: 800; }
+  .cover .aud { color: #CBD5E1; margin-top: 10px; }
+  h2 { color: #0B1F3A; font-size: 14pt; margin: 18px 0 6px; padding-bottom: 4px; border-bottom: 3px solid #F5A524; display: inline-block; }
+  section { break-inside: auto; }
+  section.break { break-before: page; }
+  p, li { margin: 4px 0; }
+  code { background: #F3F5F8; padding: 1px 4px; border-radius: 3px; font-size: 9.5pt; }
+  .pics { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .pics figure { margin: 0; flex: 1 1 100%; break-inside: avoid; }
+  .pics.phone figure { flex: 0 0 31%; }
+  .pics img { width: 100%; border: 1px solid #D1D5DB; border-radius: 6px; }
+  figcaption { font-size: 8.5pt; color: #4B5563; margin-top: 2px; }
+  table.check { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6px; }
+  table.check th, table.check td { border: 1px solid #D1D5DB; padding: 5px 6px; vertical-align: top; text-align: left; }
+  table.check th { background: #F3F5F8; }
+  td.box { width: 30px; text-align: center; font-size: 13pt; }
+  table.check td:last-child { width: 22%; }
+  .note { background: #FFFBEB; border-left: 4px solid #F5A524; padding: 6px 10px; }
+  </style></head><body>
+  <div class="cover"><div class="brand"><svg viewBox="0 0 512 512" width="36" height="36"><rect width="512" height="512" rx="112" fill="#0B1F3A"/><path d="M140 372V150l70 96" fill="none" stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M210 246l52 70 110-176" fill="none" stroke="#F5A524" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M372 140v232" fill="none" stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><circle cx="140" cy="372" r="25" fill="#5B8DEF"/></svg> ManOp</div><h1>ManOp – Site administrator guide</h1><div class="tag">From reported to resolved.</div><div class="aud">For the person who runs ManOp for their company and sites.</div><div class="aud">Screenshots are taken from the running application with synthetic sample data. Version of 2026-11-25.</div></div>
+  <section class="">
+      <h2>1. Becoming the site administrator</h2>
+      <p>The ManOp team creates your company and first site and emails you an invitation. Open it, set your password, and you are the site administrator (owner) with maintenance-manager rights.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/invite-accept.png" alt="1. Becoming the site administrator"><figcaption>Accepting the invitation</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>2. Sites, areas and QR codes</h2>
+      
+      <ol><li><strong>Sites</strong> → your site → add areas (Workshop, Offices, Warehouse, Production …) and equipment.</li><li>Switch on <strong>QR reporting without an account</strong> in Settings if visitors and staff without accounts should report.</li><li>Download <strong>QR signs (PDF)</strong>: one A4 sign for the site and one per area. Print and put them up. Or print the smaller stickers.</li><li><strong>Replace link</strong> if signs are misused: all old codes stop working; print new ones.</li></ol>
+      
+      
+      <div class="pics"><figure><img src="../screenshots/site-page.png" alt="2. Sites, areas and QR codes"><figcaption>Site page with the short report link</figcaption></figure><figure><img src="../screenshots/qr-sign-p2.png" alt="2. Sites, areas and QR codes"><figcaption>An A4 QR sign</figcaption></figure><figure><img src="../screenshots/qr-stickers.png" alt="2. Sites, areas and QR codes"><figcaption>QR stickers</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>3. Departments</h2>
+      <p><strong>Settings → Departments</strong>: add departments such as Maintenance, Operations, Management and Finance; add people and tick <strong>Department manager</strong> for the person who runs it. Departments group people; <strong>roles</strong> still decide what someone may do. Department managers see their department's open work on their dashboard and can hand jobs over.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/settings-departments.png" alt="3. Departments"><figcaption>Departments</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>4. Adding employees</h2>
+      
+      
+      <ul><li><strong>Invite</strong>: Settings → Invite someone (email, role, sites). Best for managers and technicians you know.</li><li><strong>Registration code</strong>: Settings → Registration codes → Create code (all sites or one site, valid for a number of days). Share the code or link. Switch it off or <strong>Replace</strong> it at any time. A code never gives access by itself.</li></ul>
+      
+      <div class="pics"><figure><img src="../screenshots/settings-codes.png" alt="4. Adding employees"><figcaption>Registration codes</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>5. Approving registrations and assigning roles</h2>
+      <p>People who used a code appear under <strong>Waiting for approval</strong> with their details. Once their email is confirmed, choose their role(s), department and whether they manage it, then <strong>Approve access</strong> (or <strong>Decline</strong>). They are emailed either way. Change roles later in <strong>Team</strong>; untick <strong>Active</strong> to remove access immediately.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/settings-approvals.png" alt="5. Approving registrations and assigning roles"><figcaption>Waiting for approval</figcaption></figure></div>
+    </section>
+<section class="break">
+      <h2>6. Managing site requests</h2>
+      <p>The dashboard shows new reports, <strong>unassigned</strong> jobs, possible duplicates, jobs waiting for assessment, quotes, approval, work in progress, overdue, waiting for confirmation, reopened and completed. Filter by department, status, site, priority or technician. Public (QR) reports are marked <strong>To screen</strong>: accept them for assessment or reject them with a reason.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/dashboard.png" alt="6. Managing site requests"><figcaption>Dashboard</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>7. Department work queues and handovers</h2>
+      <p>On a job, <strong>Department → Hand over this job</strong>: choose the department and/or person and say why or what must happen next. The handover is recorded with who, from, to, why and when; only the receiver is notified.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/handover-form.png" alt="7. Department work queues and handovers"><figcaption>Handing a job over</figcaption></figure><figure><img src="../screenshots/department-queue.png" alt="7. Department work queues and handovers"><figcaption>A department manager's queue</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>8. Duplicate and reopened jobs</h2>
+      <p>When a report looks like an open or recent job (same site, same area or machine, similar words), it is marked <strong>Possible duplicate</strong>. Compare the original reports under <strong>Related reports</strong>, then <strong>Link as duplicate</strong> (the report and reporter stay on record; unworked reports are closed as “Duplicate of …”) or <strong>Not a duplicate – keep separate</strong>. Closed jobs can be <strong>reopened</strong> with a reason; the original closure stays in the history.</p>
+      
+      
+      
+      <div class="pics"><figure><img src="../screenshots/duplicate-review.png" alt="8. Duplicate and reopened jobs"><figcaption>Duplicate review</figcaption></figure><figure><img src="../screenshots/duplicate-job.png" alt="8. Duplicate and reopened jobs"><figcaption>A linked duplicate</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>9. Downloading reports and documents</h2>
+      
+      
+      <ul><li>Job card, completion report and job history PDFs from each job.</li><li><strong>Insights</strong>: spend, response and fix times, root causes, contractors; area reports; CSV download.</li><li><strong>Settings → Export</strong> (owners): all company data as JSON.</li></ul>
+      
+      <div class="pics"><figure><img src="../screenshots/card-viewer.png" alt="9. Downloading reports and documents"><figcaption>Job card viewer</figcaption></figure></div>
+    </section>
+<section class="">
+      <h2>10. One-person job rules</h2>
+      <p><strong>Settings → Company → One-person jobs</strong>: allow staff to do a job start to finish themselves, and choose whether a maintenance manager signs those jobs off before they close. The dashboard shows <strong>One-person jobs in progress</strong> and <strong>One-person jobs to sign off</strong>.</p>
+      
+      
+      
+      
+    </section>
+<section class="">
+      <h2>11. Support access</h2>
+      <p>ManOp staff cannot see your jobs. If you need help, <strong>Settings → Support access</strong> grants read-only access for a limited time; every visit is recorded in your history and you can revoke it.</p>
+      
+      
+      
+      
+    </section>
+  </body></html>
