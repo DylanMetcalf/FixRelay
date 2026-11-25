@@ -22,7 +22,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const manager = can(ctx, "job.viewAll");
   const [counts, jobs, sites, techs, departments] = await Promise.all([
     dashboardCounts(ctx, f),
-    listJobs(ctx, { ...f, view: f.status || f.overdue || f.source || f.spares || f.duplicates || f.reopened || f.unassigned ? "all" : undefined }, 25),
+    listJobs(ctx, { ...f, view: f.status || f.overdue || f.source || f.spares || f.duplicates || f.reopened || f.unassigned || f.mode || f.signoff ? "all" : undefined }, 25),
     manager ? listSites(ctx) : [],
     manager ? listAssignable(ctx) : [],
     manager ? prisma.department.findMany({ where: { orgId: ctx.orgId, archived: false }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [],
@@ -43,6 +43,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     { label: "Awaiting confirmation it's fixed", n: counts.awaitingVerification, href: "?status=AWAITING_VERIFICATION" },
     { label: "Confirmed – ready to close", n: counts.readyToClose, href: "?status=VERIFIED" },
     { label: "Waiting for spares", n: counts.sparesWaiting, href: "?spares=waiting" },
+    { label: "One-person jobs in progress", n: counts.selfOpen, href: "?mode=self&status=IN_PROGRESS" },
+    { label: "One-person jobs to sign off", n: counts.selfSignoff, href: "?signoff=true", alert: true },
     { label: "Reopened work", n: counts.reopened, href: "?reopened=true" },
     { label: "Completed in the last 7 days", n: counts.recentlyClosed, href: "/jobs?tab=history" },
     { label: "Overdue", n: counts.overdue, href: "?overdue=true", alert: true },
@@ -150,7 +152,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           </div>
           <p className="muted mb-4">{counts.unowned} new report{counts.unowned === 1 ? "" : "s"} with no responsible manager yet · {counts.recentlyClosed} closed in the last 7 days.</p>
           <JobFilterBar base="/dashboard" f={f} departments={departments.map((d) => ({ value: d.id, label: d.name }))} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />
-          <h2 className="mb-3 mt-5 text-lg font-extrabold">{f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : f.spares ? "Waiting for spares" : f.duplicates ? "Possible duplicates" : f.reopened ? "Reopened work" : f.unassigned ? "Unassigned jobs" : "Latest activity"}</h2>
+          <h2 className="mb-3 mt-5 text-lg font-extrabold">{f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : f.spares ? "Waiting for spares" : f.duplicates ? "Possible duplicates" : f.reopened ? "Reopened work" : f.unassigned ? "Unassigned jobs" : f.signoff ? "One-person jobs to sign off" : f.mode === "self" ? "One-person jobs" : "Latest activity"}</h2>
           <JobList jobs={jobs} empty={<Empty title="Nothing here">No jobs match. <Link className="link" href="/requests/new">Report a fault</Link>.</Empty>} />
         </>
       )}

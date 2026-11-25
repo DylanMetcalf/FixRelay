@@ -33,6 +33,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
     can(ctx, "job.manage") ? listContractors(ctx, { activeOnly: true }) : [],
     prisma.assessment.findFirst({ where: { jobId: job.id, orgId: ctx.orgId }, orderBy: { createdAt: "desc" }, select: { recommendedWork: true } }),
   ]);
+  const rules = await prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { allowSelfJobs: true, selfJobSignOff: true } });
   const next = nextAction(job);
   const name = (id: string | null | undefined) => (id ? (job.people[id] ?? "Unknown") : "—");
   const reporter = job.requesterId ? name(job.requesterId) : `${job.reporterName ?? "Unknown"} (public link)`;
@@ -52,6 +53,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         {job.route !== "UNDECIDED" && <Pill tone="blue">{ROUTE_LABEL[job.route]}</Pill>}{job.isProject && <Pill tone="amber">Project</Pill>}
         {isOverdue(job) && <Pill tone="red">Overdue since {fmtDate(job.dueAt)}</Pill>}
         {job.reopenCount > 0 && <Pill tone="amber">Reopened ×{job.reopenCount}</Pill>}
+        {job.mode === "SELF" && <Pill tone="green">One-person job</Pill>}
         {job.duplicateStatus === "FLAGGED" && <Pill tone="amber">Possible duplicate</Pill>}
         {job.repeatOfId && <Pill tone="red">Repeat fault</Pill>}
         {job.department && <Pill tone="gray">{job.department.name}</Pill>}
@@ -68,7 +70,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <ActionsPanel sigRequired={!!org?.requireSignatures} job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))}
+          <ActionsPanel selfJobs={rules.allowSelfJobs} selfSignOff={rules.selfJobSignOff} sigRequired={!!org?.requireSignatures} job={job} ctx={ctx} team={team.map((t) => ({ value: t.userId, label: `${t.user.name}${t.roles.includes("TECHNICIAN") ? "" : " (manager)"}` }))}
             contractors={contractors.map((c) => ({ value: c.id, label: `${c.name}${c.trade ? ` – ${c.trade}` : ""}` }))} suggestedScope={assessment?.recommendedWork || job.description} />
 
           <DuplicatesCard job={job} ctx={ctx} />

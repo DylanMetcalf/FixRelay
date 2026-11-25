@@ -21,6 +21,7 @@ export async function saveSettingsAction(_: ActionState, fd: FormData) {
     await orgs.updateOrgSettings(ctx, {
       name: str(fd, "name"), address: str(fd, "address"), phone: str(fd, "phone"), contactEmail: str(fd, "contactEmail"),
       brandColour: str(fd, "brandColour"), reporterConfirmation: bool(fd, "reporterConfirmation"), publicReportingEnabled: bool(fd, "publicReportingEnabled"),
+      allowSelfJobs: bool(fd, "allowSelfJobs"), selfJobSignOff: bool(fd, "selfJobSignOff"),
     });
     const logo = await fileOf(fd, "logo");
     if (logo) await setOrgLogo(ctx, logo);

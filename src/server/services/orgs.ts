@@ -73,6 +73,8 @@ const settingsSchema = z.object({
   brandColour: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Choose a valid colour."),
   reporterConfirmation: z.boolean(),
   publicReportingEnabled: z.boolean(),
+  allowSelfJobs: z.boolean().default(true),
+  selfJobSignOff: z.boolean().default(true),
 });
 
 export async function updateOrgSettings(ctx: Ctx, input: z.input<typeof settingsSchema>) {

@@ -58,7 +58,13 @@ export default async function Settings() {
                 <legend className="px-1 text-sm font-bold">Fault reporting</legend>
                 <Check name="reporterConfirmation" label="The person who reported a fault confirms it is fixed" defaultChecked={org.reporterConfirmation} />
                 <Check name="publicReportingEnabled" label="Anyone with a site link or QR code can report without an account" defaultChecked={org.publicReportingEnabled} />
-                <p className="mt-1 text-xs text-gray-600">Reports without an account are marked for your team to screen. Reporters only give a name and phone number and cannot see anything else.</p>
+                <p className="mt-1 text-xs text-gray-600">Reports without an account are marked for your team to screen. Reporters give a name (contact details optional) and cannot see anything else.</p>
+              </fieldset>
+              <fieldset className="rounded-md border border-gray-300 p-3" data-testid="self-job-settings">
+                <legend className="px-1 text-sm font-bold">One-person jobs</legend>
+                <Check name="allowSelfJobs" label="Staff may do a job start to finish themselves (report it, fix it, complete it)" defaultChecked={org.allowSelfJobs} />
+                <Check name="selfJobSignOff" label="A maintenance manager signs off one-person jobs before they are closed" defaultChecked={org.selfJobSignOff} />
+                <p className="mt-1 text-xs text-gray-600">Managed jobs go through maintenance management (assess, approve, assign). One-person jobs skip those steps but still need evidence, appear on the dashboard and history, and get a job card. Without sign-off, they close as soon as the work is completed.</p>
               </fieldset>
               <Submit>Save company settings</Submit>
             </Form>

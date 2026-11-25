@@ -138,6 +138,7 @@ model User {
   jobTitle        String    @default("")
   photoKey        String? // profile photo in file storage (optional)
   demoPersona     Boolean   @default(false) // a sample person inside a demo company; cannot sign in, can be "viewed as"
+  guestExpiresAt  DateTime? // public sandbox visitors: the guest account and its demo company are archived after this
   createdAt       DateTime  @default(now())
 
   sessions    Session[]
@@ -182,6 +183,8 @@ model Organisation {
   referencePrefix            String    @default("REQ-") // requisition number prefix ("" = plain numbers like 12600)
   requireSignatures          Boolean   @default(false) // drawn signatures required on the requisition (reported, received, completed, originator, manager, approval)
   quoteSeq                   Int       @default(0)
+  allowSelfJobs              Boolean   @default(true) // staff may take a job start-to-finish themselves ("one-person job")
+  selfJobSignOff             Boolean   @default(true) // a maintenance manager signs off one-person jobs (otherwise the doer closes them)
   archivedAt                 DateTime? // demo companies replaced by "reset demo" (audit rows are append-only, so nothing is deleted)
   createdAt                  DateTime  @default(now())
 
@@ -311,6 +314,7 @@ model Job {
   sparesNote           String          @default("") // stores' latest note (supplier, where to collect)
   sparesEta            DateTime? // expected arrival when ordered
   status               JobStatus       @default(NEW)
+  mode                 JobMode         @default(MANAGED) // MANAGED: through maintenance management; SELF: one person start to finish
   heldFromStatus       JobStatus?
   holdReason           String?
   cancelReason         String?
@@ -857,4 +861,9 @@ model ErrorLog {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+enum JobMode {
+  MANAGED // report → triage → assess → (quote/approve) → assign → work → verify → close
+  SELF // one person reports (or takes) it, does the work, completes with evidence; closed with or without a manager's sign-off
 }

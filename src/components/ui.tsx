@@ -83,7 +83,7 @@ interface Row {
   id: string; reference: string; title: string; status: JobStatus; priority: Priority; emergency: boolean; dueAt: Date | null;
   reporterConfirmation: boolean; leadTechnicianId: string | null; technicianName: string | null; route: JobRoute; source: string;
   contractorId: string | null; contractor: { name: string } | null; site: { name: string }; location: { name: string } | null;
-  photoId?: string | null; sparesStatus?: "NOT_NEEDED" | "ON_HAND" | "TO_BUY" | "ORDERED" | "READY"; closedAt?: Date | null;
+  photoId?: string | null; mode?: "MANAGED" | "SELF"; sparesStatus?: "NOT_NEEDED" | "ON_HAND" | "TO_BUY" | "ORDERED" | "READY"; closedAt?: Date | null;
 }
 const who = (j: Row) => (j.route === "CONTRACTOR" ? (j.contractor?.name ?? "Contractor (quoting)") : (j.technicianName ?? "—"));
 
@@ -125,6 +125,7 @@ export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }
                   {j.source === "PUBLIC_LINK" && j.status === "NEW" && <Pill tone="amber">To screen</Pill>}
                   {j.route === "CONTRACTOR" && <Pill tone="blue">Contractor</Pill>}
                   {sparesWaiting(j) && <Pill tone="amber">Waiting for spares</Pill>}
+                  {j.mode === "SELF" && <Pill tone="green">One-person</Pill>}
                 </div>
                 <p className="mt-2 text-sm"><span className="font-semibold">Next:</span> {next.label} <span className="text-gray-600">({next.party})</span></p>
               </Link>
@@ -148,7 +149,7 @@ export function JobList({ jobs, empty }: { jobs: Row[]; empty: React.ReactNode }
                   <td className="td max-w-xs font-semibold"><Link href={`/jobs/${j.id}`} className="hover:underline">{j.title}</Link></td>
                   <td className="td">{j.site.name}<br /><span className="text-gray-600">{j.location?.name ?? ""}</span>{j.source === "PUBLIC_LINK" && j.status === "NEW" && <><br /><Pill tone="amber">To screen</Pill></>}</td>
                   <td className="td"><StatusBadge status={j.status} /></td>
-                  <td className="td whitespace-nowrap"><PriorityBadge priority={j.priority} emergency={j.emergency} />{sparesWaiting(j) && <><br /><Pill tone="amber">Waiting for spares</Pill></>}</td>
+                  <td className="td whitespace-nowrap"><PriorityBadge priority={j.priority} emergency={j.emergency} />{sparesWaiting(j) && <><br /><Pill tone="amber">Waiting for spares</Pill></>}{j.mode === "SELF" && <><br /><Pill tone="green">One-person</Pill></>}</td>
                   <td className="td">{next.label}<br /><span className="text-xs font-semibold text-gray-600">{next.party}</span></td>
                   <td className="td">{who(j)}</td>
                   <td className="td whitespace-nowrap">{fmtDate(j.dueAt)}{isOverdue(j) && <><br /><Pill tone="red">Overdue</Pill></>}</td>

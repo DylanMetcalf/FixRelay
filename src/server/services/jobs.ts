@@ -75,6 +75,7 @@ const createSchema = z.object({
   departmentId: optId, // responsible department, if the company uses departments
   repeatOfId: optId, // the fault came back after this earlier job
   submissionKey: z.string().trim().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(), // one per form: a second submit returns the same job
+  selfFix: z.boolean().default(false), // "I'll fix it myself": a one-person job, started straight away
 });
 
 async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>, extra: Partial<Prisma.JobUncheckedCreateInput>) {
@@ -91,9 +92,10 @@ async function insertJob(tx: Tx, orgId: string, d: z.output<typeof createSchema>
   const org = await tx.organisation.update({ where: { id: orgId }, data: { jobSeq: { increment: 1 } } });
   const rule = await tx.priorityRule.findUnique({ where: { orgId_priority: { orgId, priority: d.priority } } });
   const now = new Date();
+  const { selfFix: _selfFix, ...fields } = d;
   return tx.job.create({
     data: {
-      ...d, orgId, reference: `${org.referencePrefix}${String(org.jobSeq).padStart(5, "0")}`, reportedAt: now,
+      ...fields, orgId, reference: `${org.referencePrefix}${String(org.jobSeq).padStart(5, "0")}`, reportedAt: now,
       reporterConfirmation: org.reporterConfirmation, dueAt: rule ? new Date(now.getTime() + rule.completionHours * 3_600_000) : null,
       ...extra,
     },
@@ -139,6 +141,7 @@ export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>, s
   const d = parse(createSchema, input);
   const site = await findSite(ctx, d.siteId);
   if (!site || site.archived) throw invalid("Choose one of your sites.");
+  if (d.selfFix) await assertSelfJobsAllowed(ctx);
   const again = await sameSubmission(ctx.orgId, d.submissionKey);
   if (again) return again;
   return prisma.$transaction(async (tx) => {
@@ -146,11 +149,15 @@ export async function createJob(ctx: Ctx, input: z.input<typeof createSchema>, s
     await addSignature(tx, { orgId: ctx.orgId, jobId: job.id, step: "REPORTED", name: ctx.userName, userId: ctx.userId, dataUrl: signature });
     await logEvent(tx, actorOf(ctx), job.id, "job.created", `Fault reported: ${job.title}`, { priority: d.priority, emergency: d.emergency });
     const extra = await afterReport(tx, ctx.orgId, job, actorOf(ctx));
+    if (d.selfFix) await startSelfJob(tx, ctx, job);
     await notify(tx, {
       orgId: ctx.orgId, jobId: job.id, type: "job.created", userIds: await managerIds(tx, ctx.orgId), exceptUserId: ctx.userId,
-      title: `${d.emergency ? "EMERGENCY: " : d.priority === "CRITICAL" ? "CRITICAL: " : ""}New fault ${job.reference} at ${site.name}`, body: `${job.title}${extra}`, eventKey: `job-created:${job.id}`,
+      title: d.selfFix
+        ? `${ctx.userName} is fixing ${job.reference} at ${site.name} themselves (one-person job)`
+        : `${d.emergency ? "EMERGENCY: " : d.priority === "CRITICAL" ? "CRITICAL: " : ""}New fault ${job.reference} at ${site.name}`,
+      body: `${job.title}${extra}`, eventKey: `job-created:${job.id}`,
     });
-    return job;
+    return d.selfFix ? (await tx.job.findUniqueOrThrow({ where: { id: job.id } })) : job;
   }).catch(async (e) => {
     // Two submits of the same form at the same moment: the unique key lets only one in; return that one.
     const winner = isUniqueViolation(e) ? await sameSubmission(ctx.orgId, d.submissionKey) : null;
@@ -276,6 +283,10 @@ export interface JobFilters {
   reopened?: string;
   /** "true": open jobs nobody is responsible for yet. */
   unassigned?: string;
+  /** "self": one-person jobs; "managed": jobs going through maintenance management. */
+  mode?: string;
+  /** "true": one-person jobs completed and waiting for a manager's sign-off. */
+  signoff?: string;
   status?: JobStatus; siteId?: string; technicianId?: string; contractorId?: string; route?: string; source?: string;
   priority?: string; from?: string; to?: string; overdue?: boolean; q?: string;
 }
@@ -294,6 +305,8 @@ function filterWhere(ctx: Ctx, f: JobFilters): Prisma.JobWhereInput {
   if (f.duplicates === "flagged") and.push({ duplicateStatus: "FLAGGED", status: { notIn: ["CLOSED", "CANCELLED"] } });
   if (f.reopened === "true") and.push({ reopenCount: { gt: 0 }, status: { notIn: ["CLOSED", "CANCELLED"] } });
   if (f.unassigned === "true") and.push(UNASSIGNED);
+  if (f.mode === "self" || f.mode === "managed") and.push({ mode: f.mode === "self" ? "SELF" : "MANAGED" });
+  if (f.signoff === "true") and.push(SELF_SIGNOFF);
   if (f.view === "mine") and.push({ status: { in: OPEN_STATUSES }, OR: [{ leadTechnicianId: ctx.userId }, { technicians: { some: { userId: ctx.userId } } }] });
   if (f.status && f.status in { NEW: 1, ASSESSING: 1, ASSESSED: 1, QUOTING: 1, AWAITING_APPROVAL: 1, APPROVED: 1, ASSIGNED: 1, IN_PROGRESS: 1, ON_HOLD: 1, AWAITING_VERIFICATION: 1, VERIFIED: 1, CLOSED: 1, CANCELLED: 1 }) and.push({ status: f.status });
   if (uuid(f.contractorId)) and.push({ contractorId: f.contractorId });
@@ -309,6 +322,7 @@ function filterWhere(ctx: Ctx, f: JobFilters): Prisma.JobWhereInput {
   return { AND: and };
 }
 
+const SELF_SIGNOFF: Prisma.JobWhereInput = { mode: "SELF", status: "AWAITING_VERIFICATION", reporterConfirmation: false };
 const UNASSIGNED: Prisma.JobWhereInput = { status: { in: OPEN_STATUSES }, ownerId: null, leadTechnicianId: null, contractorId: null };
 
 export async function listJobs(ctx: Ctx, f: JobFilters = {}, take = 100) {
@@ -318,7 +332,7 @@ export async function listJobs(ctx: Ctx, f: JobFilters = {}, take = 100) {
       id: true, reference: true, title: true, status: true, priority: true, emergency: true, dueAt: true, reportedAt: true,
       reporterConfirmation: true, leadTechnicianId: true, plannedStart: true, closedAt: true, route: true, source: true,
       contractorId: true, contractor: { select: { name: true } }, site: { select: { name: true } }, location: { select: { name: true } },
-      sparesStatus: true, departmentId: true, duplicateStatus: true,
+      sparesStatus: true, departmentId: true, duplicateStatus: true, mode: true,
       // First photo from the report, shown as a thumbnail on the job card.
       attachments: { where: { kind: "REQUEST", mimeType: { startsWith: "image/" } }, select: { id: true }, orderBy: { createdAt: "asc" }, take: 1 },
     },
@@ -343,7 +357,7 @@ export async function priorityCounts(ctx: Ctx, f: JobFilters = {}) {
 export async function dashboardCounts(ctx: Ctx, f: JobFilters = {}) {
   const where = filterWhere(ctx, { ...f, view: "all", status: undefined });
   const now = new Date();
-  const [byStatus, overdue, unowned, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates] = await Promise.all([
+  const [byStatus, overdue, unowned, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates, selfOpen, selfSignoff] = await Promise.all([
     prisma.job.groupBy({ by: ["status"], where, _count: true }),
     prisma.job.count({ where: { AND: [where, { status: { in: OPEN_STATUSES }, dueAt: { lt: now } }] } }),
     prisma.job.count({ where: { AND: [where, { status: "NEW", ownerId: null }] } }),
@@ -353,13 +367,15 @@ export async function dashboardCounts(ctx: Ctx, f: JobFilters = {}) {
     prisma.job.count({ where: { AND: [where, UNASSIGNED] } }),
     prisma.job.count({ where: { AND: [where, { reopenCount: { gt: 0 }, status: { notIn: ["CLOSED", "CANCELLED"] } }] } }),
     prisma.job.count({ where: { AND: [where, { duplicateStatus: "FLAGGED", status: { notIn: ["CLOSED", "CANCELLED"] } }] } }),
+    prisma.job.count({ where: { AND: [where, { mode: "SELF", status: { in: ["IN_PROGRESS", "ON_HOLD"] } }] } }),
+    prisma.job.count({ where: { AND: [where, SELF_SIGNOFF] } }),
   ]);
   const n = (s: JobStatus) => byStatus.find((x) => x.status === s)?._count ?? 0;
   return {
     newRequests: n("NEW"), unowned, awaitingAssessment: n("ASSESSING"), assessed: n("ASSESSED"), quoting: n("QUOTING"),
     awaitingApproval: n("AWAITING_APPROVAL"), awaitingAssignment: n("APPROVED"), assigned: n("ASSIGNED"),
     inProgress: n("IN_PROGRESS"), onHold: n("ON_HOLD"), awaitingVerification: n("AWAITING_VERIFICATION"),
-    readyToClose: n("VERIFIED"), overdue, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates,
+    readyToClose: n("VERIFIED"), overdue, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates, selfOpen, selfSignoff,
   };
 }
 
@@ -608,6 +624,70 @@ export async function resumeJob(ctx: Ctx, jobId: string) {
   });
 }
 
+// ---------- One-person (self) jobs ----------
+
+/**
+ * Two ways a job can run:
+ *  - MANAGED (default): report → triage → assess → (quote/approve) → assign → work → verify → close, through maintenance management.
+ *  - SELF ("one-person job"): one person takes it start to finish. It is routed in-house, assigned to them and started at once;
+ *    they complete it with evidence. Then a maintenance manager signs it off, or – if the company switched sign-off off – it closes
+ *    straight away. Management keeps the overview: the job is on the dashboard, in history and on the job card like any other.
+ */
+async function assertSelfJobsAllowed(ctx: Ctx) {
+  requirePerm(ctx, "job.work");
+  const org = await prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { allowSelfJobs: true } });
+  if (!org.allowSelfJobs) throw forbidden("One-person jobs are switched off for your company. Send the report to maintenance management instead.");
+}
+
+async function startSelfJob(tx: Tx, ctx: Ctx, job: { id: string; status: JobStatus; requesterId: string | null; reporterConfirmation: boolean }) {
+  if (job.status !== "NEW" && job.status !== "ASSESSED") throw conflict("Only a new or assessed job can be taken as a one-person job.");
+  const now = new Date();
+  // Someone else reported it: they still confirm it is fixed (if the company asks for that). Your own report: nothing to confirm.
+  const reporterConfirmation = !!job.requesterId && job.requesterId !== ctx.userId && job.reporterConfirmation;
+  await move(tx, ctx.orgId, job, "APPROVED", { mode: "SELF", route: "IN_HOUSE", reporterConfirmation, leadTechnicianId: ctx.userId, assignedAt: now });
+  await move(tx, ctx.orgId, { id: job.id, status: "APPROVED" }, "ASSIGNED");
+  await move(tx, ctx.orgId, { id: job.id, status: "ASSIGNED" }, "IN_PROGRESS", { startedAt: now });
+  await logEvent(tx, actorOf(ctx), job.id, "job.self_started", `${ctx.userName} is doing this job start to finish (one-person job)`);
+}
+
+/** "I'll fix it myself": take a new (or assessed) report as a one-person job. */
+export async function takeAsSelfJob(ctx: Ctx, jobId: string) {
+  await assertSelfJobsAllowed(ctx);
+  return prisma.$transaction(async (tx) => {
+    const job = await loadJob(tx, ctx, jobId);
+    await startSelfJob(tx, ctx, job);
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "job.self_started", exceptUserId: ctx.userId,
+      userIds: [job.requesterId, ...(await managerIds(tx, ctx.orgId))],
+      title: `${ctx.userName} is fixing ${job.reference} (one-person job)`, body: job.title, eventKey: `self:${job.id}:${job.reopenCount}`,
+    });
+  });
+}
+
+/** After a one-person job is completed: close it straight away when the company does not ask for a manager's sign-off. */
+async function finishSelfJob(tx: Tx, ctx: Ctx, job: { id: string; reference: string; title: string; requesterId: string | null; reporterConfirmation: boolean; reopenCount: number }, completionId: string) {
+  const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { selfJobSignOff: true } });
+  if (job.reporterConfirmation) return notifyCompletion(tx, ctx.orgId, job, completionId, ctx.userId); // the reporter confirms first
+  if (org.selfJobSignOff) {
+    await notify(tx, {
+      orgId: ctx.orgId, jobId: job.id, type: "job.completion_submitted", exceptUserId: ctx.userId, userIds: await managerIds(tx, ctx.orgId),
+      title: `${job.reference}: one-person job done – please sign off`, body: `${job.title}\nCompleted by ${ctx.userName}.`, eventKey: `completion:${completionId}`,
+    });
+    return;
+  }
+  await tx.completion.update({ where: { id: completionId }, data: { status: "APPROVED" } });
+  await tx.decision.create({ data: {
+    orgId: ctx.orgId, jobId: job.id, completionId, outcome: "APPROVED", via: "INTERNAL", deciderUserId: ctx.userId, deciderName: ctx.userName,
+    deciderEmail: ctx.userEmail, recordedById: ctx.userId, comment: "One-person job: closed by the person who did the work (no manager sign-off required by the company setting).",
+  } });
+  await move(tx, ctx.orgId, { id: job.id, status: "AWAITING_VERIFICATION" }, "CLOSED", { closedAt: new Date() });
+  await logEvent(tx, actorOf(ctx), job.id, "job.closed", `Job closed by ${ctx.userName} (one-person job)`);
+  await notify(tx, {
+    orgId: ctx.orgId, jobId: job.id, type: "job.closed", exceptUserId: ctx.userId, userIds: [job.requesterId, ...(await managerIds(tx, ctx.orgId))],
+    title: `${job.reference} was fixed and closed (one-person job)`, body: `${job.title}\nBy ${ctx.userName}.`, eventKey: `closed:${job.id}:${job.reopenCount}`,
+  });
+}
+
 // ---------- Duplicates ----------
 
 /**
@@ -783,7 +863,8 @@ export async function submitCompletion(ctx: Ctx, jobId: string, input: z.input<t
     if (contractorJob) await revokeJobLinks(tx, ctx.orgId, job.id, "COMPLETION");
     await tx.attachment.updateMany({ where: { id: { in: evidence.map((e) => e.id) } }, data: { completionId: c.id } });
     await logEvent(tx, actorOf(ctx), job.id, "job.completion_submitted", `Completion submitted for verification (v${version})`, { completionId: c.id, evidence: evidence.length });
-    await notifyCompletion(tx, ctx.orgId, job, c.id, ctx.userId);
+    if (job.mode === "SELF") await finishSelfJob(tx, ctx, job, c.id);
+    else await notifyCompletion(tx, ctx.orgId, job, c.id, ctx.userId);
     return c;
   });
 }

@@ -27,6 +27,8 @@ export default async function NewRequest({ searchParams }: { searchParams: Promi
   const repeat = sp.repeatOf && /^[0-9a-f-]{36}$/.test(sp.repeatOf)
     ? await prisma.job.findFirst({ where: { id: sp.repeatOf, ...jobScope(ctx) }, select: { id: true, reference: true, title: true, siteId: true, locationId: true, assetId: true } })
     : null;
+  const orgRules = await prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { allowSelfJobs: true, selfJobSignOff: true } });
+  const canSelf = orgRules.allowSelfJobs && can(ctx, "job.work");
   const departments = simple ? [] : await prisma.department.findMany({ where: { orgId: ctx.orgId, archived: false }, orderBy: { name: "asc" }, select: { id: true, name: true } });
   return (
     <>
@@ -59,6 +61,15 @@ export default async function NewRequest({ searchParams }: { searchParams: Promi
               </Field>
             </Step>
             <Step title="Check and sign" review>
+              {canSelf && (
+                <fieldset data-testid="who-fixes">
+                  <legend className="label">Who will fix it?</legend>
+                  <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                    <label className="choice"><input type="radio" name="who" value="managed" defaultChecked /><span>Send to maintenance management<span className="block text-sm font-normal text-gray-700">They assess it, approve any spend and assign someone.</span></span></label>
+                    <label className="choice"><input type="radio" name="who" value="self" /><span>I&apos;ll fix it myself<span className="block text-sm font-normal text-gray-700">One-person job: you start now, complete it with evidence{orgRules.selfJobSignOff ? ", and a manager signs it off" : ", and it closes"}.</span></span></label>
+                  </div>
+                </fieldset>
+              )}
               <SignLine label="Submitted by – your signature" required={!!org?.requireSignatures} />
               <p className="text-xs text-gray-600">The date and time of your report are recorded automatically. You will get a requisition number straight away.</p>
               <Submit className="btn btn-primary w-full sm:w-auto">Send report</Submit>

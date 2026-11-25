@@ -59,7 +59,7 @@ export function JobCardDoc({ d, photos }: { d: JobDocumentData; photos: { photos
           <Fields items={[
             { label: "Assigned department", value: job.department?.name ?? "" },
             { label: "Responsible", value: responsible },
-            { label: "Fixed by", value: ROUTE_LABEL[job.route] },
+            { label: "Fixed by", value: job.mode === "SELF" ? `${ROUTE_LABEL[job.route]} – one-person job` : ROUTE_LABEL[job.route] },
             { label: "Expected work date", value: workDate },
             { label: "Assessment summary", value: assessment ? `${assessment.findings}${assessment.suspectedCause ? ` Likely cause: ${assessment.suspectedCause}` : ""}` : d.staff ? "Not assessed yet" : "", wide: true },
             { label: "Recommended repair", value: assessment?.recommendedWork ?? "", wide: true },

@@ -12,7 +12,7 @@ type Opt = { value: string; label: string };
 const FILES = "image/*,application/pdf";
 
 /** Everything the signed-in person can do to this job right now. Buttons mirror server permissions; the server re-checks. */
-export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigRequired }: { job: JobView; ctx: Ctx; team: Opt[]; contractors: Opt[]; suggestedScope: string; sigRequired: boolean }) {
+export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigRequired, selfJobs = false, selfSignOff = true }: { job: JobView; ctx: Ctx; team: Opt[]; contractors: Opt[]; suggestedScope: string; sigRequired: boolean; selfJobs?: boolean; selfSignOff?: boolean }) {
   const h = { jobId: job.id };
   const manage = can(ctx, "job.manage");
   const contractorJob = job.route === "CONTRACTOR";
@@ -81,6 +81,13 @@ export function ActionsPanel({ job, ctx, team, contractors, suggestedScope, sigR
     </D>
   );
 
+  // Dual workflow: anyone who does maintenance work may take a new or assessed report as a one-person job.
+  if (selfJobs && can(ctx, "job.work") && (st === "NEW" || st === "ASSESSED") && job.mode === "MANAGED") blocks.push(
+    <D key="self" label="I'll fix it myself (one-person job)">
+      <p className="text-sm text-gray-700">You take this job start to finish: it is assigned to you and started now. Complete it with evidence{selfSignOff ? " and a maintenance manager signs it off" : " and it closes"}. Managers still see it on the dashboard and in the history.</p>
+      <ActionButton action={a.takeSelfAction} hidden={h} className="btn btn-primary mt-2" confirm="Take this job yourself and start it now?">Take it and start now</ActionButton>
+    </D>,
+  );
   if (manage && st === "NEW") {
     blocks.push(
       <D key="req" label={job.source === "PUBLIC_LINK" ? "Accept and send for assessment" : "Send for assessment"} primary>

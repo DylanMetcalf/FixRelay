@@ -35,6 +35,7 @@ export async function createJobAction(_: ActionState, fd: FormData) {
       locationId: str(fd, "locationId"), assetId: str(fd, "assetId"), category: (str(fd, "category") || "General") as "General",
       priority: str(fd, "priority") as "NORMAL", emergency: bool(fd, "emergency"), isProject: bool(fd, "isProject"),
       departmentId: str(fd, "departmentId"), repeatOfId: str(fd, "repeatOfId"), submissionKey: str(fd, "submissionKey") || undefined,
+      selfFix: str(fd, "who") === "self",
     }, sig(fd));
     // A repeated submit of the same form returns the existing job; don't attach its photos twice.
     if (Date.now() - job.createdAt.getTime() < 60_000 && !(await jobs.hasRequestFiles(job.id))) await attach(ctx, fd, job.id, "REQUEST");
@@ -133,6 +134,10 @@ export async function holdAction(_: ActionState, fd: FormData) {
 export async function resumeAction(_: ActionState, fd: FormData) {
   return run(async () => { await jobs.resumeJob(await requireCtx(), id(fd)); return { ok: "Work resumed." }; });
 }
+export async function takeSelfAction(_: ActionState, fd: FormData) {
+  return run(async () => { await jobs.takeAsSelfJob(await requireCtx(), id(fd)); return { ok: "It's yours: the job is started as a one-person job." }; });
+}
+
 export async function handoverAction(_: ActionState, fd: FormData) {
   return run(async () => {
     await departments.handOverJob(await requireCtx(), id(fd), { toDepartmentId: str(fd, "toDepartmentId") || null, toUserId: str(fd, "toUserId") || null, reason: str(fd, "reason") });

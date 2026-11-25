@@ -63,8 +63,12 @@ export type Party = "Maintenance manager" | "Technician" | "Contractor" | "Appro
 export function nextAction(job: {
   status: JobStatus; route?: JobRoute; reporterConfirmation: boolean; leadTechnicianId?: string | null; contractorId?: string | null;
   sparesStatus?: "NOT_NEEDED" | "ON_HAND" | "TO_BUY" | "ORDERED" | "READY";
+  mode?: "MANAGED" | "SELF";
 }): { label: string; party: Party } {
   const contractor = job.route === "CONTRACTOR";
+  const self = job.mode === "SELF";
+  if (self && job.status === "IN_PROGRESS") return { label: "Finish the job and submit the evidence (one-person job)", party: "Technician" };
+  if (self && job.status === "AWAITING_VERIFICATION" && !job.reporterConfirmation) return { label: "Sign off the one-person job", party: "Maintenance manager" };
   // In-house work waiting for spares: stores are next (issue from stock, order, or wait for delivery).
   if (!contractor && ["APPROVED", "ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(job.status) && job.sparesStatus && ["ON_HAND", "TO_BUY", "ORDERED"].includes(job.sparesStatus)) {
     const label = { ON_HAND: "Issue the spares from stores", TO_BUY: "Order the spares", ORDERED: "Waiting for the spares to arrive" }[job.sparesStatus as "ON_HAND"];
@@ -94,6 +98,8 @@ export const ROOT_CAUSE_LABEL: Record<"MAINTENANCE" | "AGE_OF_MACHINE" | "OPERAT
 };
 
 /** Priority names people see. NORMAL is shown as "Medium". */
+export const MODE_LABEL = { MANAGED: "Managed – through maintenance management", SELF: "One-person job – start to finish by one person" } as const;
+
 export const PRIORITY_LABEL: Record<"LOW" | "NORMAL" | "HIGH" | "CRITICAL", string> = { LOW: "Low", NORMAL: "Medium", HIGH: "High", CRITICAL: "Critical" };
 /** With a short explanation, for the report forms. */
 export const PRIORITY_HELP: Record<"LOW" | "NORMAL" | "HIGH" | "CRITICAL", string> = {

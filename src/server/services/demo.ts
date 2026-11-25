@@ -152,6 +152,14 @@ export async function createDemoWorkspace(user: { id: string; name: string; emai
   await jobs.closeJob(ctx, j8.id, {});
   await jobs.reopenJob(ctx, j8.id, { reason: "Blocked again two days later: the drain line may be partly collapsed." });
 
+  // 10. One-person jobs: the technician reports and fixes small things themselves; management keeps the overview.
+  const s1 = await jobs.createJob(jabu!, { title: "Workshop air line hissing at lathe drop", description: "Quick coupler leaking at the drop beside lathe 2.", siteId: plant.id, locationId: packing.id, category: "Mechanical", priority: "NORMAL", selfFix: true, departmentId: depts.Maintenance });
+  await addJobAttachment(jabu!, { jobId: s1.id, kind: "REQUEST", filename: "coupler.jpg", bytes: await samplePhoto(4) });
+  await jobs.addWorkUpdate(jabu!, s1.id, { note: "Isolated the air, replacing the coupler now.", labourMinutes: 20 });
+  const s2 = await jobs.createJob(jabu!, { title: "Loose handrail on mezzanine stairs", description: "Two brackets loose on the handrail.", siteId: plant.id, locationId: packing.id, category: "Building", priority: "HIGH", selfFix: true, departmentId: depts.Maintenance });
+  await addJobAttachment(jabu!, { jobId: s2.id, kind: "AFTER", filename: "handrail-after.jpg", bytes: await samplePhoto(6) });
+  await jobs.submitCompletion(jabu!, s2.id, { workPerformed: "Re-fixed both brackets with new anchors; load-tested.", rootCauses: ["WEAR_AND_TEAR"], toolsAndAreaOk: null });
+
   // 9. A report that looks like one already open, for a manager to review.
   await jobs.createPublicReport(plant.publicToken, { title: "Kitchen tap dripping", description: "The hot tap in the staff kitchen keeps dripping and won't close.", reporterName: "Johannes (cleaning team)", reporterPhone: "", reporterEmail: "", locationId: kitchen.id });
   void lerato;
