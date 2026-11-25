@@ -97,6 +97,21 @@ Quote sign-off is also signed (`APPROVAL`) and shown on page 2 with the quotes, 
   - While an in-house job is approved, assigned, in progress or on hold and its spares are not ready, "What happens next" says Stores is responsible (issue, order, or waiting for delivery).
 - **Jobs board**: Open now (anything not closed or cancelled, most urgent first) and History (closed and cancelled, newest first), filtered by priority with counts.
 
+## Two ways a job runs: managed and one-person
+
+| | Managed (default) | One-person job |
+|---|---|---|
+| Who | Maintenance management moves it along | One person (technician, manager or other maintenance staff) does it start to finish |
+| Start | Report → screened → sent for assessment | Report with **"I'll fix it myself"**, or **"I'll fix it myself (one-person job)"** on a new or assessed report |
+| Steps | Assess → (quote → approve) → assign → work → confirm fixed → close | Assigned to the person and started at once (NEW → APPROVED → ASSIGNED → IN_PROGRESS, all recorded) → work → complete with evidence → closed |
+| Closing | Reporter confirms, manager closes | If someone else reported it, they still confirm. Otherwise a maintenance manager **signs it off**, or – when the company turns sign-off off – it **closes on completion** (recorded as a decision by the person who did it) |
+| Overview | Dashboard, history, job card | The same, plus dashboard tiles *One-person jobs in progress* and *to sign off*; pill "One-person"; filter `mode=self` |
+
+- Only people with the `job.work` permission (owner, maintenance manager, technician) may take one-person jobs; people who only report faults cannot.
+- Company settings (Settings → Company): **allow one-person jobs** (default on) and **manager sign-off for one-person jobs** (default on).
+- Evidence rules are the same for both: an after photo or test document, root cause, and the food-area check where it applies.
+- `Job.mode` (`MANAGED` | `SELF`) records which way the job ran; events `job.self_started`, `job.completion_submitted`, `job.verified`/`job.closed`.
+
 ## Departments and handovers
 
 - A **department** (Maintenance, Operations, Management, Finance …) groups people. It is separate from the **role** (what someone may do), the **job status** (stage of work) and the **job owner** (who is responsible right now).

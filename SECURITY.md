@@ -71,6 +71,16 @@ All checks are server-side in the service layer. The UI only hides controls.
 - Link pages show only that job's fault details, location, the site's fault photos and (after appointment) the PO and approved value. File reads via a link are checked against that job and kind.
 - Quotes or completions submitted via a link are recorded as "<contractor> (contractor, via secure link)" with time and IP. **Possession of the link is the credential**; the page says the link is personal to the contractor.
 
+## One-person jobs
+
+- Taking a job as a one-person job requires `job.work` and the company setting; the server re-checks both. The doer cannot sign off their own work when the company requires manager sign-off (closing still needs `job.manage`). When sign-off is off, the automatic close is recorded as an `INTERNAL` decision naming the person, so the history shows exactly who closed it and why.
+
+## Public sandbox
+
+- `/demo` creates a guest user (reserved `.invalid` address, unknown random password, refused at password sign-in) and a demo company owned by that guest; the session cookie is the only way in. `User.guestExpiresAt` (24 h) makes `loadSession` refuse the session after expiry; the background worker then archives the company, deactivates memberships and deletes the sessions.
+- Each visitor gets their own company: visitors never see each other's data. Demo companies never queue email.
+- Abuse limits: 5 sandboxes per IP per hour and 300 per day overall (shared Postgres rate limiter).
+
 ## Demo companies and "view as"
 
 - Demo companies are separate organisations flagged `isDemo`, built from synthetic data. Sample people have reserved `.invalid` addresses, an unknown random password and are refused at sign-in.

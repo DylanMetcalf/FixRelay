@@ -114,7 +114,15 @@ Closed the production gaps (reset/verification, email transports, shared storage
 
 Listed in BUILD_STATUS.md under "Known issues / limitations". None are known to break the main workflow.
 
-## ManOp release (2026-11-22) – read this first
+## ManOp (2026-11-25)
+
+- Renamed Resultra → ManOp (name, mark, docs, guides `docs/MANOP_*`, e2e `e2e/manop.spec.ts`, PDFs `MANOP_*.pdf`). Technical `fixrelay` names unchanged.
+- One-person jobs: `Job.mode`, `startSelfJob`/`takeAsSelfJob`/`finishSelfJob` in `jobs.ts`; settings `allowSelfJobs`, `selfJobSignOff`.
+- Public sandbox: `startSandbox`/`cleanupSandboxes` in `demo.ts`, `/demo` page, `User.guestExpiresAt`. The page must keep the form mounted during its own action (`next-action` header) – same gotcha as the login page.
+- Tour: `src/components/tour.tsx` (steps with page + selector, sessionStorage progress); anchors use `data-tour` / `data-testid`. If you move those elements, update the steps.
+- ClamAV: when clamd is down, uploads (and therefore building demo data) fail closed with "could not be virus-scanned". Restart clamd before tests.
+
+## Resultra release (2026-11-22)
 
 - The product is now **ManOp** ("From reported to resolved."). Start with MANOP_TECHNICAL_HANDOVER.md, then EXISTING_SYSTEM_AUDIT.md (what existed and why choices were made) and BUILD_STATUS.md (acceptance matrix).
 - Technical names intentionally still say `fixrelay` (cookie `fr_session`, DB names, Render services, export format id). Do not rename them without a migration plan.

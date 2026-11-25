@@ -282,7 +282,9 @@ describe("notifications and email", () => {
     const t = await tenant();
     const job = await newJob(t);
     await prisma.job.update({ where: { id: job.id }, data: { dueAt: new Date(Date.now() - 3_600_000) } });
-    await notifications.scanOverdue(); await notifications.scanOverdue();
+    // The scan works in batches of 200 (the worker repeats it); drain everything due in the shared test database first.
+    while ((await notifications.scanOverdue()) > 0) { /* next batch */ }
+    await notifications.scanOverdue(); // a repeat run must not notify again
     expect(await prisma.notification.count({ where: { jobId: job.id, type: "job.overdue", userId: t.manager.userId } })).toBe(1);
   });
 });

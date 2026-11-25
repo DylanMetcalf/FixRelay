@@ -2,7 +2,7 @@
 
 **From reported to resolved.** Maintenance operations: requests, job cards and approvals in one place.
 
-*ManOp was previously called FixRelay; some technical names (database, Render service, session cookie) still use `fixrelay` for compatibility.*
+*ManOp was previously called Resultra and, before that, FixRelay; some technical names (database, Render service, session cookie) still use `fixrelay` for compatibility.*
 
 **Live demo:** https://fixrelay-demo.onrender.com (free tier: the first load after idle takes about a minute).
 
@@ -14,7 +14,13 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 
 ## Features (implemented and tested)
 
-**New in the ManOp release**
+**New in ManOp (2026-11-25)**
+- **ManOp brand**: name (short for maintenance operations) and an M-with-check mark; colours unchanged.
+- **Two ways a job runs**: managed (through maintenance management) or **one-person** ("I'll fix it myself": start to finish by one person, with evidence; manager sign-off optional per company). Dashboard tiles and filters for both.
+- **Public sandbox** at `/demo`: anyone opens a private sample company with every role and job stage, no sign-up, gone after 24 hours.
+- **Guided tour** across the real screens, and a public **How it works** page explaining both workflows.
+
+**Added in the Resultra release**
 - **Branded PDF job documents**: maintenance job card (with a handwriting area for printed cards), completed job report (before/after photos, verification, recorded signatures only), full job history, all A4, generated on the server from live data with access checks, a generation timestamp and a sign-in-required QR link. In-app viewer with Print and Download. See [PDF_DOCUMENTATION.md](PDF_DOCUMENTATION.md).
 - **Departments and handovers**: departments with department managers; jobs belong to a department and are handed over with a reason; department queues on the dashboard; append-only handover record.
 - **Employee self-registration**: site registration codes (expire, switch off, replace); employees ask for access with name, work email, department and optional job title, phone and photo; access only after email confirmation and administrator approval.

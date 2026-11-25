@@ -24,7 +24,14 @@ npm run build && npm run test:e2e # starts `next start -p 3100` against the test
 npm run typecheck
 ```
 
-## Results (last run: 2026-11-22, ManOp release; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
+## Results (last run: 2026-11-25, ManOp release; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
+
+- `npm run typecheck`: **pass** · `npm run build`: **pass** · `npm audit --omit=dev`: **0 vulnerabilities** · `prisma migrate diff`: **no drift**
+- `npm test` (with `CLAMAV_TEST_PORT=3310`): **99 / 99 passed**, 14 files. New in this release: `self-jobs.test.ts` (4: report-and-fix with manager sign-off, close on completion without sign-off, taking someone's report with the reporter still confirming, permissions and the company switch) and a sandbox test in `platform-demo.test.ts` (private company per visitor, expiry, password sign-in refused, clean-up, no email). The overdue-alert test now drains the batch queue first (the shared test database holds hundreds of old overdue jobs).
+- `npm run test:e2e`: **69 / 69 passed in one complete run (6.9 min)**: 15 features, 4 journeys, 16 requisition, 2 board/spares, 32 in `e2e/manop.spec.ts` (S1–S20, D1–D7, V1, and new X1 sandbox + full guided tour, X2 one-person job with sign-off, X3 one-person job closing on completion and "take it myself", X4 How it works public page + accessibility).
+- Found and fixed while testing this release: the `/demo` page swapped its form for the "signed in" view during its own action, so the browser never followed the sandbox redirect (same pattern as the earlier login fix).
+
+## Earlier results (2026-11-22, Resultra release)
 
 - `npm run typecheck`: **pass**
 - `npm test` (with `CLAMAV_TEST_PORT=3310`): **94 / 94 passed**, 13 files. New: `documents.test.ts` (5: job card content, A4, multi-page, photos, footer link, completion rules, history and price permissions, isolation), `departments.test.ts` (5: departments, department scope, handover record and notifications, duplicate scoring, flag/link/dismiss, repeat faults, double submit), `registration.test.ts` (2: codes, pending requests, email confirmation, approval, decline, expiry, replacement), `qr.test.ts` (3: short codes, legacy links, rotation, name-only and idempotent QR reports, QR sign PDF), `platform-demo.test.ts` (3: customer creation and invitation, account-metadata overview, demo personas, no demo email, view-as restrictions, reset).

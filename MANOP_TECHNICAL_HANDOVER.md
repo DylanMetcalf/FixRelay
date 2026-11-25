@@ -5,7 +5,7 @@
 This document is for the next engineer. It explains how ManOp is built, where things live, how to run and test it, how to deploy it, and what is still open. Detailed references: ARCHITECTURE.md, DATABASE.md, WORKFLOWS.md, SECURITY.md, PDF_DOCUMENTATION.md, DEPLOYMENT.md, TESTING.md, BUILD_STATUS.md, EXISTING_SYSTEM_AUDIT.md.
 
 ## 1. What it is
-A multi-company (multi-tenant) SaaS for internal site maintenance. Anyone on site reports a fault (signed in, or by scanning a QR code without an account); maintenance triages, assesses, fixes it in-house or through contractors (quotes, spend approval by amount), records the work with evidence, the reporter confirms, the manager closes. Every job is also a branded PDF job card. Departments, handovers, self-registration with approval, duplicate review, a platform admin and a demo environment were added in the ManOp upgrade.
+A multi-company (multi-tenant) SaaS for internal site maintenance. Anyone on site reports a fault (signed in, or by scanning a QR code without an account); maintenance triages, assesses, fixes it in-house or through contractors (quotes, spend approval by amount), records the work with evidence, the reporter confirms, the manager closes. Every job is also a branded PDF job card. Departments, handovers, self-registration with approval, duplicate review, a platform admin and a demo environment were added in the Resultra upgrade; the ManOp release added one-person jobs (dual workflow), a public no-sign-up sandbox, a guided tour and the How it works page.
 
 ## 2. Stack
 | Layer | Choice |
@@ -25,6 +25,8 @@ A multi-company (multi-tenant) SaaS for internal site maintenance. Anyone on sit
 src/
   app/
     (auth)/          login, register, join (employee self-registration), invite, verify-email, reset-password
+    demo/            public sandbox entry (/demo)
+    how-it-works/    public explainer of managed vs one-person jobs
     (app)/           signed-in app: dashboard, jobs (+[id], [id]/card, [id]/report), requests/new, sites, settings, …
     platform/        ManOp platform admin (/platform, /platform/[orgId])
     r/[token]/       public QR report page (/r/{code})
@@ -47,7 +49,7 @@ src/
     duplicates.ts    rule-based duplicate scoring (pure, unit-tested)
     errors.ts        logError → ErrorLog
     email.ts, storage.ts, scan.ts, qr.ts
-  components/        Form (server-action forms), Stepper, QuickReport (QR form), DemoBar, Logo, …
+  components/        Form (server-action forms), Stepper, QuickReport (QR form), DemoBar, Tour (guided walkthrough), Logo, …
   middleware.ts      passes the requested path so sign-in can return to it
 prisma/schema.prisma, prisma/migrations/
 tests/ (Vitest) · e2e/ (Playwright) · assets/fonts · public/brand (logo SVGs)
@@ -56,8 +58,8 @@ tests/ (Vitest) · e2e/ (Playwright) · assets/fonts · public/brand (logo SVGs)
 ## 4. Data model (key parts)
 - **Organisation** (company) → **Membership** (roles[], siteIds[], active, **status** ACTIVE/PENDING/REJECTED) → **User** (phone, jobTitle, photoKey, demoPersona).
 - **Site** (publicToken + short **publicCode**) → **Location** (publicCode, foodArea) → **Asset** (publicCode).
-- **Job**: one record from report to closure. New: `departmentId`, `duplicateStatus`, `possibleDuplicateIds`, `duplicateOfId`, `repeatOfId`, `submissionKey` (unique per company).
-- **Department**, **DepartmentMember** (isManager), **JobHandover** (append-only), **JoinCode**, **ErrorLog**, `Session.actAsUserId` (demo only), `Organisation.archivedAt` (demo reset).
+- **Job**: one record from report to closure. `mode` MANAGED | SELF (one-person job). Also: `departmentId`, `duplicateStatus`, `possibleDuplicateIds`, `duplicateOfId`, `repeatOfId`, `submissionKey` (unique per company).
+- **Department**, **DepartmentMember** (isManager), **JobHandover** (append-only), **JoinCode**, **ErrorLog**, `Session.actAsUserId` (demo only), `Organisation.archivedAt` (demo reset), `Organisation.allowSelfJobs` / `selfJobSignOff`, `User.guestExpiresAt` (sandbox guests).
 - Append-only by trigger: ActivityEvent, Decision, JobSignature, JobHandover.
 
 ## 5. Permissions

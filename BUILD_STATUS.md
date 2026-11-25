@@ -2,7 +2,16 @@
 
 Last updated: 2026-11-22 (ManOp release). Legend: **PASS** implemented and verified by executed tests or inspection · **PARTIAL** implemented with a stated limit · **FAIL** not working · **NOT TESTED** not verified.
 
-## ManOp final acceptance criteria
+## ManOp release (2026-11-25)
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Rebrand to ManOp (name, logo); keep colours | PASS | M-with-check mark (`public/brand/manop-*.svg`), icons, social image, wordmark "Man**Op**", all text, PDFs, guides (`docs/MANOP_*`); colours unchanged (BRAND.md) |
+| Sandbox demo anyone can open | PASS | `/demo` → private sample company per visitor, no sign-up, 24 h expiry, rate limited, no email; X1, `platform-demo.test.ts`; live smoke |
+| Walkthrough of the areas and the steps a job goes through | PASS | Guided tour (13 steps across dashboard, jobs, a job, documents, sites, settings) ending on the public How it works page; X1, X4 |
+| One-person jobs alongside managed jobs, with management overview and a job card at the end | PASS | `Job.mode`, "I'll fix it myself" (report form and on new/assessed jobs), optional manager sign-off, dashboard tiles/filters, job card label; `self-jobs.test.ts`, X2, X3 |
+
+## Resultra final acceptance criteria (2026-11-22)
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
@@ -24,7 +33,7 @@ Last updated: 2026-11-22 (ManOp release). Legend: **PASS** implemented and verif
 | 16 | Job history is preserved | PASS | Append-only audit tables (trigger tests), handover append-only test, history PDF (S20, `documents.test.ts`) |
 | 17 | Platform administration is functional | PASS | S1, S2, S4, `platform-demo.test.ts`; PLATFORM_ADMIN_GUIDE |
 | 18 | Demo data is isolated | PASS | Separate demo companies, synthetic data, no email (`platform-demo.test.ts`), view-as limited to demo (forged-session test), V1 |
-| 19 | Automated tests are executed | PASS | 94/94 Vitest, 65/65 Playwright (TESTING.md) |
+| 19 | Automated tests are executed | PASS | 99/99 Vitest, 69/69 Playwright as of 2026-11-25 (TESTING.md) |
 | 20 | Critical security defects are resolved | PASS | No known critical defects; production `npm audit` 0; isolation tests (S19, security suite); dev-only tool advisories listed in TESTING.md. An independent penetration test is still recommended |
 | 21 | Screenshot-based documentation is created | PASS | `docs/MANOP_USER_GUIDE.pdf` (17 pp), `MANOP_SITE_ADMIN_GUIDE.pdf` (12 pp), `MANOP_PLATFORM_ADMIN_GUIDE.pdf` (6 pp), `MANOP_PILOT_TESTING_GUIDE.pdf` (3 pp), screenshots in `docs/screenshots`, rebuilt by `scripts/guides/*` |
 | 22 | Render and Resend setup instructions are complete | PARTIAL | DEPLOYMENT.md has the full steps (Render Blueprint, PDFs without a browser, files in Postgres, custom domain/HTTPS, backups, monitoring, Resend domain/DNS/key/sender). Not done from here: buying the ManOp domain, verifying it in Resend, and a live delivery test on it |
