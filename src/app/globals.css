@@ -66,3 +66,8 @@ body { color: var(--ink); background: var(--color-mist); font-family: ui-sans-se
   body { background: #fff; }
   .card { box-shadow: none; break-inside: avoid; }
 }
+
+/* Guided tour: each step's text fades in gently. */
+@keyframes tour-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.tour-in { animation: tour-in 280ms ease-out both; }
+@media (prefers-reduced-motion: reduce) { .tour-in { animation: none; } [data-testid="tour"] * { transition: none !important; } }

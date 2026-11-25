@@ -24,6 +24,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const personas = demoOwner ? await listPersonas(org.id) : [];
   const guestUntil = demoOwner ? (await prisma.user.findUnique({ where: { id: s.user.id }, select: { guestExpiresAt: true } }))?.guestExpiresAt ?? null : null;
   const brand = safeColour(org.brandColour);
+  // The job the guided tour opens: the most urgent open job this person can see.
+  const tourJob = await prisma.job.findFirst({ where: { orgId: org.id, status: { notIn: ["NEW", "CLOSED", "CANCELLED"] }, ...(ctx.siteIds.length ? { siteId: { in: ctx.siteIds } } : {}) }, orderBy: [{ priority: "desc" }, { reportedAt: "desc" }], select: { id: true } });
   const manager = can(ctx, "job.viewAll");
   const tech = ctx.roles.includes("TECHNICIAN");
   const home = manager || can(ctx, "job.viewAll") ? "/dashboard" : tech ? "/my-jobs" : "/dashboard";
@@ -105,7 +107,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <NavLink href="/profile" className={tab} activeClass="!text-signal"><Icon d="M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0" />Profile</NavLink>
         </Suspense>
       </nav>
-      <Tour />
+      <Tour jobHref={tourJob ? `/jobs/${tourJob.id}` : undefined} />
     </div>
   );
 }

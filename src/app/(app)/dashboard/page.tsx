@@ -8,7 +8,7 @@ import { can } from "@/server/permissions";
 import { listSites } from "@/server/services/sites";
 import { formatZar } from "@/lib/money";
 import { approvalLimit } from "@/server/permissions";
-import { dashboardCounts, type JobFilters, listJobs } from "@/server/services/jobs";
+import { dashboardCounts, type JobFilters, type JobRow, listJobs } from "@/server/services/jobs";
 import { listAssignable } from "@/server/services/orgs";
 import { STATUS_LABEL } from "@/server/workflow";
 import { JobFilterBar } from "../jobs/filters";
@@ -22,33 +22,11 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const manager = can(ctx, "job.viewAll");
   const [counts, jobs, sites, techs, departments] = await Promise.all([
     dashboardCounts(ctx, f),
-    listJobs(ctx, { ...f, view: f.status || f.overdue || f.source || f.spares || f.duplicates || f.reopened || f.unassigned || f.mode || f.signoff ? "all" : undefined }, 25),
+    listJobs(ctx, { ...f, view: f.status || f.stage || f.overdue || f.source || f.spares || f.duplicates || f.reopened || f.unassigned || f.mode || f.signoff ? "all" : undefined, tab: f.status ? undefined : "open" }, Object.keys(f).length ? 50 : 8),
     manager ? listSites(ctx) : [],
     manager ? listAssignable(ctx) : [],
     manager ? prisma.department.findMany({ where: { orgId: ctx.orgId, archived: false }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [],
   ]);
-  const tiles: { label: string; n: number; href: string; alert?: boolean }[] = [
-    { label: "New fault reports", n: counts.newRequests, href: "?status=NEW" },
-    { label: "Unassigned – nobody responsible", n: counts.unassigned, href: "?unassigned=true", alert: true },
-    { label: "Possible duplicates to review", n: counts.duplicates, href: "?duplicates=flagged", alert: true },
-    { label: "Public reports to screen", n: counts.toScreen, href: "?source=PUBLIC_LINK&status=NEW", alert: true },
-    { label: "Awaiting assessment", n: counts.awaitingAssessment, href: "?status=ASSESSING" },
-    { label: "Assessed – decide how to fix", n: counts.assessed, href: "?status=ASSESSED" },
-    { label: "Getting quotes", n: counts.quoting, href: "?status=QUOTING" },
-    { label: "Awaiting spend approval", n: counts.awaitingApproval, href: "?status=AWAITING_APPROVAL" },
-    { label: "Approved – assign technician", n: counts.awaitingAssignment, href: "?status=APPROVED" },
-    { label: "Assigned (in-house or contractor)", n: counts.assigned, href: "?status=ASSIGNED" },
-    { label: "In progress", n: counts.inProgress, href: "?status=IN_PROGRESS" },
-    { label: "On hold", n: counts.onHold, href: "?status=ON_HOLD" },
-    { label: "Awaiting confirmation it's fixed", n: counts.awaitingVerification, href: "?status=AWAITING_VERIFICATION" },
-    { label: "Confirmed – ready to close", n: counts.readyToClose, href: "?status=VERIFIED" },
-    { label: "Waiting for spares", n: counts.sparesWaiting, href: "?spares=waiting" },
-    { label: "One-person jobs in progress", n: counts.selfOpen, href: "?mode=self&status=IN_PROGRESS" },
-    { label: "One-person jobs to sign off", n: counts.selfSignoff, href: "?signoff=true", alert: true },
-    { label: "Reopened work", n: counts.reopened, href: "?reopened=true" },
-    { label: "Completed in the last 7 days", n: counts.recentlyClosed, href: "/jobs?tab=history" },
-    { label: "Overdue", n: counts.overdue, href: "?overdue=true", alert: true },
-  ];
   const setup = can(ctx, "org.manage") && !s.org.isDemo ? await onboarding(ctx.orgId, s.user.emailVerified) : null;
   // Things waiting for THIS person: quotes within their approval limit, and their own reports to confirm.
   const rules = await prisma.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { managerApprovalLimitCents: true, approverApprovalLimitCents: true } });
@@ -67,7 +45,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const myReports = !manager ? await listJobs(ctx, { view: "all", reportedByMe: stores || undefined }, 10).then((js) => js.filter((j) => j.status !== "CLOSED" && j.status !== "CANCELLED")) : [];
   return (
     <>
-      <PageHeader title={manager ? "Dashboard" : `Hello, ${s.user.name.split(" ")[0]}`} subtitle={manager ? "Every number below is a live count of jobs. Tap one to see them." : "Report faults and follow them until they are fixed."}>
+      <PageHeader title={manager ? "Dashboard" : `Hello, ${s.user.name.split(" ")[0]}`} subtitle={manager ? "What needs you now, and where every job is. Tap anything to see those jobs." : "Report faults and follow them until they are fixed."}>
         <Link href="/requests/new" className="btn btn-primary">+ Report a fault</Link>
       </PageHeader>
 
@@ -140,22 +118,87 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         </Card>
       )}
 
-      {manager && (
-        <>
-          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" data-tour="tiles">
-            {tiles.map((t) => (
-              <Link key={t.label} href={t.href.startsWith("/") ? t.href : `/dashboard${t.href}`} className={`card !p-3 hover:border-gray-500 ${t.alert && t.n > 0 ? "!border-red-400 !bg-red-50" : ""}`}>
-                <p className={`text-3xl font-extrabold tabular-nums ${t.alert && t.n > 0 ? "text-red-800" : "text-gray-900"}`}>{t.n}</p>
-                <p className="text-xs font-bold text-gray-700">{t.label}</p>
+      {manager && <ManagerOverview counts={counts} f={f} jobs={jobs}
+        filters={<JobFilterBar base="/dashboard" f={f} departments={departments.map((d) => ({ value: d.id, label: d.name }))} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />} />}
+    </>
+  );
+}
+
+type Counts = Awaited<ReturnType<typeof dashboardCounts>>;
+
+/**
+ * The manager's overview, kept deliberately simple: (1) the few things that need someone now, (2) one line showing
+ * how many jobs are at each of the five stages, (3) the list. Everything else is one tap away on the jobs board.
+ */
+function ManagerOverview({ counts, f, jobs, filters }: { counts: Counts; f: JobFilters; jobs: JobRow[]; filters: React.ReactNode }) {
+  const attention = [
+    { label: "Unassigned – nobody responsible", hint: "Give each one an owner", n: counts.unassigned, href: "?unassigned=true" },
+    { label: "Public reports to screen", hint: "Reported with a QR code, without an account", n: counts.toScreen, href: "?source=PUBLIC_LINK&status=NEW" },
+    { label: "Possible duplicates to review", hint: "Merge them or keep them separate", n: counts.duplicates, href: "?duplicates=flagged" },
+    { label: "Overdue", hint: "Past their due date", n: counts.overdue, href: "?overdue=true" },
+    { label: "One-person jobs to sign off", hint: "Finished by one person, waiting for a manager", n: counts.selfSignoff, href: "?signoff=true" },
+  ].filter((a) => a.n > 0);
+  const extras = [
+    { label: "one-person jobs in progress", n: counts.selfOpen, href: "?mode=self&status=IN_PROGRESS" },
+    { label: "waiting for spares", n: counts.sparesWaiting, href: "?spares=waiting" },
+    { label: "reopened", n: counts.reopened, href: "?reopened=true" },
+    { label: "finished in the last 7 days", n: counts.recentlyClosed, href: "/jobs?tab=history" },
+  ];
+  const stage = counts.stages.find((x) => x.key === f.stage);
+  const filtered = !!(f.status || f.stage || f.overdue || f.source || f.spares || f.duplicates || f.reopened || f.unassigned || f.mode || f.signoff || f.q || f.siteId || f.departmentId || f.technicianId || f.from || f.to);
+  const title = stage ? stage.label : f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : f.spares ? "Waiting for spares" : f.duplicates ? "Possible duplicates" : f.reopened ? "Reopened work" : f.unassigned ? "Unassigned jobs" : f.signoff ? "One-person jobs to sign off" : f.source ? "Public reports to screen" : f.mode === "self" ? "One-person jobs" : filtered ? "Matching jobs" : "Most urgent open jobs";
+  const href = (h: string) => (h.startsWith("/") ? h : `/dashboard${h}`);
+  return (
+    <>
+      <section className="mb-6" data-tour="attention" data-testid="attention">
+        <h2 className="mb-2 text-lg font-extrabold">Needs attention</h2>
+        {attention.length === 0
+          ? <p className="card !border-green-300 !bg-green-50 font-semibold text-green-900">All clear – nothing is waiting on a manager right now.</p>
+          : <ul className="space-y-2">{attention.map((a) => (
+              <li key={a.label}>
+                <Link href={href(a.href)} className="card flex items-center gap-4 !border-red-300 !bg-red-50 !p-3 hover:!border-red-500">
+                  <span className="w-10 text-center text-3xl font-extrabold tabular-nums text-red-800">{a.n}</span>
+                  <span className="flex-1"><span className="block font-bold text-gray-900">{a.label}</span><span className="text-sm text-gray-700">{a.hint}</span></span>
+                  <span aria-hidden className="font-bold text-red-800">View →</span>
+                </Link>
+              </li>
+            ))}</ul>}
+      </section>
+
+      <section className="mb-6" data-tour="tiles" data-testid="stages">
+        <h2 className="mb-1 text-lg font-extrabold">Where every open job is</h2>
+        <p className="muted mb-3">Jobs move through these five stages in order. Tap a stage to see its jobs.</p>
+        <ol className="grid gap-2 md:grid-cols-5">
+          {counts.stages.map((st, i) => (
+            <li key={st.key} className="relative">
+              <Link href={`/dashboard?stage=${st.key}`} aria-current={f.stage === st.key ? "true" : undefined}
+                className={`card flex h-full items-center gap-3 !p-3 md:flex-col md:items-start md:gap-1 hover:border-gray-500 ${f.stage === st.key ? "!border-blue-700 ring-2 ring-blue-700" : ""}`}>
+                <span className="flex items-center gap-2 md:w-full">
+                  <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-bold text-white">{i + 1}</span>
+                  <span className="text-3xl font-extrabold tabular-nums text-gray-900 md:ml-auto">{st.n}</span>
+                </span>
+                <span><span className="block font-bold text-gray-900">{st.label}</span><span className="text-xs text-gray-700">{st.hint}</span></span>
               </Link>
-            ))}
-          </div>
-          <p className="muted mb-4">{counts.unowned} new report{counts.unowned === 1 ? "" : "s"} with no responsible manager yet · {counts.recentlyClosed} closed in the last 7 days.</p>
-          <JobFilterBar base="/dashboard" f={f} departments={departments.map((d) => ({ value: d.id, label: d.name }))} sites={sites.map((c) => ({ value: c.id, label: c.name }))} techs={techs.map((t) => ({ value: t.userId, label: t.user.name }))} />
-          <h2 className="mb-3 mt-5 text-lg font-extrabold">{f.status ? STATUS_LABEL[f.status] ?? "Jobs" : f.overdue ? "Overdue jobs" : f.spares ? "Waiting for spares" : f.duplicates ? "Possible duplicates" : f.reopened ? "Reopened work" : f.unassigned ? "Unassigned jobs" : f.signoff ? "One-person jobs to sign off" : f.mode === "self" ? "One-person jobs" : "Latest activity"}</h2>
-          <JobList jobs={jobs} empty={<Empty title="Nothing here">No jobs match. <Link className="link" href="/requests/new">Report a fault</Link>.</Empty>} />
-        </>
-      )}
+              {i < counts.stages.length - 1 && <span aria-hidden className="absolute -right-2 top-1/2 z-10 hidden -translate-y-1/2 text-lg font-bold text-gray-400 md:block">›</span>}
+            </li>
+          ))}
+        </ol>
+        <p className="mt-3 text-sm text-gray-700">
+          {extras.map((x, i) => <span key={x.label}>{i > 0 && " · "}<Link className="link" href={href(x.href)}><strong className="tabular-nums">{x.n}</strong> {x.label}</Link></span>)}
+        </p>
+      </section>
+
+      <section>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-extrabold">{title}</h2>
+          {filtered ? <Link className="link text-sm font-semibold" href="/dashboard">← Back to the overview</Link> : <Link className="link text-sm font-semibold" href="/jobs">See all jobs →</Link>}
+        </div>
+        <details className="mb-3">
+          <summary className="cursor-pointer text-sm font-semibold text-blue-800">Search and filter</summary>
+          <div className="mt-2">{filters}</div>
+        </details>
+        <JobList jobs={jobs} empty={<Empty title="Nothing here">No jobs match. <Link className="link" href="/requests/new">Report a fault</Link>.</Empty>} />
+      </section>
     </>
   );
 }

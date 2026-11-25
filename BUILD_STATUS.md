@@ -8,8 +8,8 @@ Last updated: 2026-11-22 (ManOp release). Legend: **PASS** implemented and verif
 |---|---|---|
 | Rebrand to ManOp (name, logo); keep colours | PASS | M-with-check mark (`public/brand/manop-*.svg`), icons, social image, wordmark "Man**Op**", all text, PDFs, guides (`docs/MANOP_*`); colours unchanged (BRAND.md) |
 | Sandbox demo anyone can open | PASS | `/demo` → private sample company per visitor, no sign-up, 24 h expiry, rate limited, no email; X1, `platform-demo.test.ts`; live smoke |
-| Walkthrough of the areas and the steps a job goes through | PASS | Guided tour (13 steps across dashboard, jobs, a job, documents, sites, settings) ending on the public How it works page; X1, X4 |
-| One-person jobs alongside managed jobs, with management overview and a job card at the end | PASS | `Job.mode`, "I'll fix it myself" (report form and on new/assessed jobs), optional manager sign-off, dashboard tiles/filters, job card label; `self-jobs.test.ts`, X2, X3 |
+| Walkthrough of the areas and the steps a job goes through | PASS | Guided tour (9 calm steps: dashboard, one job, sites; card stays in one corner, client-side page changes, highlight glides) ending on the public How it works page; X1, X4 |
+| One-person jobs alongside managed jobs, with management overview and a job card at the end | PASS | `Job.mode`, "I'll fix it myself" (report form and on new/assessed jobs), optional manager sign-off, dashboard "Needs attention" row and filters, job card label; `self-jobs.test.ts`, X2, X3 |
 
 ## Resultra final acceptance criteria (2026-11-22)
 
@@ -23,7 +23,7 @@ Last updated: 2026-11-22 (ManOp release). Legend: **PASS** implemented and verif
 | 6 | Employee registration and approval work | PASS | S5, S6, `registration.test.ts` |
 | 7 | Department assignment and handovers work | PASS | S7, S12, `departments.test.ts` |
 | 8 | Email notification links are correct | PASS | S13 (link → sign in → job), `departments.test.ts` (link in body); live delivery: see #22 |
-| 9 | Managers can oversee job progress | PASS | Dashboard tiles incl. unassigned, duplicates, reopened, completed; department filter; board (B1); S10 |
+| 9 | Managers can oversee job progress | PASS | Simplified dashboard: "Needs attention" (unassigned, QR reports to screen, duplicates, overdue, one-person sign-off) and five stages (reported → being looked at → waiting to start → being fixed → checking and closing); department filter; board (B1); S10 |
 | 10 | Duplicate reports can be reviewed | PASS | S10, `departments.test.ts` |
 | 11 | Closed jobs can be reopened | PASS | S18, journey 1 |
 | 12 | Active job cards can be viewed, printed and downloaded | PARTIAL | Viewing and downloading are verified (D1, D2, D7). Print: the Print button calls the browser's print on the framed PDF (falls back to opening it in a new tab), and every PDF is print-ready A4; the browser print dialog itself cannot be driven by the headless test browser and was **not tested** |

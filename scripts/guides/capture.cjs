@@ -267,8 +267,8 @@ async function pdfToPng(url, p, name, pages = "1") {
   await shot(visitor, "tour-1-welcome");
   await visitor.getByTestId("tour-next").click(); await visitor.waitForTimeout(700);
   await shot(visitor, "tour-2-tiles");
-  for (let n = 0; n < 5; n++) { await visitor.getByTestId("tour-next").click(); await visitor.waitForLoadState("networkidle"); await visitor.waitForTimeout(600); }
-  await shot(visitor, "tour-job-next"); // step 7: what happens next
+  for (let n = 0; n < 3; n++) { await visitor.getByTestId("tour-next").click(); await visitor.waitForLoadState("networkidle"); await visitor.waitForTimeout(900); }
+  await shot(visitor, "tour-job-next"); // step 5: what happens next
   await visitor.getByTestId("tour-next").click(); await visitor.waitForTimeout(700);
   await visitor.getByTestId("tour-next").click(); await visitor.waitForTimeout(700);
   await shot(visitor, "tour-documents");

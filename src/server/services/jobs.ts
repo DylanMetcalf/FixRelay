@@ -287,6 +287,8 @@ export interface JobFilters {
   mode?: string;
   /** "true": one-person jobs completed and waiting for a manager's sign-off. */
   signoff?: string;
+  /** One of the five plain stages shown on the dashboard (see JOB_STAGES). */
+  stage?: string;
   status?: JobStatus; siteId?: string; technicianId?: string; contractorId?: string; route?: string; source?: string;
   priority?: string; from?: string; to?: string; overdue?: boolean; q?: string;
 }
@@ -308,6 +310,8 @@ function filterWhere(ctx: Ctx, f: JobFilters): Prisma.JobWhereInput {
   if (f.mode === "self" || f.mode === "managed") and.push({ mode: f.mode === "self" ? "SELF" : "MANAGED" });
   if (f.signoff === "true") and.push(SELF_SIGNOFF);
   if (f.view === "mine") and.push({ status: { in: OPEN_STATUSES }, OR: [{ leadTechnicianId: ctx.userId }, { technicians: { some: { userId: ctx.userId } } }] });
+  const stage = JOB_STAGES.find((x) => x.key === f.stage);
+  if (stage) and.push({ status: { in: stage.statuses } });
   if (f.status && f.status in { NEW: 1, ASSESSING: 1, ASSESSED: 1, QUOTING: 1, AWAITING_APPROVAL: 1, APPROVED: 1, ASSIGNED: 1, IN_PROGRESS: 1, ON_HOLD: 1, AWAITING_VERIFICATION: 1, VERIFIED: 1, CLOSED: 1, CANCELLED: 1 }) and.push({ status: f.status });
   if (uuid(f.contractorId)) and.push({ contractorId: f.contractorId });
   if (f.route === "IN_HOUSE" || f.route === "CONTRACTOR" || f.route === "UNDECIDED") and.push({ route: f.route });
@@ -321,6 +325,18 @@ function filterWhere(ctx: Ctx, f: JobFilters): Prisma.JobWhereInput {
   if (f.q?.trim()) and.push({ OR: [{ title: { contains: f.q.trim(), mode: "insensitive" } }, { reference: { contains: f.q.trim(), mode: "insensitive" } }] });
   return { AND: and };
 }
+
+/**
+ * The five plain stages a job moves through, used by the dashboard so people see one simple line instead of
+ * thirteen statuses. Every open status belongs to exactly one stage.
+ */
+export const JOB_STAGES: { key: string; label: string; hint: string; statuses: JobStatus[] }[] = [
+  { key: "reported", label: "Reported", hint: "New, not looked at yet", statuses: ["NEW"] },
+  { key: "deciding", label: "Being looked at", hint: "Assessing and deciding how to fix", statuses: ["ASSESSING", "ASSESSED"] },
+  { key: "waiting", label: "Waiting to start", hint: "Quotes, approval or a technician", statuses: ["QUOTING", "AWAITING_APPROVAL", "APPROVED"] },
+  { key: "fixing", label: "Being fixed", hint: "Assigned, in progress or on hold", statuses: ["ASSIGNED", "IN_PROGRESS", "ON_HOLD"] },
+  { key: "closing", label: "Checking and closing", hint: "Confirm it is fixed, then sign off", statuses: ["AWAITING_VERIFICATION", "VERIFIED"] },
+];
 
 const SELF_SIGNOFF: Prisma.JobWhereInput = { mode: "SELF", status: "AWAITING_VERIFICATION", reporterConfirmation: false };
 const UNASSIGNED: Prisma.JobWhereInput = { status: { in: OPEN_STATUSES }, ownerId: null, leadTechnicianId: null, contractorId: null };
@@ -355,7 +371,7 @@ export async function priorityCounts(ctx: Ctx, f: JobFilters = {}) {
 
 /** Dashboard queue counts. Every number is a COUNT of real job rows visible to the viewer under the same filters. */
 export async function dashboardCounts(ctx: Ctx, f: JobFilters = {}) {
-  const where = filterWhere(ctx, { ...f, view: "all", status: undefined });
+  const where = filterWhere(ctx, { ...f, view: "all", status: undefined, stage: undefined });
   const now = new Date();
   const [byStatus, overdue, unowned, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates, selfOpen, selfSignoff] = await Promise.all([
     prisma.job.groupBy({ by: ["status"], where, _count: true }),
@@ -375,7 +391,7 @@ export async function dashboardCounts(ctx: Ctx, f: JobFilters = {}) {
     newRequests: n("NEW"), unowned, awaitingAssessment: n("ASSESSING"), assessed: n("ASSESSED"), quoting: n("QUOTING"),
     awaitingApproval: n("AWAITING_APPROVAL"), awaitingAssignment: n("APPROVED"), assigned: n("ASSIGNED"),
     inProgress: n("IN_PROGRESS"), onHold: n("ON_HOLD"), awaitingVerification: n("AWAITING_VERIFICATION"),
-    readyToClose: n("VERIFIED"), overdue, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates, selfOpen, selfSignoff,
+    readyToClose: n("VERIFIED"), stages: JOB_STAGES.map((st) => ({ ...st, n: st.statuses.reduce((a, x) => a + n(x), 0) })), overdue, recentlyClosed, toScreen, sparesWaiting, unassigned, reopened, duplicates, selfOpen, selfSignoff,
   };
 }
 

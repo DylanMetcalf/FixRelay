@@ -105,7 +105,7 @@ Quote sign-off is also signed (`APPROVAL`) and shown on page 2 with the quotes, 
 | Start | Report → screened → sent for assessment | Report with **"I'll fix it myself"**, or **"I'll fix it myself (one-person job)"** on a new or assessed report |
 | Steps | Assess → (quote → approve) → assign → work → confirm fixed → close | Assigned to the person and started at once (NEW → APPROVED → ASSIGNED → IN_PROGRESS, all recorded) → work → complete with evidence → closed |
 | Closing | Reporter confirms, manager closes | If someone else reported it, they still confirm. Otherwise a maintenance manager **signs it off**, or – when the company turns sign-off off – it **closes on completion** (recorded as a decision by the person who did it) |
-| Overview | Dashboard, history, job card | The same, plus dashboard tiles *One-person jobs in progress* and *to sign off*; pill "One-person"; filter `mode=self` |
+| Overview | Dashboard, history, job card | The same, plus *One-person jobs to sign off* under Needs attention and *one-person jobs in progress* under the stages; pill "One-person"; filter `mode=self` |
 
 - Only people with the `job.work` permission (owner, maintenance manager, technician) may take one-person jobs; people who only report faults cannot.
 - Company settings (Settings → Company): **allow one-person jobs** (default on) and **manager sign-off for one-person jobs** (default on).
@@ -177,3 +177,17 @@ Every job email links to the job (`APP_URL/jobs/<id>`); a signed-out person is s
 | Overdue (worker) | Managers and the lead technician, once per job per day |
 
 Every notification has a `dedupeKey`. Emails go through the outbox (retries with backoff); bodies containing links are cleared after sending. Addresses on reserved domains (`example.com`, `*.test`, `*.example`, …) are never sent.
+
+## Dashboard stages
+
+The manager dashboard groups the thirteen statuses into five plain stages (`JOB_STAGES` in `src/server/services/jobs.ts`, filter `?stage=`):
+
+| Stage | Statuses |
+|---|---|
+| 1. Reported | NEW |
+| 2. Being looked at | ASSESSING, ASSESSED |
+| 3. Waiting to start | QUOTING, AWAITING_APPROVAL, APPROVED |
+| 4. Being fixed | ASSIGNED, IN_PROGRESS, ON_HOLD |
+| 5. Checking and closing | AWAITING_VERIFICATION, VERIFIED |
+
+Above the stages, **Needs attention** lists only non-zero items waiting on a manager: unassigned, public (QR) reports to screen, possible duplicates, overdue, one-person jobs to sign off. The list below shows the eight most urgent open jobs; search and filters are folded away under "Search and filter".

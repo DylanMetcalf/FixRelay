@@ -16,7 +16,7 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 
 **New in ManOp (2026-11-25)**
 - **ManOp brand**: name (short for maintenance operations) and an M-with-check mark; colours unchanged.
-- **Two ways a job runs**: managed (through maintenance management) or **one-person** ("I'll fix it myself": start to finish by one person, with evidence; manager sign-off optional per company). Dashboard tiles and filters for both.
+- **Two ways a job runs**: managed (through maintenance management) or **one-person** ("I'll fix it myself": start to finish by one person, with evidence; manager sign-off optional per company). Both show on the dashboard and its filters.
 - **Public sandbox** at `/demo`: anyone opens a private sample company with every role and job stage, no sign-up, gone after 24 hours.
 - **Guided tour** across the real screens, and a public **How it works** page explaining both workflows.
 
@@ -26,7 +26,7 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 - **Employee self-registration**: site registration codes (expire, switch off, replace); employees ask for access with name, work email, department and optional job title, phone and photo; access only after email confirmation and administrator approval.
 - **QR reporting improvements**: short random links per site, area and machine (`/r/{code}`, no database ids), name-only reporting with optional contact, double-submit protection, spam trap, emergency notice, printable **A4 QR signs** (PDF).
 - **Duplicate and repeat handling**: likely duplicates flagged for a manager (link, kept on record, or dismiss); "the fault came back" links a new job to a closed one.
-- **Dashboard**: unassigned, possible duplicates, reopened and completed tiles; department filter.
+- **Dashboard**: kept simple – *Needs attention* (only what is waiting on a manager) and one line of five stages every open job moves through; search and filters one tap away.
 - **Platform admin** (`/platform`): create customer companies with first site, departments and an administrator invitation; onboarding progress, users, departments, subscriptions, email delivery and server errors. Account metadata only.
 - **Demo environment**: departments and six sample people; "view as" any role (demo companies only); reset demo data; demo companies never send email.
 - **Email links**: job emails link to the job; signed-out people sign in and return to it.

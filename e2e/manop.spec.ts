@@ -647,13 +647,16 @@ test("X1 · anyone opens a private sandbox from the home page, takes the guided 
   const tour = p.getByTestId("tour");
   await expect(tour).toContainText("Welcome to ManOp");
   const titles: string[] = [];
-  for (let n = 0; n < 12; n++) {
+  await expect(p.getByTestId("attention")).toBeVisible();
+  await expect(p.getByTestId("stages").locator("li")).toHaveCount(5);
+  for (let n = 0; n < 8; n++) {
+    await expect(tour.getByTestId("tour-next")).toBeEnabled(); // not while the next screen is opening
     titles.push((await tour.locator("h2").textContent())!);
     await tour.getByTestId("tour-next").click();
-    await p.waitForLoadState("networkidle");
-    await expect(tour.getByRole("dialog")).toBeVisible();
+    await expect(tour.getByRole("dialog")).toBeVisible(); // the card stays up while pages change
   }
-  expect(titles).toEqual(expect.arrayContaining(["Your control room", "Open now and History", "What happens next", "The job card", "Sites, areas and QR codes", "Your team and rules"]));
+  await expect(tour.getByTestId("tour-next")).toBeEnabled();
+  expect(titles).toEqual(expect.arrayContaining(["1. What needs you now", "2. Where every job is", "4. Every job says what happens next", "6. The job card", "7. Sites, areas and QR codes"]));
   await expect(p).toHaveURL(/how-it-works/);
   await expect(tour).toContainText("Two ways a job runs");
   await tour.getByTestId("tour-next").click(); // Finish
