@@ -1,12 +1,12 @@
-# Resultra
+# ManOp
 
-**From reported to resolved.** Maintenance requests, job cards and approvals in one place.
+**From reported to resolved.** Maintenance operations: requests, job cards and approvals in one place.
 
-*Resultra was previously called FixRelay; some technical names (database, Render service, session cookie) still use `fixrelay` for compatibility.*
+*ManOp was previously called FixRelay; some technical names (database, Render service, session cookie) still use `fixrelay` for compatibility.*
 
 **Live demo:** https://fixrelay-demo.onrender.com (free tier: the first load after idle takes about a minute).
 
-Resultra is a multi-tenant SaaS **maintenance system for your own sites** (plants, warehouses, offices, schools, hospitality). It runs one workflow end to end:
+ManOp is a multi-tenant SaaS **maintenance system for your own sites** (plants, warehouses, offices, schools, hospitality). It runs one workflow end to end:
 
 > Someone on site reports a fault (app or QR code) → Assessment → **In-house** (assign a technician) **or contractor** (secure-link quotes → compare → approval by amount, PO) → Work with photo evidence → The reporter confirms it is fixed → Closed (and reopening)
 
@@ -14,7 +14,7 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 
 ## Features (implemented and tested)
 
-**New in the Resultra release**
+**New in the ManOp release**
 - **Branded PDF job documents**: maintenance job card (with a handwriting area for printed cards), completed job report (before/after photos, verification, recorded signatures only), full job history, all A4, generated on the server from live data with access checks, a generation timestamp and a sign-in-required QR link. In-app viewer with Print and Download. See [PDF_DOCUMENTATION.md](PDF_DOCUMENTATION.md).
 - **Departments and handovers**: departments with department managers; jobs belong to a department and are handed over with a reason; department queues on the dashboard; append-only handover record.
 - **Employee self-registration**: site registration codes (expire, switch off, replace); employees ask for access with name, work email, department and optional job title, phone and photo; access only after email confirmation and administrator approval.
@@ -47,7 +47,7 @@ It is deliberately *not* a CMMS, ERP or workflow builder. See [PRODUCT_ROADMAP.m
 - **Dashboard and insights**: live counts per stage, "Needs your approval", public reports to screen; spend by site and equipment, in-house vs contractor, contractor performance (response time, win rate, time to fix, reopened), approval turnaround, all with written definitions; CSV export.
 - **Subscriptions**: plans with entitlements stored in data (staff seats, sites, jobs), trial → grace → read-only. Data is never deleted.
 - **Platform operator console**: no access to tenant data without a time-limited grant from the tenant; any access is audited and read-only.
-- **Installable app (PWA)**: Resultra icon set, shortcuts, screenshots, an install button with iPhone instructions, an update prompt, and a branded offline page. It does **not** support offline data entry.
+- **Installable app (PWA)**: ManOp icon set, shortcuts, screenshots, an install button with iPhone instructions, an update prompt, and a branded offline page. It does **not** support offline data entry.
 - **Landing page** for prospects, plus privacy and terms templates.
 - **Upload safety**: ClamAV virus scanning, blocking of PDFs with scripts, and removal of photo location (EXIF/GPS) data.
 - **Production plumbing**: SMTP or Resend email (branded HTML), Postgres or S3 file storage, a rate limiter shared across servers, retention clean-up, and data export.
@@ -100,8 +100,8 @@ npm run worker    # separate terminal: emails (printed to the console by default
 
 ## Documentation
 
-[EXISTING_SYSTEM_AUDIT](EXISTING_SYSTEM_AUDIT.md) · [TECHNICAL HANDOVER](RESULTRA_TECHNICAL_HANDOVER.md) · [PDF_DOCUMENTATION](PDF_DOCUMENTATION.md) · [BRAND](BRAND.md) · [AUDITS](AUDITS.md) · [POPIA](POPIA.md) · [ARCHITECTURE](ARCHITECTURE.md) · [DATABASE](DATABASE.md) · [WORKFLOWS](WORKFLOWS.md) · [SECURITY](SECURITY.md) · [TESTING](TESTING.md) · [DEPLOYMENT](DEPLOYMENT.md) · [PRODUCT_ROADMAP](PRODUCT_ROADMAP.md) · [BUILD_STATUS](BUILD_STATUS.md) · [AI_HANDOVER](AI_HANDOVER.md)
+[EXISTING_SYSTEM_AUDIT](EXISTING_SYSTEM_AUDIT.md) · [TECHNICAL HANDOVER](MANOP_TECHNICAL_HANDOVER.md) · [PDF_DOCUMENTATION](PDF_DOCUMENTATION.md) · [BRAND](BRAND.md) · [AUDITS](AUDITS.md) · [POPIA](POPIA.md) · [ARCHITECTURE](ARCHITECTURE.md) · [DATABASE](DATABASE.md) · [WORKFLOWS](WORKFLOWS.md) · [SECURITY](SECURITY.md) · [TESTING](TESTING.md) · [DEPLOYMENT](DEPLOYMENT.md) · [PRODUCT_ROADMAP](PRODUCT_ROADMAP.md) · [BUILD_STATUS](BUILD_STATUS.md) · [AI_HANDOVER](AI_HANDOVER.md)
 
-User guides (PDF, with screenshots of the running app): [docs/RESULTRA_USER_GUIDE.pdf](docs/RESULTRA_USER_GUIDE.pdf) · [docs/RESULTRA_SITE_ADMIN_GUIDE.pdf](docs/RESULTRA_SITE_ADMIN_GUIDE.pdf) · [docs/RESULTRA_PLATFORM_ADMIN_GUIDE.pdf](docs/RESULTRA_PLATFORM_ADMIN_GUIDE.pdf) · [docs/RESULTRA_PILOT_TESTING_GUIDE.pdf](docs/RESULTRA_PILOT_TESTING_GUIDE.pdf)
+User guides (PDF, with screenshots of the running app): [docs/MANOP_USER_GUIDE.pdf](docs/MANOP_USER_GUIDE.pdf) · [docs/MANOP_SITE_ADMIN_GUIDE.pdf](docs/MANOP_SITE_ADMIN_GUIDE.pdf) · [docs/MANOP_PLATFORM_ADMIN_GUIDE.pdf](docs/MANOP_PLATFORM_ADMIN_GUIDE.pdf) · [docs/MANOP_PILOT_TESTING_GUIDE.pdf](docs/MANOP_PILOT_TESTING_GUIDE.pdf)
 
 > Production use needs a separate security, operational and POPIA/compliance review first. See SECURITY.md and BUILD_STATUS.md.

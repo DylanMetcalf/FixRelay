@@ -5,8 +5,8 @@ import { Logo, Mark } from "@/components/logo";
 import { getSession } from "./_lib/session";
 
 export const metadata = {
-  title: { absolute: "Resultra – From reported to resolved." },
-  description: "Maintenance requests, job cards and approvals in one place. Resultra is the maintenance system for your own sites: anyone reports a fault, your team decides in-house or contractor, quotes are compared and approved, and every repair is tracked to the finish.",
+  title: { absolute: "ManOp – From reported to resolved." },
+  description: "Maintenance operations: requests, job cards and approvals in one place. ManOp is the maintenance system for your own sites: anyone reports a fault, your team decides in-house or contractor, quotes are compared and approved, and every repair is tracked to the finish.",
 };
 
 const PAINS = [
@@ -66,7 +66,7 @@ export default async function Landing() {
             </li>
           ))}
         </ul>
-        <p className="mx-auto mt-8 max-w-2xl text-center text-lg text-gray-700">Resultra replaces the chasing with one clear process. Every job always shows <strong>what is happening, who is responsible and what happens next.</strong></p>
+        <p className="mx-auto mt-8 max-w-2xl text-center text-lg text-gray-700">ManOp replaces the chasing with one clear process. Every job always shows <strong>what is happening, who is responsible and what happens next.</strong></p>
       </section>
 
       <section id="how" className="bg-mist py-16">
@@ -109,7 +109,7 @@ export default async function Landing() {
           </div>
           <div className="rounded-xl bg-navy-2 p-6">
             <h3 className="text-xl font-extrabold">Install it like an app</h3>
-            <p className="mt-2 text-slate-300">Resultra runs in the browser and installs on Android, iPhone and desktop – no app store needed. On iPhone: Share → <em>Add to Home Screen</em>.</p>
+            <p className="mt-2 text-slate-300">ManOp runs in the browser and installs on Android, iPhone and desktop – no app store needed. On iPhone: Share → <em>Add to Home Screen</em>.</p>
             <div className="mt-4"><InstallButton /></div>
           </div>
         </div>
@@ -123,7 +123,7 @@ export default async function Landing() {
       </section>
 
       <footer className="border-t border-gray-200 py-8 text-center text-sm text-gray-600">
-        © {new Date().getFullYear()} Resultra · <Link className="underline" href="/privacy">Privacy</Link> · <Link className="underline" href="/terms">Terms</Link> · <Link className="underline" href="/login">Sign in</Link>
+        © {new Date().getFullYear()} ManOp · <Link className="underline" href="/privacy">Privacy</Link> · <Link className="underline" href="/terms">Terms</Link> · <Link className="underline" href="/login">Sign in</Link>
       </footer>
     </div>
   );

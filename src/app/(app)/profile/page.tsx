@@ -68,7 +68,7 @@ export default async function Profile() {
           </Card>
         )}
         <Card title="Install the app">
-          <p className="muted">On your phone, open your browser menu and choose <strong>Add to Home Screen</strong> (or <strong>Install app</strong>). Resultra then opens like an app. It still needs a connection to load and save work.</p>
+          <p className="muted">On your phone, open your browser menu and choose <strong>Add to Home Screen</strong> (or <strong>Install app</strong>). ManOp then opens like an app. It still needs a connection to load and save work.</p>
         </Card>
         <Card><form method="post" action="/api/logout"><button className="btn btn-secondary w-full">Sign out</button></form></Card>
       </div>

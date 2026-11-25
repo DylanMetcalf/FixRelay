@@ -118,7 +118,7 @@ export async function registerWithCode(input: z.input<typeof registerSchema>, ph
   if (!v) throw invalid("That registration code is not valid. Check it with your site administrator; codes can expire or be replaced.");
   if (d.departmentId && !(await prisma.department.findFirst({ where: { id: d.departmentId, orgId: v.org.id, archived: false } }))) throw invalid("Choose one of the departments.");
   if (await prisma.user.findUnique({ where: { email: d.email } }))
-    throw conflict("This email address already has a Resultra account. Sign in first, or ask your administrator to invite you.");
+    throw conflict("This email address already has a ManOp account. Sign in first, or ask your administrator to invite you.");
   const passwordHash = await hashPassword(d.password);
   const photoKey = photo?.length ? await storePhoto(v.org.id, photo) : null;
   return prisma.$transaction(async (tx) => {
@@ -177,7 +177,7 @@ export async function approveMember(ctx: Ctx, membershipId: string, input: z.inp
     });
     const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } });
     await queueEmail(tx, {
-      orgId: ctx.orgId, to: m.user.email, subject: `Your access to ${org.name} on Resultra was approved`, dedupeKey: `approved:${m.id}`,
+      orgId: ctx.orgId, to: m.user.email, subject: `Your access to ${org.name} on ManOp was approved`, dedupeKey: `approved:${m.id}`,
       body: `Hi ${m.user.name},\n\n${ctx.userName} approved your access to ${org.name}. Sign in to start:\n${appUrl()}/dashboard`,
     });
     await logEvent(tx, actorOf(ctx), null, "team.approved", `Approved ${m.user.name} as ${d.roles.join(", ").toLowerCase()}`);
@@ -192,7 +192,7 @@ export async function rejectMember(ctx: Ctx, membershipId: string, input: { reas
     await tx.membership.update({ where: { id: m.id }, data: { status: "REJECTED", active: false } });
     const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } });
     await queueEmail(tx, {
-      orgId: ctx.orgId, to: m.user.email, subject: `Your request to join ${org.name} on Resultra`, dedupeKey: `rejected:${m.id}`,
+      orgId: ctx.orgId, to: m.user.email, subject: `Your request to join ${org.name} on ManOp`, dedupeKey: `rejected:${m.id}`,
       body: `Hi ${m.user.name},\n\nYour request to join ${org.name} was not approved.${input.reason?.trim() ? ` Reason: ${input.reason.trim().slice(0, 300)}` : ""} If you think this is a mistake, contact your site administrator.`,
     });
     await logEvent(tx, actorOf(ctx), null, "team.rejected", `Declined the access request from ${m.user.name}`);

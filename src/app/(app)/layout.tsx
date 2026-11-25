@@ -51,7 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/profile" className="block truncate text-sm font-bold text-white">{s.user.name}</Link>
           <p className="truncate text-xs text-slate-400">{ctx.support ? "Platform support (read-only)" : ctx.roles.join(", ").toLowerCase()}</p>
           <form method="post" action="/api/logout"><button className="mt-2 text-xs font-bold text-slate-300 underline">Sign out</button></form>
-          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400"><Mark size={14} /> Powered by Resultra</p>
+          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400"><Mark size={14} /> Powered by ManOp</p>
         </div>
       </aside>
 

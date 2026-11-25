@@ -84,7 +84,7 @@ export async function forgotPasswordAction(_: ActionState, fd: FormData) {
     await rateLimit(`forgot:email:${str(fd, "email").trim().toLowerCase()}`, 3, 60 * 60_000);
     await account.requestPasswordReset(str(fd, "email"));
     // Identical response whether or not the address is registered.
-    return { ok: "If that email address has a Resultra account, a reset link is on its way. Check your inbox (and spam folder)." , data: { sent: "1" } };
+    return { ok: "If that email address has a ManOp account, a reset link is on its way. Check your inbox (and spam folder)." , data: { sent: "1" } };
   });
 }
 

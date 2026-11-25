@@ -12,7 +12,7 @@ export async function GET() {
   try {
     await rateLimit(`export:${s.user.id}`, 10, 60 * 60_000);
     const data = await exportCompany(s.ctx);
-    const name = `resultra-company-export-${new Date().toISOString().slice(0, 10)}.json`;
+    const name = `manop-company-export-${new Date().toISOString().slice(0, 10)}.json`;
     return new NextResponse(JSON.stringify(data, null, 2), {
       headers: { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": `attachment; filename="${name}"`, "Cache-Control": "private, no-store" },
     });

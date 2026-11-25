@@ -11,7 +11,7 @@ const adminUser = async () => {
   return { id: u.id, name: u.name, isPlatformAdmin: true };
 };
 
-describe("Resultra platform administration", () => {
+describe("ManOp platform administration", () => {
   it("creates a customer with its first site, departments and an administrator invitation; shows account facts only", async () => {
     const admin = await adminUser();
     const t = await tenant();
@@ -55,7 +55,7 @@ describe("demo environment", () => {
     expect(await prisma.attachment.count({ where: { orgId, kind: "REQUEST" } })).toBeGreaterThanOrEqual(3);
     expect(await prisma.outboxEmail.count({ where: { orgId } })).toBe(0); // nothing leaves a demo company
     const persona = await prisma.user.findUniqueOrThrow({ where: { id: personas[2]!.userId } });
-    expect(persona.email).toMatch(/@demo\.resultra\.invalid$/);
+    expect(persona.email).toMatch(/@demo\.manop\.invalid$/);
     await expect(login(persona.email, "anything at all")).rejects.toEqual(code("UNAUTHENTICATED"));
   });
 

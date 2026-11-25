@@ -1,5 +1,5 @@
 /**
- * Resultra pilot acceptance: the 20 required scenarios (S1–S20) and the job document tests (D1–D7).
+ * ManOp pilot acceptance: the 20 required scenarios (S1–S20) and the job document tests (D1–D7).
  * Each test sets up its own company, so they can run in any order.
  */
 import AxeBuilder from "@axe-core/playwright";
@@ -26,7 +26,7 @@ async function signIn(b: Browser, email: string, nextPath?: string, password = P
 
 async function platformAdmin() {
   const email = `platform-${uid()}@e2e.example`;
-  await db.user.create({ data: { email, name: "Resultra Operator", passwordHash: await bcrypt.hash(PASSWORD, 6), isPlatformAdmin: true, emailVerifiedAt: new Date() } });
+  await db.user.create({ data: { email, name: "ManOp Operator", passwordHash: await bcrypt.hash(PASSWORD, 6), isPlatformAdmin: true, emailVerifiedAt: new Date() } });
   return email;
 }
 
@@ -519,7 +519,7 @@ test("D1 · the job page offers the job card, PDF download, print and (when done
   const src = await p.getByTestId("card-frame").getAttribute("src");
   const framed = await p.request.get(src!);
   expect(framed.headers()["content-type"]).toBe("application/pdf"); // the viewer shows the generated PDF
-  expect(framed.headers()["x-frame-options"]).toBe("SAMEORIGIN"); // which may only be framed by Resultra itself
+  expect(framed.headers()["x-frame-options"]).toBe("SAMEORIGIN"); // which may only be framed by ManOp itself
   const a11y = await new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).exclude("iframe").analyze();
   expect(a11y.violations.map((v) => v.id)).toEqual([]);
 });
@@ -530,11 +530,11 @@ test("D2 · downloaded job card: A4, branded, real job data, status and generati
   const job = await db.job.findUniqueOrThrow({ where: { id: jobIdOf(url) } });
   const org = await db.organisation.findUniqueOrThrow({ where: { id: await orgOf(email) } });
   const { res, pdf } = await pdfOf(p, `/api/jobs/${job.id}/documents/card?download=1`);
-  expect(res.headers()["content-disposition"]).toBe(`attachment; filename="RESULTRA_JobCard_${job.reference}.pdf"`);
+  expect(res.headers()["content-disposition"]).toBe(`attachment; filename="MANOP_JobCard_${job.reference}.pdf"`);
   expect(res.headers()["cache-control"]).toContain("no-store");
   expect(pdf.pages[0]!.width).toBeCloseTo(595.28, 0);
   expect(pdf.pages[0]!.height).toBeCloseTo(841.89, 0);
-  for (const want of ["MAINTENANCE JOB CARD", job.reference, org.name, "Germiston Plant", "Cold Room 2", "Fire door closer broken", "High", "New report", "SAST", "Resultra"])
+  for (const want of ["MAINTENANCE JOB CARD", job.reference, org.name, "Germiston Plant", "Cold Room 2", "Fire door closer broken", "High", "New report", "SAST", "ManOp"])
     expect(pdf.text.toLowerCase()).toContain(want.toLowerCase());
   expect(pdf.text).toMatch(/Generated \d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2} SAST/);
 });
@@ -565,7 +565,7 @@ test("D4 · the completion report shows before/after evidence, the verification 
   await expect(p.getByTestId("documents").getByRole("link", { name: "Download completion report" })).toBeVisible();
   const job = await db.job.findUniqueOrThrow({ where: { id: jobIdOf(url) } });
   const { res, pdf } = await pdfOf(p, `/api/jobs/${job.id}/documents/completion?download=1`);
-  expect(res.headers()["content-disposition"]).toContain(`RESULTRA_CompletionReport_${job.reference}.pdf`);
+  expect(res.headers()["content-disposition"]).toContain(`MANOP_CompletionReport_${job.reference}.pdf`);
   for (const want of ["COMPLETED JOB REPORT", "Final status: Closed", "Repaired and tested.", "Wear and tear", "Confirmed fixed by"]) expect(pdf.text).toContain(want);
   expect(pdf.pages.reduce((n, pg) => n + pg.images, 0)).toBeGreaterThanOrEqual(2); // after photo + QR
 });

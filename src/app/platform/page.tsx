@@ -14,7 +14,7 @@ export const metadata = { title: "Platform admin" };
 export const dynamic = "force-dynamic";
 
 /**
- * Resultra platform administration: create and configure customer companies, follow onboarding, subscriptions,
+ * ManOp platform administration: create and configure customer companies, follow onboarding, subscriptions,
  * email delivery and platform errors. Account metadata only – company business data needs the company's grant.
  */
 export default async function Platform({ searchParams }: { searchParams: Promise<{ q?: string }> }) {

@@ -42,7 +42,7 @@ function SignPage({ sign, company }: { sign: Sign; company: string }) {
       </View>
       <View style={{ position: "absolute", left: 40, right: 40, bottom: 26, flexDirection: "row", alignItems: "center", justifyContent: "center" }}>
         <Mark size={16} />
-        <Text style={{ fontSize: 9, color: C.muted, marginLeft: 6 }}>Resultra · From reported to resolved. No account or app needed.</Text>
+        <Text style={{ fontSize: 9, color: C.muted, marginLeft: 6 }}>ManOp · From reported to resolved. No account or app needed.</Text>
       </View>
     </Page>
   );
@@ -67,10 +67,10 @@ export async function renderQrSigns(ctx: Ctx, siteId: string, opts: { locationId
   }
   const signs: Sign[] = await Promise.all(places.map(async (p) => ({ place: p.place, site: site.name, url: reportUrl(p.code), qr: await qrPng(reportUrl(p.code)) })));
   const bytes = await renderToBuffer(
-    <Document title={`QR signs – ${site.name}`} author="Resultra" creator="Resultra" producer="Resultra">
+    <Document title={`QR signs – ${site.name}`} author="ManOp" creator="ManOp" producer="ManOp">
       {signs.map((sg) => <SignPage key={sg.url} sign={sg} company={org.name} />)}
     </Document>,
   );
   const safe = site.name.replace(/[^\w-]+/g, "_").slice(0, 40);
-  return { bytes, filename: `RESULTRA_QR_Signs_${safe}.pdf` };
+  return { bytes, filename: `MANOP_QR_Signs_${safe}.pdf` };
 }

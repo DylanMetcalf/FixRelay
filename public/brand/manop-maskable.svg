@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ManOp">
+  <!-- ManOp mark: an M (maintenance operations) whose middle stroke is a check. It starts at a blue dot (reported) and the check (resolved) runs into the right stem. Colours: Relay Navy #0B1F3A, Signal Amber #F5A524, Report Blue #5B8DEF. -->
+  <rect width="512" height="512" fill="#0B1F3A"/>
+  <g transform="translate(76.8 76.8) scale(0.7)"><path d="M140 372V150l70 96" fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M210 246l52 70 110-176" fill="none" stroke="#F5A524" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M372 140v232" fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><circle cx="140" cy="372" r="25" fill="#5B8DEF"/></g>
+</svg>

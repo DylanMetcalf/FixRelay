@@ -81,7 +81,7 @@ Shared foundations: `src/server/permissions.ts` (permission matrix and `jobScope
 - Public pages (`/r/<code>` fault report, `/c/<linkToken>` contractor portal) use `PublicShell` with the company's branding and no app navigation.
 - Every job page shows **what happens next and who is responsible** (`nextAction()` in workflow.ts).
 
-## Resultra additions (2026-11)
+## ManOp additions (2026-11)
 
 - **Sign-in return path:** `src/middleware.ts` adds the requested path as a request header; `requireSession` redirects signed-out people to `/login?next=<path>` (same-site paths only), so links in emails land on the job after sign-in. The login page skips its own "already signed in" redirect while re-rendering for the sign-in action, so the action's result decides where to go (dashboard, `/platform`, or the waiting-for-approval page).
 - **Demo "view as":** `loadSession` builds the context from a sample person when the session carries `actAsUserId` and every safety condition holds (see SECURITY.md).

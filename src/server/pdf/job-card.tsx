@@ -29,7 +29,7 @@ export function JobCardDoc({ d, photos }: { d: JobDocumentData; photos: { photos
   const sig = (step: string) => d.signatures.filter((x) => x.step === step).at(-1);
 
   return (
-    <Document title={`Job card ${job.reference}`} author="Resultra" subject={`Maintenance job card for ${job.title}`} creator="Resultra" producer="Resultra">
+    <Document title={`Job card ${job.reference}`} author="ManOp" subject={`Maintenance job card for ${job.title}`} creator="ManOp" producer="ManOp">
       <Page size="A4" style={s.page}>
         <DocHeader h={{ title: "MAINTENANCE JOB CARD", numberLabel: "Job card no.", number: job.reference, status: STATUS_LABEL[job.status],
           company: d.org, site: { name: job.site.name, address: job.site.address }, generatedAt: d.generatedAt }} />
@@ -108,7 +108,7 @@ export function JobCardDoc({ d, photos }: { d: JobDocumentData; photos: { photos
                 <WriteBox label="Date" lines={1} grow={1} />
                 <WriteBox label="Signature" lines={1} grow={1.4} />
               </View>
-              <Text style={[s.small, s.muted]}>Handwritten entries are not part of the digital record until they are entered in Resultra.</Text>
+              <Text style={[s.small, s.muted]}>Handwritten entries are not part of the digital record until they are entered in ManOp.</Text>
             </View>
           </Section>
         )}

@@ -2,7 +2,7 @@
 
 Source of truth: `src/server/workflow.ts` (`TRANSITIONS`, `nextAction`). Enforcement: `jobs.ts → move()` (a guarded `UPDATE … WHERE status = <status read>`) plus a permission check on every action.
 
-Resultra is an **internal** maintenance system for a company with one or more sites. Someone on site reports a fault; the maintenance team either fixes it **in-house** or gets **contractor quotes**; the job is tracked until the person who reported it confirms it is fixed.
+ManOp is an **internal** maintenance system for a company with one or more sites. Someone on site reports a fault; the maintenance team either fixes it **in-house** or gets **contractor quotes**; the job is tracked until the person who reported it confirms it is fixed.
 
 ## The two routes
 

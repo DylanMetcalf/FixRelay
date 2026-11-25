@@ -48,7 +48,7 @@ export async function notify(tx: Tx, n: NotifyInput): Promise<void> {
   await tx.outboxEmail.createMany({
     data: users.map((u) => ({
       orgId: n.orgId, toEmail: u.email, subject: n.title,
-      body: `${n.body ?? n.title}\n\n${n.jobId ? `Open the job in Resultra (sign in if asked):\n${appUrl()}/jobs/${n.jobId}` : `Open Resultra:\n${appUrl()}/dashboard`}`, dedupeKey: `${n.eventKey}:${u.id}`,
+      body: `${n.body ?? n.title}\n\n${n.jobId ? `Open the job in ManOp (sign in if asked):\n${appUrl()}/jobs/${n.jobId}` : `Open ManOp:\n${appUrl()}/dashboard`}`, dedupeKey: `${n.eventKey}:${u.id}`,
     })),
     skipDuplicates: true,
   });
@@ -103,7 +103,7 @@ export async function processOutbox(transport: EmailTransport = consoleTransport
       try {
         await transport.send({
           to: email.toEmail, subject: email.subject, text: email.body, replyTo: org?.contactEmail || undefined,
-          html: renderEmailHtml({ subject: email.subject, text: email.body, brandName: org?.name ?? "Resultra", brandColour: org?.brandColour ?? "#1E5AA8" }),
+          html: renderEmailHtml({ subject: email.subject, text: email.body, brandName: org?.name ?? "ManOp", brandColour: org?.brandColour ?? "#1E5AA8" }),
         });
         // The body can contain a one-time approval link: do not keep it once delivered.
         await tx.outboxEmail.update({

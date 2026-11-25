@@ -27,7 +27,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
       <p className="muted mb-4 mt-1">You were invited as <strong>{inv.email}</strong>.</p>
       <Form action={acceptInviteAction} hidden={{ token }}>
         {!inv.hasAccount && <Field label="Your name" name="name" defaultValue={inv.name} autoComplete="name" required />}
-        <Field label={inv.hasAccount ? "Your existing Resultra password" : "Choose a password"} name="password" type="password" minLength={10} required
+        <Field label={inv.hasAccount ? "Your existing ManOp password" : "Choose a password"} name="password" type="password" minLength={10} required
           autoComplete={inv.hasAccount ? "current-password" : "new-password"} hint={inv.hasAccount ? "You already have an account with this email." : "At least 10 characters."} />
         <Submit className="btn btn-primary w-full">Accept invitation</Submit>
       </Form>

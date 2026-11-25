@@ -1,5 +1,5 @@
 /**
- * Captures real screenshots of a running Resultra instance for the user guides.
+ * Captures real screenshots of a running ManOp instance for the user guides.
  *   BASE=http://localhost:3220 DATABASE_URL=… OUT=docs/screenshots node scripts/guides/capture.cjs
  * It creates its own platform owner, customer company, people and jobs through the real UI (synthetic data only).
  * PDFs (job card, completion report, QR sign) are rendered to images with pdftoppm when available.
@@ -58,7 +58,7 @@ async function pdfToPng(url, p, name, pages = "1") {
   browser = await chromium.launch();
   // ---------- Platform owner
   const opEmail = `platform-${uid()}@guide.example`;
-  await db.user.create({ data: { email: opEmail, name: "Resultra Operator", passwordHash: await bcrypt.hash(PASSWORD, 6), isPlatformAdmin: true, emailVerifiedAt: new Date() } });
+  await db.user.create({ data: { email: opEmail, name: "ManOp Operator", passwordHash: await bcrypt.hash(PASSWORD, 6), isPlatformAdmin: true, emailVerifiedAt: new Date() } });
   const op = await signIn(opEmail);
   const company = `Spanjaard Pilot ${uid().toUpperCase()}`;
   const adminEmail = `bongi-${uid()}@guide.example`;

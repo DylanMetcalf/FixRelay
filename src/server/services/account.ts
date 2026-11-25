@@ -37,8 +37,8 @@ async function claim(tx: Tx, token: string, purpose: AuthTokenPurpose) {
 export async function sendVerificationEmail(tx: Tx, user: { id: string; email: string; name: string }) {
   const token = await issue(tx, user.id, "EMAIL_VERIFY", VERIFY_HOURS * 3_600_000);
   await queueEmail(tx, {
-    orgId: null, to: user.email, subject: "Confirm your email address for Resultra", dedupeKey: `verify:${hashToken(token)}`,
-    body: `Hi ${user.name},\n\nPlease confirm this is your email address:\n${appUrl()}/verify-email/${token}\n\nThe link expires in ${VERIFY_HOURS} hours. If you did not create a Resultra account, you can ignore this email.`,
+    orgId: null, to: user.email, subject: "Confirm your email address for ManOp", dedupeKey: `verify:${hashToken(token)}`,
+    body: `Hi ${user.name},\n\nPlease confirm this is your email address:\n${appUrl()}/verify-email/${token}\n\nThe link expires in ${VERIFY_HOURS} hours. If you did not create a ManOp account, you can ignore this email.`,
   });
 }
 
@@ -65,8 +65,8 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const token = await issue(tx, user.id, "PASSWORD_RESET", RESET_MINUTES * 60_000);
     await queueEmail(tx, {
-      orgId: null, to: user.email, subject: "Reset your Resultra password", dedupeKey: `reset:${hashToken(token)}`,
-      body: `Hi ${user.name},\n\nSomeone (hopefully you) asked to reset your Resultra password. Choose a new password here:\n${appUrl()}/reset-password/${token}\n\nThe link works once and expires in ${RESET_MINUTES} minutes. If you did not ask for this, ignore this email: your password has not changed.`,
+      orgId: null, to: user.email, subject: "Reset your ManOp password", dedupeKey: `reset:${hashToken(token)}`,
+      body: `Hi ${user.name},\n\nSomeone (hopefully you) asked to reset your ManOp password. Choose a new password here:\n${appUrl()}/reset-password/${token}\n\nThe link works once and expires in ${RESET_MINUTES} minutes. If you did not ask for this, ignore this email: your password has not changed.`,
     });
   });
 }
@@ -90,8 +90,8 @@ export async function resetPassword(token: string, password: string): Promise<st
     await tx.session.deleteMany({ where: { userId: user.id } });
     await tx.authToken.updateMany({ where: { userId: user.id, purpose: "PASSWORD_RESET", usedAt: null }, data: { usedAt: new Date() } });
     await queueEmail(tx, {
-      orgId: null, to: user.email, subject: "Your Resultra password was changed", dedupeKey: `pwchanged:${t.id}`,
-      body: `Hi ${user.name},\n\nYour Resultra password was just changed and all devices were signed out. If this was not you, reset your password immediately and contact your administrator.`,
+      orgId: null, to: user.email, subject: "Your ManOp password was changed", dedupeKey: `pwchanged:${t.id}`,
+      body: `Hi ${user.name},\n\nYour ManOp password was just changed and all devices were signed out. If this was not you, reset your password immediately and contact your administrator.`,
     });
     return createSession(tx, user.id);
   });

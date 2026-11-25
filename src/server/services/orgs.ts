@@ -199,7 +199,7 @@ export async function inviteMember(ctx: Ctx, input: z.input<typeof inviteSchema>
     });
     const org = await tx.organisation.findUniqueOrThrow({ where: { id: ctx.orgId } });
     await queueEmail(tx, {
-      orgId: ctx.orgId, to: d.email, subject: `You have been invited to ${org.name} on Resultra`,
+      orgId: ctx.orgId, to: d.email, subject: `You have been invited to ${org.name} on ManOp`,
       body: `${ctx.userName} invited you to join ${org.name}.\n\nAccept: ${appUrl()}/invite/${token}\n\nThis link expires in ${INVITE_DAYS} days.`,
       dedupeKey: `invite:${inv.id}`,
     });

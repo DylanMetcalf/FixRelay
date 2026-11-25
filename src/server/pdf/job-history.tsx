@@ -33,7 +33,7 @@ export function JobHistoryDoc({ d }: { d: JobDocumentData }) {
   const reopenings = job.events.filter((e) => e.type === "job.reopened");
 
   return (
-    <Document title={`Job history ${job.reference}`} author="Resultra" creator="Resultra" producer="Resultra">
+    <Document title={`Job history ${job.reference}`} author="ManOp" creator="ManOp" producer="ManOp">
       <Page size="A4" style={s.page}>
         <DocHeader h={{ title: "JOB HISTORY REPORT", numberLabel: "Job no.", number: job.reference, status: STATUS_LABEL[job.status],
           company: d.org, site: { name: job.site.name, address: job.site.address }, generatedAt: d.generatedAt }} />
@@ -86,7 +86,7 @@ export function JobHistoryDoc({ d }: { d: JobDocumentData }) {
           <Table cols={[{ h: "File", w: "40%" }, { h: "Type", w: "18%" }, { h: "Added", w: "24%" }, { h: "By", w: "18%" }]}
             rows={job.attachments.map((a) => [a.filename, KIND[a.kind] ?? a.kind, fmtDT(a.createdAt), a.uploadedById ? name(a.uploadedById) : "Reporter / contractor"])}
             empty="No attachments." />
-          <Text style={[s.small, s.muted, { marginTop: 4 }]}>Files are kept in the digital record; open the job in Resultra to view them.</Text>
+          <Text style={[s.small, s.muted, { marginTop: 4 }]}>Files are kept in the digital record; open the job in ManOp to view them.</Text>
         </Section>
 
         <DocFooter reference={`Job history ${job.reference}`} generatedAt={d.generatedAt} qr={d.qr} href={d.link} />

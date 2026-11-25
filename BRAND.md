@@ -1,19 +1,22 @@
-# Resultra brand
+# ManOp brand
 
-**Name:** Resultra (one word, capital R). **Tagline:** "From reported to resolved." **Descriptor:** "Maintenance requests, job cards and approvals in one place."
+**Name:** ManOp (one word: capital M, capital O; short for *maintenance operations*). **Tagline:** "From reported to resolved." **Descriptor:** "Maintenance operations: requests, job cards and approvals in one place."
 
-Resultra was previously called FixRelay. The colours, typography, layout and voice are unchanged; only the name and the symbol changed. Technical identifiers that would break existing sessions or deployments keep their old names on purpose: the session cookie (`fr_session`), environment variables, database and Render service names, and the JSON export format id (`fixrelay-export/2`).
+ManOp was previously called Resultra and, before that, FixRelay. Colours, typography, layout and voice are unchanged; the name and the symbol changed. Technical identifiers that would break existing sessions or deployments keep their old names on purpose: the session cookie (`fr_session`), environment variables, database and Render service names (`fixrelay…`), and the JSON export format id (`fixrelay-export/2`).
+
+## Wordmark
+"Man" in white (on navy) or navy (on light backgrounds) and "Op" in Signal Amber, extra-bold. Always one word, never "Man Op" or "MANOP" in running text.
 
 ## Mark
-An **R** whose leg becomes a **check**. It starts at a blue dot (*reported*) at the foot of the stem and finishes in an amber check (*resolved*): one continuous line from report to resolution. Geometric, two strokes on the navy tile, legible down to 16 px.
-Files (editable SVG, 512 × 512 grid, 46 px strokes with round caps):
-- `public/brand/resultra-mark.svg`: rounded tile (rx 112), the master
-- `public/brand/resultra-square.svg`: square tile for iOS
-- `public/brand/resultra-maskable.svg`: Android adaptive icon (symbol inside the 80 % safe zone)
+An **M** drawn in three strokes on the navy tile. It starts at a blue dot (*reported*) at the foot of the left stem; the middle of the M is an amber **check** (*resolved*) that runs straight into the right stem: maintenance operations, from report to resolution. Geometric, legible down to 16 px.
+Files (editable SVG, 512 × 512 grid, 46 px strokes, round caps):
+- `public/brand/manop-mark.svg`: rounded tile (rx 112), the master
+- `public/brand/manop-square.svg`: square tile for iOS
+- `public/brand/manop-maskable.svg`: Android adaptive icon (symbol inside the 80 % safe zone)
 - PNGs generated from the SVGs: `public/favicon-32.png`, `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png`, `icon-maskable-192/512.png`; `public/icon.svg`; social image `public/brand/og.png` (1200 × 630)
-- React: `src/components/logo.tsx` (`<Logo/>`, `<Mark/>`); PDF documents draw the same paths (`src/server/pdf/brand.tsx`)
+- React: `src/components/logo.tsx` (`<Logo/>`, `<Mark/>`); PDFs draw the same paths (`src/server/pdf/brand.tsx`); guide covers (`scripts/guides/build.cjs`)
 
-Regenerate the PNGs after editing the SVG: `node -e "..."` with sharp (see TECHNICAL notes in RESULTRA_TECHNICAL_HANDOVER.md).
+Regenerate the PNGs after editing the SVG (command in MANOP_TECHNICAL_HANDOVER.md, section 10).
 
 ## Colours
 | Token | Hex | Use |

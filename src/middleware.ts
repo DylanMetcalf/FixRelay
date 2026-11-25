@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 export function middleware(req: NextRequest) {
   const headers = new Headers(req.headers);
-  headers.set("x-resultra-path", `${req.nextUrl.pathname}${req.nextUrl.search}`.slice(0, 500));
+  headers.set("x-manop-path", `${req.nextUrl.pathname}${req.nextUrl.search}`.slice(0, 500));
   return NextResponse.next({ request: { headers } });
 }
 

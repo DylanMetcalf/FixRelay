@@ -6,7 +6,7 @@ import type { JobDocumentData, Photo } from "./data";
 import { Para, PhotoGrid, SignatureBlock } from "./parts";
 import { C, fmtDT, s } from "./theme";
 
-const VIA: Record<string, string> = { LINK: "secure link", PORTAL: "signed in to Resultra", IN_PERSON: "in person, signed on a staff device", INTERNAL: "by a manager on the reporter's behalf" };
+const VIA: Record<string, string> = { LINK: "secure link", PORTAL: "signed in to ManOp", IN_PERSON: "in person, signed on a staff device", INTERNAL: "by a manager on the reporter's behalf" };
 
 /**
  * COMPLETED JOB REPORT: the formal record of what was asked for, what was approved, what was done, the evidence
@@ -25,7 +25,7 @@ export function CompletionReportDoc({ d, before, after }: { d: JobDocumentData; 
   const final = job.status === "CLOSED" ? `Closed ${fmtDT(job.closedAt)}` : `${STATUS_LABEL[job.status]} – not closed yet when this report was generated`;
 
   return (
-    <Document title={`Completed job report ${job.reference}`} author="Resultra" creator="Resultra" producer="Resultra">
+    <Document title={`Completed job report ${job.reference}`} author="ManOp" creator="ManOp" producer="ManOp">
       <Page size="A4" style={s.page}>
         <DocHeader h={{ title: "COMPLETED JOB REPORT", numberLabel: "Job no.", number: job.reference, status: STATUS_LABEL[job.status],
           company: d.org, site: { name: job.site.name, address: job.site.address }, generatedAt: d.generatedAt }} />

@@ -1,11 +1,11 @@
-# Resultra – technical handover
+# ManOp – technical handover
 
-*From reported to resolved.* Maintenance requests, job cards and approvals in one place.
+*From reported to resolved.* Maintenance operations: requests, job cards and approvals in one place.
 
-This document is for the next engineer. It explains how Resultra is built, where things live, how to run and test it, how to deploy it, and what is still open. Detailed references: ARCHITECTURE.md, DATABASE.md, WORKFLOWS.md, SECURITY.md, PDF_DOCUMENTATION.md, DEPLOYMENT.md, TESTING.md, BUILD_STATUS.md, EXISTING_SYSTEM_AUDIT.md.
+This document is for the next engineer. It explains how ManOp is built, where things live, how to run and test it, how to deploy it, and what is still open. Detailed references: ARCHITECTURE.md, DATABASE.md, WORKFLOWS.md, SECURITY.md, PDF_DOCUMENTATION.md, DEPLOYMENT.md, TESTING.md, BUILD_STATUS.md, EXISTING_SYSTEM_AUDIT.md.
 
 ## 1. What it is
-A multi-company (multi-tenant) SaaS for internal site maintenance. Anyone on site reports a fault (signed in, or by scanning a QR code without an account); maintenance triages, assesses, fixes it in-house or through contractors (quotes, spend approval by amount), records the work with evidence, the reporter confirms, the manager closes. Every job is also a branded PDF job card. Departments, handovers, self-registration with approval, duplicate review, a platform admin and a demo environment were added in the Resultra upgrade.
+A multi-company (multi-tenant) SaaS for internal site maintenance. Anyone on site reports a fault (signed in, or by scanning a QR code without an account); maintenance triages, assesses, fixes it in-house or through contractors (quotes, spend approval by amount), records the work with evidence, the reporter confirms, the manager closes. Every job is also a branded PDF job card. Departments, handovers, self-registration with approval, duplicate review, a platform admin and a demo environment were added in the ManOp upgrade.
 
 ## 2. Stack
 | Layer | Choice |
@@ -26,7 +26,7 @@ src/
   app/
     (auth)/          login, register, join (employee self-registration), invite, verify-email, reset-password
     (app)/           signed-in app: dashboard, jobs (+[id], [id]/card, [id]/report), requests/new, sites, settings, …
-    platform/        Resultra platform admin (/platform, /platform/[orgId])
+    platform/        ManOp platform admin (/platform, /platform/[orgId])
     r/[token]/       public QR report page (/r/{code})
     c/[token]/       contractor secure links
     api/             jobs/[id]/documents/[kind] (PDFs), sites/[id]/signs (QR PDF), files, avatar, export, health, manifest
@@ -101,15 +101,15 @@ Vitest needs a Postgres test database (`TEST_DATABASE_URL`, default `postgresql:
 Render Blueprint with Postgres; files in Postgres (no reliance on Render's temporary disk); migrations on start; health check `/api/health`; custom domain and HTTPS via Render; Resend for email. Step by step: DEPLOYMENT.md.
 
 ## 10. Brand assets
-Edit `public/brand/resultra-mark.svg` (512 grid) and regenerate PNG icons with sharp:
+Edit `public/brand/manop-mark.svg` (512 grid) and regenerate PNG icons with sharp:
 ```bash
-node -e "const s=require('sharp');[['resultra-mark',32,'favicon-32.png'],['resultra-square',180,'apple-touch-icon.png'],['resultra-mark',192,'icon-192.png'],['resultra-mark',512,'icon-512.png'],['resultra-maskable',192,'icon-maskable-192.png'],['resultra-maskable',512,'icon-maskable-512.png']].forEach(([f,n,o])=>s('public/brand/'+f+'.svg',{density:400}).resize(n,n).png().toFile('public/'+o))"
+node -e "const s=require('sharp');[['manop-mark',32,'favicon-32.png'],['manop-square',180,'apple-touch-icon.png'],['manop-mark',192,'icon-192.png'],['manop-mark',512,'icon-512.png'],['manop-maskable',192,'icon-maskable-192.png'],['manop-maskable',512,'icon-maskable-512.png']].forEach(([f,n,o])=>s('public/brand/'+f+'.svg',{density:400}).resize(n,n).png().toFile('public/'+o))"
 ```
 Keep `src/components/logo.tsx` and `src/server/pdf/brand.tsx` in step with the SVG paths.
 
 ## 11. Remaining tasks and known limits
 See BUILD_STATUS.md for the PASS/PARTIAL table. Main items:
-1. Move the demo from Render free (database expires 2026-12-17) to the paid Blueprint; buy and connect the Resultra domain; verify the Resend sending domain and run a live delivery check.
+1. Move the demo from Render free (database expires 2026-12-17) to the paid Blueprint; buy and connect the ManOp domain; verify the Resend sending domain and run a live delivery check.
 2. Docker image not built in the sandbox (no Docker there).
 3. Real-user usability testing and an independent security review / penetration test before general release.
 4. Content-Security-Policy still allows inline scripts (nonce-based CSP is a roadmap item).

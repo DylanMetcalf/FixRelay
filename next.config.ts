@@ -31,7 +31,7 @@ const config: NextConfig = {
     return [
       { source: "/(.*)", headers: securityHeaders },
       { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache" }] },
-      // Job documents may be shown inside Resultra's own job card viewer (same origin only).
+      // Job documents may be shown inside ManOp's own job card viewer (same origin only).
       { source: "/api/jobs/:id/documents/:kind", headers: [
         { key: "X-Frame-Options", value: "SAMEORIGIN" },
         { key: "Content-Security-Policy", value: "default-src 'none'; frame-ancestors 'self'; object-src 'none'" },

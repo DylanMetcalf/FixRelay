@@ -186,7 +186,7 @@ export default async function Settings() {
 
         {owner && !org.isDemo && (
           <Card title="Support access">
-            <p className="muted mb-3">Resultra staff cannot see your data. If you need help, you can grant read-only access for a limited time. Every visit is recorded in your history.</p>
+            <p className="muted mb-3">ManOp staff cannot see your data. If you need help, you can grant read-only access for a limited time. Every visit is recorded in your history.</p>
             <ul className="mb-3 space-y-2 text-sm">{grants.map((g) => {
               const live = !g.revokedAt && g.expiresAt > new Date();
               return (

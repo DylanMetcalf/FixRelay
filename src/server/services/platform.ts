@@ -1,5 +1,5 @@
 /**
- * The Resultra platform owner's tools. The platform owner sees ACCOUNT METADATA ONLY: companies, sites, contacts,
+ * The ManOp platform owner's tools. The platform owner sees ACCOUNT METADATA ONLY: companies, sites, contacts,
  * users and their roles, departments, onboarding progress, subscription, email delivery and platform errors.
  * Jobs, quotes, photos, reports and other business data stay private; opening a company needs a time-limited,
  * audited grant from that company (see SupportAccessGrant).
@@ -51,11 +51,11 @@ export async function createCustomer(admin: Admin, input: z.input<typeof custome
       tokenHash: hashToken(token), invitedBy: admin.id, expiresAt: new Date(Date.now() + INVITE_DAYS * 86_400_000),
     } });
     await queueEmail(tx, {
-      orgId: org.id, to: d.contactEmail, subject: `Your Resultra account for ${d.companyName} is ready`, dedupeKey: `customer-invite:${inv.id}`,
-      body: `Hi ${d.contactName},\n\nResultra is set up for ${d.companyName} (site: ${d.siteName}). Accept this invitation to become the site administrator, add your team and print your QR codes:\n${appUrl()}/invite/${token}\n\nThe link expires in ${INVITE_DAYS} days.`,
+      orgId: org.id, to: d.contactEmail, subject: `Your ManOp account for ${d.companyName} is ready`, dedupeKey: `customer-invite:${inv.id}`,
+      body: `Hi ${d.contactName},\n\nManOp is set up for ${d.companyName} (site: ${d.siteName}). Accept this invitation to become the site administrator, add your team and print your QR codes:\n${appUrl()}/invite/${token}\n\nThe link expires in ${INVITE_DAYS} days.`,
     });
-    await logEvent(tx, { orgId: org.id, userId: admin.id, label: `${admin.name} (Resultra platform)` }, null, "org.created_by_platform",
-      `Company created by the Resultra platform owner; ${d.contactEmail} invited as site administrator`);
+    await logEvent(tx, { orgId: org.id, userId: admin.id, label: `${admin.name} (ManOp platform)` }, null, "org.created_by_platform",
+      `Company created by the ManOp platform owner; ${d.contactEmail} invited as site administrator`);
     return { orgId: org.id, siteId: site.id };
   });
   return { ...result, inviteLink: `${appUrl()}/invite/${token}` };
@@ -71,7 +71,7 @@ export async function resendCustomerInvite(admin: Admin, orgId: string) {
     await tx.invitation.updateMany({ where: { orgId, email: old.email, acceptedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
     const inv = await tx.invitation.create({ data: { orgId, email: old.email, name: old.name, roles: old.roles, siteIds: [], tokenHash: hashToken(token), invitedBy: admin.id, expiresAt: new Date(Date.now() + INVITE_DAYS * 86_400_000) } });
     const org = await tx.organisation.findUniqueOrThrow({ where: { id: orgId }, select: { name: true } });
-    await queueEmail(tx, { orgId, to: old.email, subject: `Your Resultra account for ${org.name} is ready`, dedupeKey: `customer-invite:${inv.id}`,
+    await queueEmail(tx, { orgId, to: old.email, subject: `Your ManOp account for ${org.name} is ready`, dedupeKey: `customer-invite:${inv.id}`,
       body: `Hi ${old.name},\n\nAccept this invitation to become the site administrator for ${org.name}:\n${appUrl()}/invite/${token}\n\nThe link expires in ${INVITE_DAYS} days.` });
   });
   return `${appUrl()}/invite/${token}`;

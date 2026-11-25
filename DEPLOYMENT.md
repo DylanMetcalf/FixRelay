@@ -1,8 +1,8 @@
 # Deployment
 
-Resultra (formerly FixRelay) runs as one Node.js web service plus PostgreSQL. All options below use the same code and environment variables. Service, database and cookie names keep their earlier `fixrelay` identifiers on purpose, so existing deployments and sessions keep working.
+ManOp (formerly FixRelay) runs as one Node.js web service plus PostgreSQL. All options below use the same code and environment variables. Service, database and cookie names keep their earlier `fixrelay` identifiers on purpose, so existing deployments and sessions keep working.
 
-**Current demo:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**. Move to the paid `render.yaml` before the pilot. The Resultra domain is **not** assumed: everything uses `APP_URL`, so the domain can be added later.
+**Current demo:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**. Move to the paid `render.yaml` before the pilot. The ManOp domain is **not** assumed: everything uses `APP_URL`, so the domain can be added later.
 
 ## Option A: Render (recommended for the pilot)
 
@@ -20,9 +20,9 @@ Resultra (formerly FixRelay) runs as one Node.js web service plus PostgreSQL. Al
 Job cards, completion reports, history reports and QR signs are generated on the server with `@react-pdf/renderer`, which is pure JavaScript: **no Chromium or other browser is needed** on the server. The Inter fonts are bundled in `assets/fonts/` (SIL Open Font License, see `LICENSE-Inter-OFL.txt`), so output is identical on every machine. PDFs are generated on request and streamed; they are never written to disk or stored, so there is nothing stale to clean up or leak. Memory: a job card with four photos peaks well under 100 MB; the Starter instance (512 MB) is enough, the free 512 MB instance works but is slower on its first request.
 
 ### Custom domain and HTTPS
-1. In the web service: **Settings → Custom Domains → Add**, e.g. `app.resultra.co.za` (once the domain is owned).
+1. In the web service: **Settings → Custom Domains → Add**, e.g. `app.manop.co.za` (once the domain is owned).
 2. Add the DNS record Render shows (CNAME to the `onrender.com` host, or the A/ALIAS record for an apex domain). Render issues and renews the TLS certificate automatically; HTTP redirects to HTTPS.
-3. Change `APP_URL` to `https://app.resultra.co.za` and redeploy. Emailed links, QR codes and PDF links use it. **Print QR signs after this change**: signs printed with the old address will still point to the old address.
+3. Change `APP_URL` to `https://app.manop.co.za` and redeploy. Emailed links, QR codes and PDF links use it. **Print QR signs after this change**: signs printed with the old address will still point to the old address.
 4. HTTPS is required in production: session cookies are `Secure` with the `__Host-` prefix, HSTS is sent, and the installable app needs HTTPS.
 
 ### Staging / pilot environment
@@ -57,12 +57,12 @@ Then run `npm start` (web) and `npm run worker` (background), or only `npm start
 | Variable | Required | Notes |
 |---|---|---|
 | `DATABASE_URL` | yes | PostgreSQL 14+ (tested on 16). Add `?sslmode=require` for managed databases |
-| `APP_URL` | yes | Public HTTPS URL, e.g. `https://app.resultra.co.za`. Used in emails, QR codes and PDF links. On Render, `RENDER_EXTERNAL_URL` is used if it is not set |
+| `APP_URL` | yes | Public HTTPS URL, e.g. `https://app.manop.co.za`. Used in emails, QR codes and PDF links. On Render, `RENDER_EXTERNAL_URL` is used if it is not set |
 | `NODE_ENV` | yes | `production` |
 | `STORAGE_DRIVER` | no | `db` (default; files in Postgres, works with several instances, included in database backups), `s3`, or `local` (development only: not for Render, whose disk is temporary) |
 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`, `S3_SSE` | if `s3` | Any S3-compatible store (AWS S3 af-south-1, Cloudflare R2, Backblaze B2). Bucket must be **private** |
 | `EMAIL_TRANSPORT` | no | `console` (default, logs a one-line summary only), `smtp`, `resend` |
-| `EMAIL_FROM` | if not console | e.g. `Resultra <notifications@mail.resultra.co.za>` on a verified domain |
+| `EMAIL_FROM` | if not console | e.g. `ManOp <notifications@mail.manop.co.za>` on a verified domain |
 | `RESEND_API_KEY` | if `resend` | A **sending-only** key, restricted to the sending domain |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | if `smtp` | 587 uses STARTTLS; 465 uses TLS |
 | `CLAMAV_HOST`, `CLAMAV_PORT` or `CLAMAV_SOCKET` | recommended | Every upload is scanned; unreachable = uploads refused |
@@ -75,10 +75,10 @@ Secrets are never committed. `.env.example` lists the names only.
 
 ## Resend (email)
 
-1. **Account and domain.** In Resend: **Domains → Add domain**. Use a sub-domain you own for sending, e.g. `mail.resultra.co.za` (keeps your main domain's reputation separate). Choose a region close to your users (EU / Ireland is closest to South Africa).
-2. **DNS.** Add the records Resend shows at your DNS provider: the SPF `TXT` record and the DKIM `CNAME`/`TXT` records (and the optional MX record for bounces). Add a DMARC record for the parent domain, starting with `v=DMARC1; p=none; rua=mailto:dmarc@resultra.co.za`, and tighten it to `quarantine` once mail flows. Wait until Resend shows the domain as **Verified**.
+1. **Account and domain.** In Resend: **Domains → Add domain**. Use a sub-domain you own for sending, e.g. `mail.manop.co.za` (keeps your main domain's reputation separate). Choose a region close to your users (EU / Ireland is closest to South Africa).
+2. **DNS.** Add the records Resend shows at your DNS provider: the SPF `TXT` record and the DKIM `CNAME`/`TXT` records (and the optional MX record for bounces). Add a DMARC record for the parent domain, starting with `v=DMARC1; p=none; rua=mailto:dmarc@manop.co.za`, and tighten it to `quarantine` once mail flows. Wait until Resend shows the domain as **Verified**.
 3. **API key.** **API Keys → Create**: permission **Sending access**, restricted to the verified domain. Copy it once; store it only in Render (`RESEND_API_KEY`). Never commit it or paste it into a ticket.
-4. **Sender.** Set `EMAIL_FROM=Resultra <notifications@mail.resultra.co.za>` and `EMAIL_TRANSPORT=resend`. Company-specific emails show the customer's company name and colour in the message, but are sent from this address.
+4. **Sender.** Set `EMAIL_FROM=ManOp <notifications@mail.manop.co.za>` and `EMAIL_TRANSPORT=resend`. Company-specific emails show the customer's company name and colour in the message, but are sent from this address.
 5. **Development and tests.** Leave `EMAIL_TRANSPORT=console` (the default) in development: emails are written to the database outbox and only a one-line summary is logged. Automated tests never send email (they read the outbox), and addresses on reserved domains (`example.com`, `.test`, `.invalid`, …) are never delivered. Demo companies never queue email at all. To try real delivery safely, Resend accepts `delivered@resend.dev`.
 6. **Production check.** Register a test company with a real inbox: the confirmation email must arrive. Then try "Forgot password?" and an invitation. Platform admin → Platform health shows sent / waiting / failed counts and the last errors.
 7. **Delivery tracking.** Each email is stored in the outbox with its status (`PENDING`, `SENT`, `FAILED`), attempts and the last error; failures are retried with back-off (5 attempts) and duplicates are suppressed by a unique key per event and recipient.
@@ -86,7 +86,7 @@ Secrets are never committed. `.env.example` lists the names only.
 ## Backups and restore
 - Render Postgres (paid plans) takes daily snapshots with point-in-time recovery; keep at least 30 days. With `STORAGE_DRIVER=db`, photos and signatures are inside these backups.
 - Restore: Render dashboard → database → **Recovery** → choose a point in time → restore to a new database, then point `DATABASE_URL` at it and redeploy. **Test a restore before the pilot starts** and quarterly after that.
-- Manual export: `pg_dump --format=custom "$DATABASE_URL" > resultra.dump`; restore with `pg_restore --clean --no-owner -d "$NEW_DATABASE_URL" resultra.dump`.
+- Manual export: `pg_dump --format=custom "$DATABASE_URL" > manop.dump`; restore with `pg_restore --clean --no-owner -d "$NEW_DATABASE_URL" manop.dump`.
 - Each company's owner can also download a full JSON export of their data from Settings.
 
 ## Monitoring and error logging

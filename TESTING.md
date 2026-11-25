@@ -24,18 +24,18 @@ npm run build && npm run test:e2e # starts `next start -p 3100` against the test
 npm run typecheck
 ```
 
-## Results (last run: 2026-11-22, Resultra release; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
+## Results (last run: 2026-11-22, ManOp release; Linux, Node 22, PostgreSQL 16, Chromium from Playwright 1.63, ClamAV 1.5.4)
 
 - `npm run typecheck`: **pass**
 - `npm test` (with `CLAMAV_TEST_PORT=3310`): **94 / 94 passed**, 13 files. New: `documents.test.ts` (5: job card content, A4, multi-page, photos, footer link, completion rules, history and price permissions, isolation), `departments.test.ts` (5: departments, department scope, handover record and notifications, duplicate scoring, flag/link/dismiss, repeat faults, double submit), `registration.test.ts` (2: codes, pending requests, email confirmation, approval, decline, expiry, replacement), `qr.test.ts` (3: short codes, legacy links, rotation, name-only and idempotent QR reports, QR sign PDF), `platform-demo.test.ts` (3: customer creation and invitation, account-metadata overview, demo personas, no demo email, view-as restrictions, reset).
-- `npm run test:e2e`: **65 / 65 passed** (15 features, 4 journeys, 16 requisition, 2 board/spares, **28 in `e2e/resultra.spec.ts`**). In the last complete run 62 passed, 2 failed because they still used the pre-upgrade QR link format, and 1 did not run because it depends on an earlier test in the same serial file; after updating the two tests, those 3 were re-run and passed (`journey.spec.ts` 4/4, R16).
+- `npm run test:e2e`: **65 / 65 passed** (15 features, 4 journeys, 16 requisition, 2 board/spares, **28 in `e2e/manop.spec.ts`**). In the last complete run 62 passed, 2 failed because they still used the pre-upgrade QR link format, and 1 did not run because it depends on an earlier test in the same serial file; after updating the two tests, those 3 were re-run and passed (`journey.spec.ts` 4/4, R16).
 - `npm run build`: **pass**
 - `npm audit --omit=dev`: **0 vulnerabilities**. `npm audit` (including dev tools) lists advisories in `vitest`/`tinypool`/`@vitest/mocker` and `s3rver` (`busboy`/`dicer`, `fast-xml-parser`): these are test-only tools that never ship to production; fixing them needs a vitest major upgrade (follow-up). `effect` (Prisma CLI) is pinned to 3.22.4 for GHSA-7589-6fvf-x4pw.
 - `prisma migrate diff` (migrations vs schema): **no drift**
-- **Live smoke test** (https://fixrelay-demo.onrender.com, commit `7150ac2`, 2026-11-22): title and heading "Resultra – From reported to resolved.", manifest and icon, sign-up, demo workspace with demo bar, job card PDF download (`RESULTRA_JobCard_12602.pdf`, application/pdf), history PDF, short site link `/r/<code>`, QR signs PDF, "view as" the finance approver, and an anonymous phone report through the QR link with the demo's required signature (report number shown). Static files were routed through Playwright's network stack because of a sandbox network quirk (see earlier notes).
+- **Live smoke test** (https://fixrelay-demo.onrender.com, commit `7150ac2`, 2026-11-22): title and heading "ManOp – From reported to resolved.", manifest and icon, sign-up, demo workspace with demo bar, job card PDF download (`MANOP_JobCard_12602.pdf`, application/pdf), history PDF, short site link `/r/<code>`, QR signs PDF, "view as" the finance approver, and an anonymous phone report through the QR link with the demo's required signature (report number shown). Static files were routed through Playwright's network stack because of a sandbox network quirk (see earlier notes).
 - PDFs: generated documents were checked with pdf.js in tests and rendered to images with `pdftoppm` for visual inspection (layout, page breaks, photo proportions, footer on every page).
 
-### The 20 required pilot scenarios (e2e/resultra.spec.ts)
+### The 20 required pilot scenarios (e2e/manop.spec.ts)
 
 | # | Scenario | Test | Result |
 |---|---|---|---|

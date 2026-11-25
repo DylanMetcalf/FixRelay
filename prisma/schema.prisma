@@ -1,4 +1,4 @@
-// Resultra schema (formerly FixRelay). Every tenant-owned table carries orgId. See DATABASE.md.
+// ManOp schema (formerly FixRelay). Every tenant-owned table carries orgId. See DATABASE.md.
 generator client {
   provider = "prisma-client-js"
 }

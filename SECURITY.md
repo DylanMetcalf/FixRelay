@@ -88,7 +88,7 @@ All checks are server-side in the service layer. The UI only hides controls.
 - Generated per request from the permission-checked job loader; never stored; `Cache-Control: private, no-store`; 401/403/404 as for pages. Prices only for people with price access; history refused to people who only report faults.
 - Photos are read from private storage on the server and embedded; no public URLs.
 - The QR code / link on documents points to the job page, which requires signing in with access. It carries no token.
-- Only Resultra's own viewer page may frame the PDF (`X-Frame-Options: SAMEORIGIN` on that route only; `DENY` everywhere else).
+- Only ManOp's own viewer page may frame the PDF (`X-Frame-Options: SAMEORIGIN` on that route only; `DENY` everywhere else).
 
 ## Error logging
 

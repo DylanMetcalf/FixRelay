@@ -61,7 +61,7 @@ export function JoinCodesCard({ codes, sites }: { codes: Codes; sites: { id: str
   const site = (id: string | null) => (id ? sites.find((s) => s.id === id)?.name ?? "Site" : "All sites");
   return (
     <Card title="Registration codes">
-      <p className="muted mb-3">Employees register at <strong>{appUrl().replace(/^https?:\/\//, "") || "your Resultra address"}/join</strong> with a code. A code never gives access by itself: you approve each person above. Replace a code if it is shared too widely.</p>
+      <p className="muted mb-3">Employees register at <strong>{appUrl().replace(/^https?:\/\//, "") || "your ManOp address"}/join</strong> with a code. A code never gives access by itself: you approve each person above. Replace a code if it is shared too widely.</p>
       <ul className="space-y-2" data-testid="join-codes">
         {codes.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-300 p-2">

@@ -27,7 +27,7 @@ export async function requireSession(): Promise<SessionView & { ctx: Ctx; org: N
 }
 /** /login, with ?next= pointing back to the page that was asked for (only same-site paths). */
 export async function loginUrl() {
-  const path = (await headers()).get("x-resultra-path") ?? "";
+  const path = (await headers()).get("x-manop-path") ?? "";
   return /^\/(?!\/)[\w\-/?=&%.]*$/.test(path) && !path.startsWith("/login") ? `/login?next=${encodeURIComponent(path)}` : "/login";
 }
 

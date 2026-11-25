@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/app/_lib/session";
 
 /**
- * Web app manifest. The app is always "Resultra"; when signed in, the installed name also carries the company
+ * Web app manifest. The app is always "ManOp"; when signed in, the installed name also carries the company
  * name. start_url, id and scope never vary by tenant, and the response is not cached, so branding cannot leak
  * between companies.
  */
@@ -12,9 +12,9 @@ export async function GET() {
   return NextResponse.json(
     {
       id: "/",
-      name: org ? `Resultra – ${org.name}` : "Resultra",
-      short_name: "Resultra",
-      description: "From reported to resolved. Maintenance requests, job cards and approvals in one place.",
+      name: org ? `ManOp – ${org.name}` : "ManOp",
+      short_name: "ManOp",
+      description: "From reported to resolved. Maintenance operations: requests, job cards and approvals in one place.",
       start_url: "/dashboard?source=pwa", scope: "/", display: "standalone", display_override: ["standalone", "minimal-ui"],
       orientation: "any", background_color: "#0B1F3A", theme_color: "#0B1F3A", lang: "en-ZA", dir: "ltr",
       categories: ["business", "productivity", "utilities"],

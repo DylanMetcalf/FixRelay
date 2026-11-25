@@ -1,8 +1,8 @@
-# Existing system audit (before the Resultra upgrade)
+# Existing system audit (before the ManOp upgrade)
 
-Date: 2026-11-21 · Audited commit: `f3da29a` (branch `claude/quirky-archimedes-x415o3`) · Checkpoint: commit `f3da29a` (local tag `pre-resultra-checkpoint`; the commit is on the remote branch)
+Date: 2026-11-21 · Audited commit: `f3da29a` (branch `claude/quirky-archimedes-x415o3`) · Checkpoint: commit `f3da29a` (local tag `pre-manop-checkpoint`; the commit is on the remote branch)
 
-This records what FixRelay already did before it became **Resultra**, what needed improving, what was missing, and where the new requirements touch the existing design. Nothing was rebuilt; every change below is incremental.
+This records what FixRelay already did before it became **ManOp**, what needed improving, what was missing, and where the new requirements touch the existing design. Nothing was rebuilt; every change below is incremental.
 
 ## 1. Technology stack
 
@@ -60,7 +60,7 @@ The job page (`/jobs/[id]`) is already the single source of truth: what, where, 
 
 | Requirement | Today | Gap / plan |
 |---|---|---|
-| Rename to Resultra, new icon | FixRelay brand | Rename customer-facing text, metadata, manifest, emails, PDFs; new geometric mark in the same palette. Keep the cookie name, env vars, DB names and migrations unchanged for compatibility |
+| Rename to ManOp, new icon | FixRelay brand | Rename customer-facing text, metadata, manifest, emails, PDFs; new geometric mark in the same palette. Keep the cookie name, env vars, DB names and migrations unchanged for compatibility |
 | Core workflow + alternatives | Complete, incl. hold, cancel, reopen, revised/rejected quotes | Add **repeat fault linked to an earlier job** |
 | Job page shows everything | Yes | Add department, handovers, duplicate/repeat links, document buttons |
 | QR reporting without login | `/r/{43-char token}`; areas and machines use `?l=<uuid>` / `?a=<uuid>` | Add **short, non-sequential codes** for sites, areas and machines (`/r/{code}`) so no database IDs appear; keep old links working. Make contact details optional (name required), add a double-submit guard, keep the safety warning (reworded) |
@@ -90,4 +90,4 @@ The job page (`/jobs/[id]`) is already the single source of truth: what, where, 
 
 ## 10. Checkpoint
 
-`git tag pre-resultra-checkpoint` at commit `f3da29a` (recover with `git checkout pre-resultra-checkpoint`). All schema changes in this upgrade are **additive** (new tables, new nullable or defaulted columns). Rollback: redeploy the tag; the extra columns and tables are ignored by the old code. No data is dropped.
+`git tag pre-manop-checkpoint` at commit `f3da29a` (recover with `git checkout pre-manop-checkpoint`). All schema changes in this upgrade are **additive** (new tables, new nullable or defaulted columns). Rollback: redeploy the tag; the extra columns and tables are ignored by the old code. No data is dropped.

@@ -23,12 +23,12 @@ export async function renderJobDocument(ctx: Ctx, jobId: string, kind: JobDocKin
   const ref = safeRef(d.job.reference);
   if (kind === "card") {
     const photos = await d.loadPhotos(["REQUEST", "BEFORE"], 4);
-    return { bytes: await renderToBuffer(<JobCardDoc d={d} photos={photos} />), filename: `RESULTRA_JobCard_${ref}.pdf` };
+    return { bytes: await renderToBuffer(<JobCardDoc d={d} photos={photos} />), filename: `MANOP_JobCard_${ref}.pdf` };
   }
   if (kind === "completion") {
     if (d.job.completions.length === 0) throw conflict("The completion report is available once the work has been completed.");
     const [before, after] = [await d.loadPhotos(["REQUEST", "BEFORE"], 4), await d.loadPhotos(["AFTER"], 6)];
-    return { bytes: await renderToBuffer(<CompletionReportDoc d={d} before={before} after={after} />), filename: `RESULTRA_CompletionReport_${ref}.pdf` };
+    return { bytes: await renderToBuffer(<CompletionReportDoc d={d} before={before} after={after} />), filename: `MANOP_CompletionReport_${ref}.pdf` };
   }
-  return { bytes: await renderToBuffer(<JobHistoryDoc d={d} />), filename: `RESULTRA_JobHistory_${ref}.pdf` };
+  return { bytes: await renderToBuffer(<JobHistoryDoc d={d} />), filename: `MANOP_JobHistory_${ref}.pdf` };
 }

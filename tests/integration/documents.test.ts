@@ -21,7 +21,7 @@ describe("branded job documents (PDF)", () => {
     await jobs.assignJob(t.manager, job.id, { leadTechnicianId: t.tech.userId, instructions: "Lock out before opening the panel." });
 
     const { bytes, filename } = await renderJobDocument(t.manager, job.id, "card");
-    expect(filename).toBe(`RESULTRA_JobCard_${job.reference}.pdf`);
+    expect(filename).toBe(`MANOP_JobCard_${job.reference}.pdf`);
     keep("card-open.pdf", bytes);
     expect(bytes.subarray(0, 5).toString()).toBe("%PDF-");
     const pdf = await readPdf(bytes);
@@ -31,11 +31,11 @@ describe("branded job documents (PDF)", () => {
     const org = await prisma.organisation.findUniqueOrThrow({ where: { id: t.orgId } });
     for (const want of ["MAINTENANCE JOB CARD", job.reference, org.name, "Germiston Plant", "Cold Room 2", "Compressor tripping", "Trips after 20 minutes.",
       "High", "Start capacitor degraded", "Replace capacitor", "Lock out before opening the panel.", "Assigned", "Reported photo", "Work performed",
-      "Technician name", "Manager verification", "SAST", "Resultra"]) has(pdf.text, want);
+      "Technician name", "Manager verification", "SAST", "ManOp"]) has(pdf.text, want);
     expect(pdf.text).toMatch(/Page 1 of \d/);
     expect(pdf.pages[0]!.links).toEqual([`http://test.local/jobs/${job.id}`]); // the QR code / link opens the job (sign-in required)
     expect(pdf.pages.reduce((n, p) => n + p.images, 0)).toBeGreaterThanOrEqual(2); // the photo and the footer QR code
-    for (const p of pdf.pages) expect(p.text.replace(/Resultra|Page \d+ of \d+|Snapshot generated.*$/g, "").trim().length).toBeGreaterThan(20); // no empty pages
+    for (const p of pdf.pages) expect(p.text.replace(/ManOp|Page \d+ of \d+|Snapshot generated.*$/g, "").trim().length).toBeGreaterThan(20); // no empty pages
   });
 
   it("long descriptions wrap onto further pages with the header content once and a footer on every page", async () => {
@@ -66,7 +66,7 @@ describe("branded job documents (PDF)", () => {
     await jobs.confirmFixed(t.requester, job.id, { outcome: "APPROVED", comment: "Running well now" });
     await jobs.closeJob(t.manager, job.id);
     const { bytes, filename } = await renderJobDocument(t.requester, job.id, "completion"); // the reporter may download it
-    expect(filename).toBe(`RESULTRA_CompletionReport_${job.reference}.pdf`);
+    expect(filename).toBe(`MANOP_CompletionReport_${job.reference}.pdf`);
     keep("completion.pdf", bytes);
     pdf = await readPdf(bytes);
     expect(pdf.text).toContain("Final status: Closed");

@@ -2,14 +2,15 @@
 import { Circle, Image, Link, Path, Rect, Svg, Text, View } from "@react-pdf/renderer";
 import { C, fmtDT, s } from "./theme";
 
-/** The Resultra mark (same geometry as public/brand/resultra-mark.svg). */
+/** The ManOp mark (same geometry as public/brand/manop-mark.svg). */
 export function Mark({ size = 28 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 512 512">
       <Rect width="512" height="512" rx="112" fill={C.navy} />
-      <Path d="M156 372V140h96a62 62 0 0 1 0 124h-96" fill="none" stroke="#FFFFFF" strokeWidth={46} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M232 268l64 92 92-140" fill="none" stroke={C.amber} strokeWidth={46} strokeLinecap="round" strokeLinejoin="round" />
-      <Circle cx="156" cy="372" r="25" fill={C.reportBlue} />
+      <Path d="M140 372V150l70 96" fill="none" stroke="#FFFFFF" strokeWidth={46} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M210 246l52 70 110-176" fill="none" stroke={C.amber} strokeWidth={46} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M372 140v232" fill="none" stroke="#FFFFFF" strokeWidth={46} strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx="140" cy="372" r="25" fill={C.reportBlue} />
     </Svg>
   );
 }
@@ -24,7 +25,7 @@ export interface HeaderInfo {
   generatedAt: Date;
 }
 
-/** Document header: Resultra brand, document title and number, the customer's company and site, status. */
+/** Document header: ManOp brand, document title and number, the customer's company and site, status. */
 export function DocHeader({ h }: { h: HeaderInfo }) {
   return (
     <View>
@@ -32,7 +33,7 @@ export function DocHeader({ h }: { h: HeaderInfo }) {
         <Mark size={30} />
         <View style={{ marginLeft: 10, flexGrow: 1 }}>
           <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: 800, letterSpacing: 0.4 }}>{h.title}</Text>
-          <Text style={{ color: "#CBD5E1", fontSize: 8, marginTop: 2 }}>Resultra · From reported to resolved.</Text>
+          <Text style={{ color: "#CBD5E1", fontSize: 8, marginTop: 2 }}>ManOp · From reported to resolved.</Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
           <Text style={{ color: "#CBD5E1", fontSize: 7, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{h.numberLabel}</Text>
@@ -69,7 +70,7 @@ export function DocFooter({ reference, generatedAt, qr, href, note }: { referenc
     <View fixed style={{ position: "absolute", left: 36, right: 36, bottom: 18, flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderColor: C.line, paddingTop: 6 }}>
       <Mark size={14} />
       <View style={{ marginLeft: 6, flexGrow: 1 }}>
-        <Text style={{ fontSize: 7.5, fontWeight: 700, color: C.navy }}>Resultra · {reference}</Text>
+        <Text style={{ fontSize: 7.5, fontWeight: 700, color: C.navy }}>ManOp · {reference}</Text>
         <Text style={{ fontSize: 6.5, color: C.muted }}>{note ?? `Snapshot generated ${fmtDT(generatedAt)}. The live record may have changed since.`}</Text>
       </View>
       <Text style={{ fontSize: 7.5, color: C.muted, marginRight: qr ? 8 : 0 }} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />

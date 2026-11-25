@@ -35,6 +35,6 @@ export async function GET(req: Request) {
     j.isProject ? "yes" : "no", (j.completions[0]?.rootCauses ?? []).map((c) => ROOT_CAUSE_LABEL[c]).join("; "), j.completions[0]?.rootCauseNotes ?? "",
   ]);
   return new NextResponse("﻿" + rows.map((r) => r.map(cell).join(",")).join("\r\n"), {
-    headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="resultra-jobs-${locationId ? "area-" : ""}${from.toISOString().slice(0, 10)}.csv"`, "Cache-Control": "private, no-store" },
+    headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="manop-jobs-${locationId ? "area-" : ""}${from.toISOString().slice(0, 10)}.csv"`, "Cache-Control": "private, no-store" },
   });
 }

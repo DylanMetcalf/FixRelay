@@ -1,4 +1,4 @@
--- Resultra upgrade: departments and handovers, site registration codes with approval, short public QR codes,
+-- ManOp upgrade: departments and handovers, site registration codes with approval, short public QR codes,
 -- duplicate / repeat-fault links, double-submit guard, demo personas, platform error log.
 -- Additive only: new tables and nullable / defaulted columns. Rollback = redeploy the previous release; nothing is dropped.
 

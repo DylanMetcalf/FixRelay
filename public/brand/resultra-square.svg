@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Resultra">
-  <!-- Resultra mark: an R whose leg becomes a check. It starts at a blue dot (reported) and ends in an amber check (resolved). Colours: Relay Navy #0B1F3A, Signal Amber #F5A524, Report Blue #5B8DEF. -->
-  <rect width="512" height="512" fill="#0B1F3A"/>
-  <path d="M156 372V140h96a62 62 0 0 1 0 124h-96" fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><path d="M232 268l64 92 92-140" fill="none" stroke="#F5A524" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/><circle cx="156" cy="372" r="25" fill="#5B8DEF"/>
-</svg>

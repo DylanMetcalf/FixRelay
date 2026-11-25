@@ -1,5 +1,5 @@
 /**
- * Shared look of every Resultra PDF: bundled Inter fonts (identical output on every server), brand colours from
+ * Shared look of every ManOp PDF: bundled Inter fonts (identical output on every server), brand colours from
  * BRAND.md, A4 page with consistent margins, and South African date formatting in the company's time zone.
  */
 import path from "node:path";

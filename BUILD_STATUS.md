@@ -1,13 +1,13 @@
 # Build status
 
-Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and verified by executed tests or inspection · **PARTIAL** implemented with a stated limit · **FAIL** not working · **NOT TESTED** not verified.
+Last updated: 2026-11-22 (ManOp release). Legend: **PASS** implemented and verified by executed tests or inspection · **PARTIAL** implemented with a stated limit · **FAIL** not working · **NOT TESTED** not verified.
 
-## Resultra final acceptance criteria
+## ManOp final acceptance criteria
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | Fix Relay is correctly renamed Resultra | PASS | All customer-facing text, metadata, manifest, emails, PDFs, legal pages and help; e2e features 1–2 (title, manifest), emails in tests. Technical identifiers kept on purpose (cookie, env vars, DB, Render service) – BRAND.md |
-| 2 | The new icon is integrated | PASS | `public/brand/resultra-*.svg` (editable), favicon, Apple touch, PWA and maskable PNGs, social image, `Logo`/`Mark` components, PDF headers/footers, QR signs |
+| 1 | Fix Relay is correctly renamed ManOp | PASS | All customer-facing text, metadata, manifest, emails, PDFs, legal pages and help; e2e features 1–2 (title, manifest), emails in tests. Technical identifiers kept on purpose (cookie, env vars, DB, Render service) – BRAND.md |
+| 2 | The new icon is integrated | PASS | `public/brand/manop-*.svg` (editable), favicon, Apple touch, PWA and maskable PNGs, social image, `Logo`/`Mark` components, PDF headers/footers, QR signs |
 | 3 | Existing design and functionality preserved | PASS | Colours, typography and layout unchanged; all earlier tests still pass (94 Vitest, 37 earlier e2e) after updating only tests for intended changes (new QR links, optional phone, demo bar) |
 | 4 | QR reporting works without login | PASS | S8, S9, journey 3, R13, R16; `qr.test.ts` |
 | 5 | Correct site and area identification | PASS | Short codes per site/area/machine resolve to the right place (S8, `qr.test.ts`); old links still resolve until replaced |
@@ -18,7 +18,7 @@ Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and ve
 | 10 | Duplicate reports can be reviewed | PASS | S10, `departments.test.ts` |
 | 11 | Closed jobs can be reopened | PASS | S18, journey 1 |
 | 12 | Active job cards can be viewed, printed and downloaded | PARTIAL | Viewing and downloading are verified (D1, D2, D7). Print: the Print button calls the browser's print on the framed PDF (falls back to opening it in a new tab), and every PDF is print-ready A4; the browser print dialog itself cannot be driven by the headless test browser and was **not tested** |
-| 13 | Job-card PDFs use the correct Resultra design | PASS | Visual inspection of rendered pages; header/footer/brand text asserted in `documents.test.ts`, D2 |
+| 13 | Job-card PDFs use the correct ManOp design | PASS | Visual inspection of rendered pages; header/footer/brand text asserted in `documents.test.ts`, D2 |
 | 14 | Reported photographs appear correctly | PASS | Image count and proportions (`documents.test.ts`, D3); visual check: no stretching or cropping |
 | 15 | Completed job reports work | PASS | D4, S20, `documents.test.ts` |
 | 16 | Job history is preserved | PASS | Append-only audit tables (trigger tests), handover append-only test, history PDF (S20, `documents.test.ts`) |
@@ -26,11 +26,11 @@ Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and ve
 | 18 | Demo data is isolated | PASS | Separate demo companies, synthetic data, no email (`platform-demo.test.ts`), view-as limited to demo (forged-session test), V1 |
 | 19 | Automated tests are executed | PASS | 94/94 Vitest, 65/65 Playwright (TESTING.md) |
 | 20 | Critical security defects are resolved | PASS | No known critical defects; production `npm audit` 0; isolation tests (S19, security suite); dev-only tool advisories listed in TESTING.md. An independent penetration test is still recommended |
-| 21 | Screenshot-based documentation is created | PASS | `docs/RESULTRA_USER_GUIDE.pdf` (17 pp), `RESULTRA_SITE_ADMIN_GUIDE.pdf` (12 pp), `RESULTRA_PLATFORM_ADMIN_GUIDE.pdf` (6 pp), `RESULTRA_PILOT_TESTING_GUIDE.pdf` (3 pp), screenshots in `docs/screenshots`, rebuilt by `scripts/guides/*` |
-| 22 | Render and Resend setup instructions are complete | PARTIAL | DEPLOYMENT.md has the full steps (Render Blueprint, PDFs without a browser, files in Postgres, custom domain/HTTPS, backups, monitoring, Resend domain/DNS/key/sender). Not done from here: buying the Resultra domain, verifying it in Resend, and a live delivery test on it |
+| 21 | Screenshot-based documentation is created | PASS | `docs/MANOP_USER_GUIDE.pdf` (17 pp), `MANOP_SITE_ADMIN_GUIDE.pdf` (12 pp), `MANOP_PLATFORM_ADMIN_GUIDE.pdf` (6 pp), `MANOP_PILOT_TESTING_GUIDE.pdf` (3 pp), screenshots in `docs/screenshots`, rebuilt by `scripts/guides/*` |
+| 22 | Render and Resend setup instructions are complete | PARTIAL | DEPLOYMENT.md has the full steps (Render Blueprint, PDFs without a browser, files in Postgres, custom domain/HTTPS, backups, monitoring, Resend domain/DNS/key/sender). Not done from here: buying the ManOp domain, verifying it in Resend, and a live delivery test on it |
 | 23 | Deployed and smoke-tested | PASS | Render demo redeployed from this branch (commit `7150ac2`); live smoke test passed (TESTING.md). The demo runs on Render's free tier; move to the paid Blueprint for the pilot |
 
-## Resultra features delivered
+## ManOp features delivered
 
 | Area | Status | Notes |
 |---|---|---|
@@ -55,7 +55,7 @@ Last updated: 2026-11-22 (Resultra release). Legend: **PASS** implemented and ve
 
 ## Earlier: internal site maintenance model (2026-11-17)
 
-Resultra was changed from a tool for maintenance *contractors serving customers* into an **internal maintenance system for a company's own sites**. Defaults chosen (the plan's recommendations): several sites per subscriber; spending limits by amount with optional PO numbers; three quotes above a limit the company sets (or a written reason); the reporter confirms the fix and the manager closes; reporting without an account behind a setting (off by default); this replaces the contractor-facing version.
+ManOp was changed from a tool for maintenance *contractors serving customers* into an **internal maintenance system for a company's own sites**. Defaults chosen (the plan's recommendations): several sites per subscriber; spending limits by amount with optional PO numbers; three quotes above a limit the company sets (or a written reason); the reporter confirms the fix and the manager closes; reporting without an account behind a setting (off by default); this replaces the contractor-facing version.
 
 | # | Criterion (internal model) | Status | Evidence |
 |---|---|---|---|

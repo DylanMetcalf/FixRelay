@@ -57,7 +57,7 @@ export async function createDemoWorkspace(user: { id: string; name: string; emai
   const people: Record<string, Ctx> = {};
   const unusable = await bcrypt.hash(randomBytes(32).toString("hex"), 4);
   for (const p of PERSONAS) {
-    const u = await prisma.user.create({ data: { email: `${p.key}.${org.id.slice(0, 8)}@demo.resultra.invalid`, name: p.name, jobTitle: p.jobTitle, passwordHash: unusable, demoPersona: true, emailVerifiedAt: new Date() } });
+    const u = await prisma.user.create({ data: { email: `${p.key}.${org.id.slice(0, 8)}@demo.manop.invalid`, name: p.name, jobTitle: p.jobTitle, passwordHash: unusable, demoPersona: true, emailVerifiedAt: new Date() } });
     await prisma.membership.create({ data: { orgId: org.id, userId: u.id, roles: [...p.roles] } });
     await prisma.departmentMember.create({ data: { orgId: org.id, departmentId: depts[p.dept]!, userId: u.id, isManager: p.manager } });
     people[p.key] = { userId: u.id, userName: u.name, userEmail: u.email, orgId: org.id, roles: [...p.roles], siteIds: [], support: false, locked: false, emailVerified: true,
@@ -115,7 +115,7 @@ export async function createDemoWorkspace(user: { id: string; name: string; emai
     ["Dock leveller not lifting", dc.id, bay.id, ["BREAKDOWN"], 12],
   ];
   for (const [title, siteId, locationId, rootCauses, daysAgo] of past) {
-    const j = await jobs.createJob(ctx, { title, description: "Logged on the paper requisition before Resultra.", siteId, locationId, category: "Mechanical", priority: "NORMAL" });
+    const j = await jobs.createJob(ctx, { title, description: "Logged on the paper requisition before ManOp.", siteId, locationId, category: "Mechanical", priority: "NORMAL" });
     await jobs.submitAssessment(ctx, j.id, { findings: "Checked on site.", quoteRequired: false });
     await jobs.routeInHouse(ctx, j.id, {});
     await jobs.assignJob(ctx, j.id, { leadTechnicianId: jabu!.userId });

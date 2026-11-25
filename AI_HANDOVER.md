@@ -4,7 +4,7 @@ For future AI coding assistants (and humans). Read this first, then BUILD_STATUS
 
 ## What this is
 
-Resultra is a multi-tenant **internal site maintenance** SaaS (Next.js 15 + PostgreSQL + Prisma). Its one workflow is: someone on site reports a fault (app or QR code) → assessment → **in-house** (technician) **or contractor** (secure-link quotes → compare → approval by amount, PO) → work with evidence → the reporter confirms it is fixed → closed. Until 2026-11-17 it was a tool for contractors serving customers; that model (Client, ApprovalLink, /q and /v pages, customer portal) was removed. See WORKFLOWS.md.
+ManOp is a multi-tenant **internal site maintenance** SaaS (Next.js 15 + PostgreSQL + Prisma). Its one workflow is: someone on site reports a fault (app or QR code) → assessment → **in-house** (technician) **or contractor** (secure-link quotes → compare → approval by amount, PO) → work with evidence → the reporter confirms it is fixed → closed. Until 2026-11-17 it was a tool for contractors serving customers; that model (Client, ApprovalLink, /q and /v pages, customer portal) was removed. See WORKFLOWS.md.
 
 ## Project map
 
@@ -25,7 +25,7 @@ src/server/services/export.ts   company data export (POPIA)
 src/server/services/*.ts        ALL business logic (see ARCHITECTURE.md table)
 src/worker.ts                   standalone worker (uses jobs-runner)
 src/instrumentation.ts          starts the loop in-process when WORKER_IN_PROCESS=true
-src/components/logo.tsx         Resultra mark + wordmark (see BRAND.md)
+src/components/logo.tsx         ManOp mark + wordmark (see BRAND.md)
 src/app/_lib/session.ts         cookie handling, requireSession/requirePage
 src/app/_lib/action.ts          run() wrapper for server actions → ActionState
 src/app/actions/*.ts            server actions: parse FormData → call ONE service → return
@@ -114,9 +114,9 @@ Closed the production gaps (reset/verification, email transports, shared storage
 
 Listed in BUILD_STATUS.md under "Known issues / limitations". None are known to break the main workflow.
 
-## Resultra release (2026-11-22) – read this first
+## ManOp release (2026-11-22) – read this first
 
-- The product is now **Resultra** ("From reported to resolved."). Start with RESULTRA_TECHNICAL_HANDOVER.md, then EXISTING_SYSTEM_AUDIT.md (what existed and why choices were made) and BUILD_STATUS.md (acceptance matrix).
+- The product is now **ManOp** ("From reported to resolved."). Start with MANOP_TECHNICAL_HANDOVER.md, then EXISTING_SYSTEM_AUDIT.md (what existed and why choices were made) and BUILD_STATUS.md (acceptance matrix).
 - Technical names intentionally still say `fixrelay` (cookie `fr_session`, DB names, Render services, export format id). Do not rename them without a migration plan.
 - New services: `departments.ts`, `registration.ts`, `platform.ts`; PDFs in `src/server/pdf/`; duplicate scoring in `src/server/duplicates.ts`; `logError` in `src/server/errors.ts`.
 - **react-pdf gotcha:** never put `lineHeight` on the `<Page>` style: it stops fixed footers from rendering. Put it on text styles.

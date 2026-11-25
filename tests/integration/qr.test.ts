@@ -44,7 +44,7 @@ describe("QR reporting links and signs", () => {
     const t = await tenant();
     await sites.createLocation(t.owner, { siteId: t.site.id, name: "Workshop" });
     const { bytes, filename } = await renderQrSigns(t.manager, t.site.id);
-    expect(filename).toBe("RESULTRA_QR_Signs_Germiston_Plant.pdf");
+    expect(filename).toBe("MANOP_QR_Signs_Germiston_Plant.pdf");
     if (process.env.PDF_OUT) (await import("node:fs")).writeFileSync(`${process.env.PDF_OUT}/signs.pdf`, bytes);
     const pdf = await readPdf(bytes);
     expect(pdf.pages).toHaveLength(3); // site + Cold Room 2 + Workshop

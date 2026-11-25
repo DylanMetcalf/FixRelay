@@ -22,7 +22,7 @@ export function ServiceWorker() {
   if (!update) return null;
   return (
     <div role="status" className="no-print fixed inset-x-4 bottom-24 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg bg-navy px-4 py-3 text-sm text-white shadow-lg md:bottom-6">
-      <span>A new version of Resultra is ready.</span>
+      <span>A new version of ManOp is ready.</span>
       <button className="btn btn-sm bg-signal text-navy" onClick={() => { updateRequested.current = true; update.postMessage("skipWaiting"); }}>Update</button>
     </div>
   );
@@ -42,10 +42,10 @@ export function InstallButton({ className = "btn bg-signal text-navy" }: { class
     window.addEventListener("appinstalled", () => setInstalled(true));
     return () => window.removeEventListener("beforeinstallprompt", on);
   }, []);
-  if (installed) return <p className="text-sm font-semibold">✓ Resultra is installed on this device.</p>;
+  if (installed) return <p className="text-sm font-semibold">✓ ManOp is installed on this device.</p>;
   return (
     <div>
-      <button type="button" className={className} onClick={async () => { if (evt) { await evt.prompt(); setEvt(null); } else setHelp((h) => !h); }}>Install Resultra app</button>
+      <button type="button" className={className} onClick={async () => { if (evt) { await evt.prompt(); setEvt(null); } else setHelp((h) => !h); }}>Install ManOp app</button>
       {help && (
         <p className="mt-2 text-sm" role="note">
           <strong>iPhone / iPad:</strong> open this page in Safari, tap Share, then <em>Add to Home Screen</em>. <strong>Android:</strong> open the browser menu (⋮) and tap <em>Install app</em>. <strong>Desktop:</strong> use the install icon in the address bar.

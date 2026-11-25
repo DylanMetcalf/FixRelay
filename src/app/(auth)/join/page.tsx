@@ -18,7 +18,7 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
   if (!info) {
     return (
       <>
-        <h1 className="text-xl font-extrabold">Join your company on Resultra</h1>
+        <h1 className="text-xl font-extrabold">Join your company on ManOp</h1>
         <p className="muted mb-4 mt-1">Enter the registration code from your site administrator. It looks like <strong>ABCD-1234</strong>.</p>
         {raw && <p className="mb-3 rounded-md bg-red-50 p-3 text-sm font-semibold text-red-900" role="alert">That code is not valid. It may have expired or been replaced. Ask your site administrator for the current code.</p>}
         <form method="get" action="/join" className="space-y-3">
