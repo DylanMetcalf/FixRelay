@@ -1,10 +1,10 @@
-# ManOp (formerly FixRelay). One-click deployment on Render (render.com): Blueprint → New → connect this repository.
+# ManOp. One-click deployment on Render (render.com): Blueprint → New → connect this repository.
 # Uses one web service with the background worker running in-process (WORKER_IN_PROCESS=true) and a Postgres
 # database. Files are stored in Postgres (STORAGE_DRIVER=db), so no extra storage service is needed to start.
 # Set the "sync: false" values in the Render dashboard. Antivirus: add a ClamAV private service and set CLAMAV_HOST.
 services:
   - type: web
-    name: fixrelay
+    name: manop
     runtime: node
     plan: starter
     region: frankfurt
@@ -17,7 +17,7 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: DATABASE_URL
-        fromDatabase: { name: fixrelay-db, property: connectionString }
+        fromDatabase: { name: manop-db, property: connectionString }
       - key: STORAGE_DRIVER
         value: db
       - key: WORKER_IN_PROCESS
@@ -25,13 +25,15 @@ services:
       - key: APP_URL
         sync: false
       - key: EMAIL_TRANSPORT
-        sync: false
+        value: resend
       - key: EMAIL_FROM
         sync: false
       - key: RESEND_API_KEY
         sync: false
 databases:
-  - name: fixrelay-db
+  - name: manop-db
     plan: basic-256mb
     region: frankfurt
     postgresMajorVersion: "16"
+    databaseName: manop
+    user: manop
