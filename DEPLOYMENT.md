@@ -2,7 +2,7 @@
 
 ManOp (formerly FixRelay) runs as one Node.js web service plus PostgreSQL. All options below use the same code and environment variables. Service, database and cookie names keep their earlier `fixrelay` identifiers on purpose, so existing deployments and sessions keep working.
 
-**Go-live:** follow `GO_LIVE.md` (paid `render.yaml`: service `manop`, database `manop-db`, domain www.manop.co.za). **Old free test server:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**. Move to the paid `render.yaml` before the pilot. The domain `www.manop.co.za` is being connected (see "Custom domain" below); everything uses `APP_URL`, so nothing else changes.
+**Go-live:** follow `GO_LIVE.md` (existing service, renamed ManOp, domain www.manop.co.za). **Current server:** https://fixrelay-demo.onrender.com, deployed from `render.demo.yaml` (Render free tier, Frankfurt). The free web service sleeps after about 15 minutes idle (the first visit then takes about a minute), and the free database **expires on 2026-12-17**. Move to the paid `render.yaml` before the pilot. The domain `www.manop.co.za` is being connected (see "Custom domain" below); everything uses `APP_URL`, so nothing else changes.
 
 ## Option A: Render (recommended for the pilot)
 
@@ -21,9 +21,9 @@ Job cards, completion reports, history reports and QR signs are generated on the
 
 ### Custom domain and HTTPS (www.manop.co.za)
 The domain is `manop.co.za`; the app runs on **`www.manop.co.za`**, and the bare `manop.co.za` redirects to it. Render's API tools cannot add domains, so steps 1 and 2 are done by hand.
-1. Render dashboard → new **manop** web service → **Settings → Custom Domains → Add Custom Domain** → `www.manop.co.za`. Render offers to add `manop.co.za` as well; accept, so one redirects to the other.
+1. Render dashboard → web service **ManOp** (address `fixrelay-demo.onrender.com`) → **Settings → Custom Domains → Add Custom Domain** → `www.manop.co.za`. Render offers to add `manop.co.za` as well; accept, so one redirects to the other.
 2. At the registrar or DNS host for `manop.co.za` (the .co.za registrar, or Cloudflare if the nameservers point there):
-   - `CNAME`, name `www`, value: the new service's address, normally `manop.onrender.com`
+   - `CNAME`, name `www`, value `fixrelay-demo.onrender.com`
    - `A`, name `@` (the bare domain), value `216.24.57.1` (check the IP Render shows; it is Render's documented load balancer address)
    - Delete any older `A`, `AAAA` or `CNAME` records for `@` or `www` (registrar parking pages). Leave `MX` and `TXT` records alone: they carry email.
    - On Cloudflare, set both records to **DNS only** (grey cloud) until Render shows the domain as verified.
